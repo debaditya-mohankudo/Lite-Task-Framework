@@ -150,12 +150,20 @@ Skill(skill="update-concept-store", args="repo=<repo> touched_files=<files> cont
 
 If no concept store exists, silently continue — don't note it as a gap. Only evolve concepts when the task genuinely changes domain understanding, not on every task.
 
-**Regardless of whether concepts changed**, match the task's `Files:` (or a grooming pass's earlier `## Concept context` block, if present in the body) against `concept_store/concepts.json` and record which concept slugs this task touched — this is bookkeeping, not evolution, so do it even when Step 5's update-concept-store call above was skipped:
+**Regardless of whether concepts changed**, match the task's `Files:` (or a grooming pass's earlier `## Concept context` block, if present in the body) against the repo's concept store and record which concept slugs/names this task touched — this is bookkeeping, not evolution, so do it even when Step 5's update-concept-store call above was skipped. Detect format first (corrected 2026-07-24 — this step previously only checked `concept_store/concepts.json` and silently produced nothing for SQLite-format repos like SeniorDevAgent):
+
+```bash
+test -f "<repo>/concept_store/concepts.json" -a -f "<repo>/concept_store/store.py" && echo json
+test -f "<repo>/concepts.db" -a -f "<repo>/concept_store.py" && echo sqlite
+```
+
+JSON format: match `Files:` against `concept["module"]` in `concept_store/concepts.json`. SQLite format: match `Files:` against each concept's evidence `source_ref` values (`ConceptStore.get_evidence(concept_id)`) or against `domain`/`name` for the touched subsystem — same lookup `/update-concept-store` Step 2b and `/task-grooming` Step 2 already use.
 
 ```
 ## Concepts touched
 - hooks/gates.py: gates-prereq-chain-enforcement
 ```
+(SQLite format: use the matched concept's `name`/`domain` in place of the JSON example's `module` slug.)
 
 Fold this into the Step 7b persisted section rather than writing it separately. This gives future grooming/introspection passes a direct link from task → concept without re-deriving the file-to-concept match each time.
 
