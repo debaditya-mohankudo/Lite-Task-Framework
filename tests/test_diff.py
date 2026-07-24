@@ -24,13 +24,9 @@ _OLD = {
 
 
 def _make_fake_client(concepts: list) -> MagicMock:
-    content_block = MagicMock()
-    content_block.text = json.dumps(concepts)
-    message = MagicMock()
-    message.content = [content_block]
-    client = MagicMock()
-    client.messages.create.return_value = message
-    return client
+    agent = MagicMock()
+    agent.complete.return_value = json.dumps(concepts)
+    return agent
 
 
 def _seed_store(tmp_path: Path, concept: dict) -> ConceptStore:
@@ -42,7 +38,7 @@ def _seed_store(tmp_path: Path, concept: dict) -> ConceptStore:
 def test_no_drift(tmp_path):
     store = _seed_store(tmp_path, _OLD)
     client = _make_fake_client([_OLD])
-    reports = diff([_MOD], tmp_path, store, client=client)
+    reports = diff([_MOD], tmp_path, store, agent=client)
     assert len(reports) == 1
     assert not reports[0].has_drift
 
@@ -51,7 +47,7 @@ def test_changed_invariant_detected(tmp_path):
     store = _seed_store(tmp_path, _OLD)
     updated = {**_OLD, "invariants": ["hooks may return None for no-op"]}
     client = _make_fake_client([updated])
-    reports = diff([_MOD], tmp_path, store, client=client)
+    reports = diff([_MOD], tmp_path, store, agent=client)
     assert len(reports[0].changed) == 1
     assert reports[0].changed[0]["field"] == "invariants"
 
@@ -60,14 +56,14 @@ def test_new_concept_detected(tmp_path):
     store = _seed_store(tmp_path, _OLD)
     new_concept = {**_OLD, "name": "dispatcher-fallback-chain"}
     client = _make_fake_client([_OLD, new_concept])
-    reports = diff([_MOD], tmp_path, store, client=client)
+    reports = diff([_MOD], tmp_path, store, agent=client)
     assert "dispatcher-fallback-chain" in reports[0].added
 
 
 def test_dropped_concept_detected(tmp_path):
     store = _seed_store(tmp_path, _OLD)
     client = _make_fake_client([])  # extractor returns nothing for this file
-    reports = diff([_MOD], tmp_path, store, client=client)
+    reports = diff([_MOD], tmp_path, store, agent=client)
     assert "dispatcher-routes-by-hook-type" in reports[0].dropped
 
 
@@ -75,7 +71,7 @@ def test_confidence_drop_detected(tmp_path):
     store = _seed_store(tmp_path, _OLD)
     dropped = {**_OLD, "confidence": 0.5}
     client = _make_fake_client([dropped])
-    reports = diff([_MOD], tmp_path, store, client=client)
+    reports = diff([_MOD], tmp_path, store, agent=client)
     assert len(reports[0].confidence_drops) == 1
     assert reports[0].confidence_drops[0]["was"] == 0.9
     assert reports[0].confidence_drops[0]["now"] == 0.5
@@ -84,7 +80,7 @@ def test_confidence_drop_detected(tmp_path):
 def test_skips_files_not_in_source_list(tmp_path):
     store = _seed_store(tmp_path, _OLD)
     client = _make_fake_client([])
-    reports = diff(["some/random/file.py"], tmp_path, store, client=client)
+    reports = diff(["some/random/file.py"], tmp_path, store, agent=client)
     assert reports == []
 
 
@@ -101,7 +97,7 @@ def test_caps_at_max_files(tmp_path):
     original_max = _diff._MAX_FILES_PER_INVOCATION
     _diff._MAX_FILES_PER_INVOCATION = 2
     try:
-        reports = diff(files, tmp_path, store, client=client)
+        reports = diff(files, tmp_path, store, agent=client)
         assert len(reports) <= 2
     finally:
         _diff._MAX_FILES_PER_INVOCATION = original_max

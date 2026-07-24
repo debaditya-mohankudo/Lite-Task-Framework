@@ -6,8 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-import anthropic
-
+from concept_store.claude_cli import ClaudeCLI
 from concept_store.store import ConceptStore
 from concept_store.extractor import extract, _SOURCE_FILES
 
@@ -46,11 +45,15 @@ def diff(
     changed_files: list[str],
     repo_root: Path,
     store: ConceptStore,
-    client: Optional[anthropic.Anthropic] = None,
+    agent: Optional[ClaudeCLI] = None,
 ) -> list[DriftReport]:
     """Re-extract concepts for changed_files and diff against the store.
 
     Caps at _MAX_FILES_PER_INVOCATION files; skips the rest with a note in the report.
+
+    `agent` is forwarded to extract() as-is (including None) — extract()
+    handles constructing a default ClaudeCLI per call, so diff() doesn't
+    need its own default-construction logic (task:a91133b8).
     """
     repo_root = Path(repo_root)
     repo_rel = [
@@ -60,9 +63,6 @@ def diff(
 
     if not repo_rel:
         return []
-
-    if client is None:
-        client = anthropic.Anthropic()
 
     reports = []
     for rel_file in repo_rel:
@@ -78,7 +78,7 @@ def diff(
             original = _ext._SOURCE_FILES
             _ext._SOURCE_FILES = [rel_file]
             try:
-                extract(repo_root, tmp_store, client=client)
+                extract(repo_root, tmp_store, agent=agent)
             finally:
                 _ext._SOURCE_FILES = original
 
