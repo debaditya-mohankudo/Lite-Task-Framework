@@ -157,7 +157,7 @@ test -f "<repo>/concept_store/concepts.json" -a -f "<repo>/concept_store/store.p
 test -f "<repo>/concepts.db" -a -f "<repo>/concept_store.py" && echo sqlite
 ```
 
-JSON format: match `Files:` against `concept["module"]` in `concept_store/concepts.json`. SQLite format: match `Files:` against each concept's evidence `source_ref` values (`ConceptStore.get_evidence(concept_id)`) or against `domain`/`name` for the touched subsystem — same lookup `/update-concept-store` Step 2b and `/task-grooming` Step 2 already use.
+JSON format: match `Files:` against `concept["module"]` in `concept_store/concepts.json` — or, for a non-Java target repo, `concept__list(repo="<repo>")` (task:2813ece5) instead of reading the file directly. SQLite format: match `Files:` against each concept's evidence `source_ref` values (`ConceptStore.get_evidence(concept_id)`) or against `domain`/`name` for the touched subsystem — same lookup `/update-concept-store` Step 2b and `/task-grooming` Step 2 already use.
 
 ```
 ## Concepts touched

@@ -94,6 +94,8 @@ from pathlib import Path
 concepts = json.loads(Path("<repo>/concept_store/concepts.json").read_text())
 ```
 
+Or, for a non-Java target repo (not claude-hooks-dev's own store), `concept__list(repo="<repo>")`/`concept__get(repo="<repo>", name=...)` (task:2813ece5, added 2026-07-24) do the same read without hand-writing this snippet each time — prefer these when grooming a task in a repo other than claude-hooks-dev itself.
+
 Prefer a `Concepts:` section in the task body if present — look those slugs up directly. Otherwise match the task's `Files:` section against `concept["module"]`.
 
 **SQLite format** (SeniorDevAgent pattern):
