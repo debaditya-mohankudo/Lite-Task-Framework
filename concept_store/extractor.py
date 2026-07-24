@@ -4,11 +4,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import anthropic
-
+from concept_store.claude_cli import ClaudeCLI
 from concept_store.store import ConceptStore
 
-_MODEL = "claude-sonnet-4-6"
+# "sonnet" (alias, tracks the latest Sonnet) rather than a pinned full model
+# name — matches SeniorDevAgent's ClaudeCLILLM default, and avoids going
+# stale as models rotate (task:a91133b8; was "claude-sonnet-4-6", an
+# anthropic-SDK-style model id left over from the pre-CLI implementation).
+_MODEL = "sonnet"
 
 _SOURCE_FILES = [
     "hooks/dispatcher.py",
@@ -51,6 +54,21 @@ Return a single top-level JSON array of these objects. Nothing else.
 """
 
 
+def _strip_json_response(raw: str) -> str:
+    """Strip markdown code fences the model wraps its JSON in, despite the
+    system prompt explicitly asking it not to (observed live via task:
+    a91133b8's manual drift-detection check — `claude -p` returned
+    ```json\\n[...]\\n``` even with "No prose, no markdown fences" in
+    _SYSTEM). Same fence-stripping SeniorDevAgent's loop/pass2.py::
+    _parse_json uses, ported (not imported — separate repo) since this
+    module's payload is a top-level JSON array, not that function's
+    object-only fallback shape."""
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    return raw
+
+
 def _read_sources(repo_root: Path) -> str:
     parts = []
     for rel in _SOURCE_FILES:
@@ -62,22 +80,23 @@ def _read_sources(repo_root: Path) -> str:
     return "\n\n".join(parts)
 
 
-def extract(repo_root: Path, store: ConceptStore, client: anthropic.Anthropic | None = None) -> list[dict]:
-    """Read all source files, call Claude once, parse concepts, upsert into store."""
-    if client is None:
-        client = anthropic.Anthropic()
+def extract(repo_root: Path, store: ConceptStore, agent: ClaudeCLI | None = None) -> list[dict]:
+    """Read all source files, call Claude once, parse concepts, upsert into store.
+
+    Uses ClaudeCLI (`claude -p` subprocess, authenticated via the existing
+    Claude Code login) rather than the anthropic SDK — no
+    ANTHROPIC_API_KEY required (task:a91133b8). ClaudeCLI is a ported
+    subset of SeniorDevAgent's ClaudeCLILLM (structured JSON output,
+    is_error checking, timeout/heartbeat), not the simpler BareClaudeAgent
+    already in this repo — see concept_store/claude_cli.py's docstring for
+    why."""
+    if agent is None:
+        agent = ClaudeCLI(model=_MODEL)
 
     source = _read_sources(repo_root)
     user_message = f"{source}\n\n{_INSTRUCTIONS}"
 
-    response = client.messages.create(
-        model=_MODEL,
-        max_tokens=8192,
-        system=_SYSTEM,
-        messages=[{"role": "user", "content": user_message}],
-    )
-
-    raw = response.content[0].text.strip()
+    raw = _strip_json_response(agent.complete(_SYSTEM, user_message))
     try:
         concepts = json.loads(raw)
     except json.JSONDecodeError as exc:

@@ -1,4 +1,5 @@
-"""Unit tests for concept_store/extractor.py using a fake Anthropic client."""
+"""Unit tests for concept_store/extractor.py using a fake ClaudeCLI agent
+(task:a91133b8 — no anthropic SDK / API key involved)."""
 from __future__ import annotations
 
 import json
@@ -32,20 +33,16 @@ _FAKE_CONCEPTS = [
 ]
 
 
-def _make_fake_client(response_json: list) -> MagicMock:
-    content_block = MagicMock()
-    content_block.text = json.dumps(response_json)
-    message = MagicMock()
-    message.content = [content_block]
-    client = MagicMock()
-    client.messages.create.return_value = message
-    return client
+def _make_fake_agent(response_text: str) -> MagicMock:
+    agent = MagicMock()
+    agent.complete.return_value = response_text
+    return agent
 
 
 def test_extract_upserts_all_concepts(tmp_path):
     store = ConceptStore(tmp_path / "concepts.json")
-    client = _make_fake_client(_FAKE_CONCEPTS)
-    concepts = extract(tmp_path, store, client=client)
+    agent = _make_fake_agent(json.dumps(_FAKE_CONCEPTS))
+    concepts = extract(tmp_path, store, agent=agent)
     assert len(concepts) == 2
     assert store.get("dispatcher-routes-by-hook-type") is not None
     assert store.get("gates-prereq-chain") is not None
@@ -53,33 +50,38 @@ def test_extract_upserts_all_concepts(tmp_path):
 
 def test_extract_calls_claude_once(tmp_path):
     store = ConceptStore(tmp_path / "concepts.json")
-    client = _make_fake_client(_FAKE_CONCEPTS)
-    extract(tmp_path, store, client=client)
-    assert client.messages.create.call_count == 1
+    agent = _make_fake_agent(json.dumps(_FAKE_CONCEPTS))
+    extract(tmp_path, store, agent=agent)
+    assert agent.complete.call_count == 1
 
 
 def test_extract_raises_on_bad_json(tmp_path):
     store = ConceptStore(tmp_path / "concepts.json")
-    content_block = MagicMock()
-    content_block.text = "not json at all"
-    message = MagicMock()
-    message.content = [content_block]
-    client = MagicMock()
-    client.messages.create.return_value = message
+    agent = _make_fake_agent("not json at all")
     with pytest.raises(ValueError, match="unparseable JSON"):
-        extract(tmp_path, store, client=client)
+        extract(tmp_path, store, agent=agent)
 
 
 def test_extract_raises_on_non_array(tmp_path):
     store = ConceptStore(tmp_path / "concepts.json")
-    client = _make_fake_client({"not": "an array"})
+    agent = _make_fake_agent(json.dumps({"not": "an array"}))
     with pytest.raises(ValueError, match="Expected JSON array"):
-        extract(tmp_path, store, client=client)
+        extract(tmp_path, store, agent=agent)
 
 
 def test_concepts_persisted_to_json(tmp_path):
     store = ConceptStore(tmp_path / "concepts.json")
-    client = _make_fake_client(_FAKE_CONCEPTS)
-    extract(tmp_path, store, client=client)
+    agent = _make_fake_agent(json.dumps(_FAKE_CONCEPTS))
+    extract(tmp_path, store, agent=agent)
     store2 = ConceptStore(tmp_path / "concepts.json")
     assert len(store2.list()) == 2
+
+
+def test_extract_strips_markdown_fences(tmp_path):
+    """Observed live (task:a91133b8): `claude -p` wraps its JSON response
+    in ```json fences despite _SYSTEM explicitly saying not to."""
+    store = ConceptStore(tmp_path / "concepts.json")
+    fenced = "```json\n" + json.dumps(_FAKE_CONCEPTS) + "\n```"
+    agent = _make_fake_agent(fenced)
+    concepts = extract(tmp_path, store, agent=agent)
+    assert len(concepts) == 2
