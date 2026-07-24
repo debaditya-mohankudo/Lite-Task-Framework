@@ -5,6 +5,7 @@ SQLite connection as the upsert, eliminating a second DB round-trip.
 """
 from __future__ import annotations
 
+import importlib
 import json
 import re
 import sqlite3
@@ -60,6 +61,66 @@ def _derive_keywords(tool_name: str, domain: str, skill: str) -> str:
     if skill:
         tokens.update(t for t in _SPLIT_RE.split(skill) if len(t) >= 3)
     return ",".join(sorted(tokens))
+
+
+def seed_all_tool_keywords() -> int:
+    """task:53c9f817 — proactively seed mcp_tool_hints for every registered MCP
+    tool, not just ones that have already been called at least once.
+
+    Without this, a never-invoked tool has empty `keywords` and can only
+    surface via domain match — a cold-start gap confirmed directly when
+    scratch__* tools had zero rows here until manually inserted. Walks
+    src.dispatcher.DOMAIN_MAP (the single source of truth for every
+    registered domain__action tool) and derives keywords the same way
+    _derive_keywords() does reactively, plus the handler's own docstring
+    tokens (dispatcher._wrap() already copies handler.__doc__ onto every
+    tool, so this needs no new plumbing).
+
+    Only inserts rows for tools with no existing row — never overwrites a
+    tool that already has real usage history (count, recent_prompts,
+    reactively-derived keywords). Returns the number of tools newly seeded.
+    """
+    from src.dispatcher import DOMAIN_MAP
+    from core.tool_registry import infer_domain, infer_skill
+
+    tool_hints_db = _cfg.tool_hints_db
+    if not tool_hints_db.exists():
+        return 0
+
+    seeded = 0
+    try:
+        with sqlite3.connect(str(tool_hints_db)) as conn:
+            conn.execute(_ENSURE_HINTS)
+            existing = {r[0] for r in conn.execute("SELECT tool_name FROM mcp_tool_hints").fetchall()}
+
+            for domain, (module_path, actions) in DOMAIN_MAP.items():
+                module = importlib.import_module(module_path)
+                for action in actions:
+                    tool_name = f"{domain}__{action}"
+                    if tool_name in existing:
+                        continue
+                    handler = getattr(module, f"handle_{action}", None)
+                    doc_tokens = set()
+                    if handler and handler.__doc__:
+                        first_line = handler.__doc__.strip().splitlines()[0]
+                        doc_tokens = {t.lower() for t in re.findall(r"[A-Za-z]{4,}", first_line)}
+                    skill = infer_skill(tool_name)
+                    keywords = _derive_keywords(tool_name, infer_domain(tool_name) or domain, skill)
+                    if doc_tokens:
+                        keywords = ",".join(sorted(set(keywords.split(",")) | doc_tokens))
+                    conn.execute(
+                        "INSERT INTO mcp_tool_hints (tool_name, domain, count, keywords) VALUES (?, ?, 0, ?)",
+                        (tool_name, domain, keywords),
+                    )
+                    seeded += 1
+            conn.commit()
+    except Exception as exc:
+        _log.warning("[log_tool_usage] seed_all_tool_keywords failed: %s", exc)
+        return seeded
+
+    if seeded:
+        _log.info("[log_tool_usage] seed_all_tool_keywords: seeded %d new tool(s)", seeded)
+    return seeded
 
 
 def _append_prompt(existing_json: str, new_prompt: str) -> str:

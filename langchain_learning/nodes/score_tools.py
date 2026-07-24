@@ -12,10 +12,12 @@ _log = get_logger(__name__)
 
 
 class ScoreToolsNode:
-    """Retrieve top-5 tool hints by domain match + keyword overlap.
+    """Retrieve top-5 tool hints by domain match + keyword overlap, tie-broken by usage count.
 
-    score = domain_match * 2 + kw_overlap
-    where kw_overlap = count of prompt keywords that appear in the tool's keywords column.
+    base  = domain_match * 2 + kw_overlap
+    score = base + log1p(count) * 0.3   (only when base > 0 — see task:53c9f817)
+    where kw_overlap = count of prompt keywords that appear in the tool's keywords column,
+    and count is the tool's real invocation count (mcp_tool_hints.count).
 
     Accepts an optional ToolScorer at construction time; defaults to
     KeywordOverlapScorer (production backend). Pass NullToolScorer or a custom
