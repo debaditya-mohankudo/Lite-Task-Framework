@@ -3,6 +3,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
+# task:53c9f817 — seed_all_tool_keywords() imports core.tool_registry (hooks/core/),
+# same requirement LogToolUsageNode already has at hook-server runtime.
+sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
 from mcp.server.fastmcp import FastMCP
 from dispatcher import build_dispatcher
@@ -69,6 +72,12 @@ def _bootstrap() -> None:
             log.debug("[bootstrap] task index present, skipping rebuild")
     except Exception as exc:
         log.warning("[bootstrap] task index rebuild failed: %s", exc)
+
+    try:
+        from langchain_learning.nodes.log_tool_usage import seed_all_tool_keywords
+        seed_all_tool_keywords()
+    except Exception as exc:
+        log.warning("[bootstrap] tool_hints keyword seeding failed: %s", exc)
 
 
 _bootstrap()

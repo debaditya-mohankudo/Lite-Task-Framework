@@ -147,12 +147,23 @@ class KeywordOverlapScorer:
     Satisfies ToolScorer Protocol.
     """
 
+    # task:53c9f817 — log1p saturates so a heavily-used tool (e.g.
+    # contacts__search at ~3687 calls -> log1p=8.2) gets a meaningful edge
+    # over an equally domain/keyword-matched but rarely-used tool without
+    # letting raw call volume swamp the signal entirely (kw_overlap terms
+    # are typically 0-4). Applied only as a tie-breaker on top of an
+    # existing domain/keyword match (see `if base > 0` below) — usage
+    # count must never manufacture relevance out of nothing, or a
+    # frequently-called out-of-domain tool would leak into every result set.
+    _COUNT_WEIGHT = 0.3
+
     def score(
         self,
         keywords: set[str],
         domains: set[str],
         top_n: int = 5,
     ) -> list[dict]:
+        import math
         import sqlite3
         from langchain_learning.config import config as _cfg
 
@@ -174,13 +185,15 @@ class KeywordOverlapScorer:
         for row in rows:
             domain_match = 1.0 if row["domain"] in domains else 0.0
             kw_overlap   = sum(1 for k in keywords if k in (row["keywords"] or ""))
-            score        = domain_match * 2 + kw_overlap
+            base         = domain_match * 2 + kw_overlap
+            count        = row["count"] or 0
+            score        = base + math.log1p(count) * self._COUNT_WEIGHT if base > 0 else 0.0
             if score > 0:
                 scored.append((score, {
                     "tool_name": row["tool_name"],
                     "domain":    row["domain"],
                     "skill":     row["skill"] or "",
-                    "count":     row["count"] or 0,
+                    "count":     count,
                 }))
 
         scored.sort(key=lambda x: -x[0])

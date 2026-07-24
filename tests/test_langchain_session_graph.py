@@ -246,6 +246,28 @@ def test_score_tools_missing_db_returns_empty():
 
 
 # ---------------------------------------------------------------------------
+# KeywordOverlapScorer — count tie-breaker (task:53c9f817)
+# ---------------------------------------------------------------------------
+
+def test_score_tools_count_breaks_ties_within_domain(mock_cfg):
+    # imessage__send (count=50) and vault__write (count=40) both match
+    # domain="macos"/"vault" respectively with no keyword overlap — equal
+    # base score (domain_match*2), so the higher-count tool should rank first.
+    result = score_tools(_base_state(domains=["macos", "vault"], keywords=[]))
+    tool_names = [h["tool_name"] for h in result["tool_hints"]]
+    assert tool_names.index("imessage__send") < tool_names.index("vault__write")
+
+
+def test_score_tools_count_does_not_manufacture_relevance(mock_cfg):
+    # imessage__send has count=50 (the highest in the fixture) but domain
+    # "macos" is not requested and keywords don't overlap — it must not
+    # leak into results just because of its usage count.
+    result = score_tools(_base_state(domains=["astrology"], keywords=["panchang"]))
+    tool_names = [h["tool_name"] for h in result["tool_hints"]]
+    assert "imessage__send" not in tool_names
+
+
+# ---------------------------------------------------------------------------
 # Full graph — end-to-end via build_session_graph()
 # ---------------------------------------------------------------------------
 
