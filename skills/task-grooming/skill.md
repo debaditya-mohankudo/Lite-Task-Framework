@@ -79,6 +79,15 @@ These are the primary inputs to grooming — reading the body in isolation witho
 
 ## Step 2 — Concept store lookup (if the repo has one)
 
+Two formats are in active use (corrected 2026-07-24 — this step previously only checked the JSON format and silently skipped every SQLite-format repo, e.g. SeniorDevAgent, treating "wrong format" as "no store exists"). Detect first, same check `/update-concept-store` uses:
+
+```bash
+test -f "<repo>/concept_store/concepts.json" -a -f "<repo>/concept_store/store.py" && echo json
+test -f "<repo>/concepts.db" -a -f "<repo>/concept_store.py" && echo sqlite
+```
+
+**JSON format** (claude-hooks-dev pattern):
+
 ```python
 import json
 from pathlib import Path
@@ -87,9 +96,19 @@ concepts = json.loads(Path("<repo>/concept_store/concepts.json").read_text())
 
 Prefer a `Concepts:` section in the task body if present — look those slugs up directly. Otherwise match the task's `Files:` section against `concept["module"]`.
 
-For each match, check:
+**SQLite format** (SeniorDevAgent pattern):
 
-* **Invariant conflict** — does the task's plan violate a stored invariant for that module?
+```python
+from concept_store import ConceptStore
+store = ConceptStore("<repo>/concepts.db")
+concepts = store.list_concepts()  # then match by domain, or by evidence source_ref against Files:
+```
+
+Match the task's `Files:` section against each concept's evidence (`store.get_evidence(concept_id)`'s `source_ref` values) or against `domain`/`name` for the subsystem a touched file belongs to — same matching logic `/update-concept-store` Step 2b already uses.
+
+For each match, in either format, check:
+
+* **Invariant conflict** — does the task's plan violate something the concept's description asserts as always-true for that module? (SQLite concepts don't have a separate `invariants` field — read this out of `description`, and check `risk_findings`/`test_gaps` via `get_risk_findings`/`get_test_gaps` for already-known open concerns the plan should account for.)
 * **Contract break** — does the plan change what the module promises callers?
 * **New concept** — does the task introduce behavior not captured by any existing concept?
 
@@ -102,7 +121,9 @@ Append matches as a `## Concept context` block in the grooming notes:
   → check: does this task's change respect these invariants?
 ```
 
-Skip silently if no concept store exists for the repo.
+(SQLite format: substitute the concept's `name`/`domain` and relevant `description`/open risk_findings for the JSON example's `module`/`invariants`.)
+
+Skip silently only if NEITHER format's store files are present — not just because the JSON path specifically didn't match.
 
 ---
 
