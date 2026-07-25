@@ -27,6 +27,7 @@ dependencies = [
     "python-multipart>=0.0.30",
     "markdown>=3.10.2",
     "tiktoken>=0.8.0",
+    "uvloop>=0.22.1",
 ]
 
 [project.optional-dependencies]
