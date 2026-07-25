@@ -1,7 +1,7 @@
 {
   "domain": "claude-hooks",
-  "node_count": 149,
-  "edge_count": 236,
+  "node_count": 159,
+  "edge_count": 225,
   "adjacency": {
     "activate-task-before-work": [
       "always-activate-task-after-create",
@@ -26,6 +26,7 @@
       "domain-classifier-llm-when"
     ],
     "claude-cli-safe-mode-no-tools-flags": [],
+    "claude-cli-wraps-json-in-markdown-fences": [],
     "claude-hooks-checkpointer-migration-pending": [],
     "claude-hooks-code-rag-scope-decision": [
       "gitignore-rag-files",
@@ -82,14 +83,12 @@
       "claude-hooks-current-gates"
     ],
     "claude-hooks-graph-event-routing": [
-      "claude-hooks-ups-pipeline",
       "claude-hooks-node-design",
       "claude-hooks-posttooluse-bridge",
       "claude-hooks-hook-delivery"
     ],
     "claude-hooks-hook-delivery": [
       "claude-hooks-key-files",
-      "claude-hooks-ups-pipeline",
       "claude-hooks-graph-event-routing",
       "claude-hooks-hook-payload-shape"
     ],
@@ -121,7 +120,6 @@
       "task-framework-memory-delegation"
     ],
     "claude-hooks-load-vault-context": [
-      "claude-hooks-ups-pipeline",
       "claude-hooks-load-memories-node"
     ],
     "claude-hooks-mcp-hooks-boundary": [
@@ -136,7 +134,6 @@
       "langchain-vs-claude-code-inversion"
     ],
     "claude-hooks-node-design": [
-      "claude-hooks-ups-pipeline",
       "claude-hooks-graph-event-routing",
       "gate-policy-boundary-in-node",
       "protocol-as-pipe-joint"
@@ -193,7 +190,6 @@
     ],
     "claude-hooks-session-lifecycle": [
       "langgraph-checkpointer-pattern",
-      "claude-hooks-ups-pipeline",
       "claude-hooks-stop-vs-sessionend",
       "checkpoint-is-ipc"
     ],
@@ -226,13 +222,6 @@
     "claude-hooks-type-vocabulary": [
       "claude-hooks-task-state-machine"
     ],
-    "claude-hooks-ups-pipeline": [
-      "claude-hooks-graph-event-routing",
-      "claude-hooks-node-design",
-      "claude-hooks-session-lifecycle",
-      "langgraph-checkpointer-pattern",
-      "claude-hooks-hook-delivery"
-    ],
     "claude-hooks-wiki-pattern": [
       "claude-hooks-docs-in-repo",
       "claude-hooks-readme-style"
@@ -255,6 +244,7 @@
       "claude-hooks-observability-principle",
       "logs-read-tool"
     ],
+    "deploy-skip-tests-md-only": [],
     "dev-gate-removal-task-close-gotcha": [
       "claude-hooks-current-gates",
       "claude-hooks-deploy-workflow"
@@ -294,16 +284,19 @@
     "gitignore-rag-files": [
       "claude-hooks-code-rag-scope-decision"
     ],
+    "grep-all-md-files-before-declaring-doc-removal-done": [],
     "grep-repo-wide-for-old-behavior-signature-before-deploy": [],
     "grooming-as-design-session": [],
     "hard-to-test-means-bad-structure": [
       "claude-hooks-test-isolation",
       "protocol-extraction-reduces-node-code"
     ],
+    "historical-task-bodies-can-describe-unbuilt-work": [],
     "hook-dev-mode": [
       "claude-hooks-constraints",
       "claude-hooks-hook-delivery"
     ],
+    "hook-server-single-worker-decision": [],
     "hooks-paths-module": [
       "claude-hooks-key-files",
       "claude-hooks-databases",
@@ -323,9 +316,9 @@
     ],
     "langgraph-checkpointer-pattern": [
       "claude-hooks-session-lifecycle",
-      "checkpoint-is-ipc",
-      "claude-hooks-ups-pipeline"
+      "checkpoint-is-ipc"
     ],
+    "langgraph-node-removal-touches-3-files": [],
     "last-validated-now-auto-stamped": [],
     "launchd-plist-reload-required": [
       "claude-hooks-server-deploy-restart",
@@ -335,7 +328,10 @@
       "claude-hooks-observability-principle"
     ],
     "manual-live-file-surgery-can-leave-stale-connection-state": [],
+    "mcp-dispatch-is-table-driven-domain-map": [],
     "mcp-hook-bridge-convention": [],
+    "mcp-hook-bridge-is-one-way": [],
+    "mcp-not-wrapping-fastapi-server": [],
     "mcp-tool-owns-its-hook-prompt": [],
     "memory-add-batch-prefer-over-serial": [
       "claude-hooks-load-memories-node",
@@ -357,13 +353,13 @@
       "claude-hooks-load-memories-node"
     ],
     "migration-test-keep-old-ddl": [],
-    "migration-test-must-keep-old-ddl": [],
     "minor-followups-reuse-related-task-id": [],
     "mock-cfg-must-patch-retriever-config": [
       "claude-hooks-test-isolation",
       "retriever-top-n-none-not-hardcoded"
     ],
     "multi-path-hook-prompts-stay-separate": [],
+    "new-project-cwd-needs-domain-mapping": [],
     "new-ups-field-decide-budget-truncation-exemption": [
       "claude-hooks-context-token-budget",
       "ups-context-sources-all-capped",
@@ -442,6 +438,7 @@
       "task-always-add-completion-memory"
     ],
     "task-create-templates-vary-by-issue-type": [],
+    "task-deletion-safety-tied-to-concept-store": [],
     "task-framework-memory-delegation": [
       "activate-task-before-work",
       "always-activate-task-after-create",
@@ -460,6 +457,7 @@
       "claude-hooks-posttooluse-bridge",
       "tasks-ui-live-session-gate"
     ],
+    "tasks-index-task-upsert-bug": [],
     "tasks-migrate-check-correct-table": [
       "sqlite-idempotent-column-migration"
     ],

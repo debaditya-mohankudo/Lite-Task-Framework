@@ -1,0 +1,10 @@
+{
+  "name": "mcp-hook-bridge-is-one-way",
+  "type": "feedback",
+  "tags": "langgraph, mcp_hook_bridge, __hook__, post_tool_use, session_graph, dispatcher, side effects, additionalSystemPrompt",
+  "body": "The `__hook__` convention (langchain_learning/nodes/mcp_hook_bridge.py, routed via `_post_tool_route` in session_graph.py) is a one-way channel: any MCP tool that returns `{\"__hook__\": {...}}` gets that payload piped straight into `pending_hook_output` → `additionalSystemPrompt` injection. It has no side-effect execution — it cannot trigger a DB write, a subprocess call, or any other stateful action.\n\nWhy: discovered while implementing commit→task-id mapping (task:a2fd402d) — considered routing MCP `git__commit` PostToolUse capture through this convention since it already exists as a generic \"any MCP tool → dispatcher\" bridge, but it only pipes text for prompt injection, not arbitrary logic.\n\nHow to apply: for a PostToolUse side effect (recording something, writing to a DB, calling another tool) triggered by an arbitrary MCP tool's result, add a direct function call in hooks/dispatcher.py._handle_post_tool_use (keyed on `strip_mcp_prefix(tool_name)`), not the `__hook__`/mcp_hook_bridge path. Reserve `__hook__` for cases that genuinely want to inject text into the next system prompt. See [[dispatcher-hook-event-routing]] for the broader PreToolUse/PostToolUse routing rules.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-24 04:38:59"
+}

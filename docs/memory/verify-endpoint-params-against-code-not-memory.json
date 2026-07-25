@@ -3,11 +3,13 @@
   "type": "feedback",
   "tags": "memory staleness, endpoint params, verify before trusting, api params, session endpoint, task:61703ef7",
   "body": "A memory or docstring claiming an API endpoint accepts a specific query param (e.g. \"?cwd=<path>\") should be verified against the actual route handler before relying on it — an unrecognized query param to a FastAPI/Starlette route is silently ignored by default, not rejected, so a wrong claim about accepted params doesn't fail loudly; it just quietly does nothing.\n\nWhy: memory verify-session-id-via-hooks-server claimed GET /session accepted an optional ?cwd=<path> filter. The actual hooks/server.py handler takes no params at all and returns every session unfiltered. The mistake persisted because passing the bogus param never errored.\n\nHow to apply: before trusting a memory's claim about an endpoint's accepted parameters, grep the route handler's function signature directly — don't assume a memory is current just because it reads confidently.",
-  "files": [],
+  "files": [
+    "hooks/server.py"
+  ],
   "docs": [],
   "related": [
     "session-id-how-to",
     "verify-session-id-via-hooks-server"
   ],
-  "updated": "2026-07-05 03:37:41"
+  "updated": "2026-07-25 20:17:43"
 }

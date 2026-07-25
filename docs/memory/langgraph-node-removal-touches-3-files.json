@@ -1,0 +1,10 @@
+{
+  "name": "langgraph-node-removal-touches-3-files",
+  "type": "feedback",
+  "tags": "langgraph, node removal, registry, session_state, session_graph, refactor checklist, claude-hooks, task:e8c2646b",
+  "body": "Removing a LangGraph node from this repo's UPS pipeline requires touching 3 files, not 2: langchain_learning/nodes/registry.py (import + NODE_REGISTRY entry), langchain_learning/session_state.py (any state fields the node owns), AND langchain_learning/session_graph.py (build_session_graph()'s node-registration list, any add_edge/add_conditional_edges wiring, the ASCII topology diagram in the module docstring, and _fresh_state()'s default for any state field the node owns).\n\nWhy: task:99365a77 (removing CacheCheckNode) initially scoped only registry.py + session_state.py; session_graph.py's own independent wiring (node list, conditional edge, docstring, _fresh_state default) was found mid-implementation and would have left a dangling KeyError on the deleted node's registry key if missed.\n\nHow to apply: when grooming or implementing a task that removes a node, grep for the node's class name across all of langchain_learning/ before writing the file checklist — don't assume registry.py + session_state.py is the complete surface.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-24 04:38:59"
+}

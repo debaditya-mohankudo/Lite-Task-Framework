@@ -1,0 +1,10 @@
+{
+  "name": "task-deletion-safety-tied-to-concept-store",
+  "type": "feedback",
+  "tags": "task deletion cleanup concept store hygiene purge done tasks database",
+  "body": "Treat concept-store coverage, not just task age, as the real criterion for whether an old 'done' task is safe to hard-delete.\n\nWhy: once concept_store/concepts.json is well maintained, the fear of losing information when deleting old tasks is much lower — the durable architectural knowledge (invariants, contracts, design rationale) has already been distilled out of the task body into the concept store. A done task's remaining value at that point is mostly historical noise, not signal.\n\nHow to apply: before bulk-deleting old done tasks from proj_tasks.db, check whether the files/modules those tasks touched have corresponding concept-store entries. If concepts are stale or missing for a task's Files:, consider running /update-concept-store first or flagging it, rather than deleting purely by oldest-first age.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-25 20:16:03"
+}

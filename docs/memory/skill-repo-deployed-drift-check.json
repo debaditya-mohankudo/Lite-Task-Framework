@@ -1,10 +1,10 @@
 {
   "name": "skill-repo-deployed-drift-check",
   "type": "feedback",
-  "tags": "skills drift deployed repo copy source of truth diff before editing skill.md claude skills directory sync, task:628fcd72",
-  "body": "Before editing any skill.md, diff the repo copy (~/workspace/claude-hooks-dev/skills/<name>/skill.md) against the deployed copy (~/.claude/skills/<name>/skill.md) — drift goes both directions.\n\nWhy: frontmatter declares the repo as source of truth, but skills sometimes get improved in-place in the deployed location and never committed (task-grooming's 2026-07-05 rewrite existed only in ~/.claude/skills until task:628fcd72 synced it). Editing the stale repo copy and re-deploying would silently revert those improvements.\n\nHow to apply: run diff first; if the deployed copy is newer, sync deployed→repo, commit the sync (noting the drift), then apply the new edit on top and deploy back.",
+  "tags": "skills drift deployed repo copy source of truth diff before editing skill.md claude skills directory sync dev main branch behind, task:628fcd72",
+  "body": "Before editing any skill.md, three copies can disagree — diff all of them: the dev worktree copy (~/workspace/claude-hooks-dev/skills/...), the main worktree copy (~/workspace/claude-hooks/skills/...), and the deployed copy (~/.claude/skills/...).\n\nWhy: task:628fcd72 found dev's task-grooming copy two versions stale. First diagnosis blamed uncommitted deployed-only edits, but the truth was main already had the rewrite committed (90e421b) while the dev branch was behind — editing dev's stale copy caused a merge conflict at /deploy --ship. Skill commits that land on main without flowing back to dev create this silently.\n\nHow to apply: run `diff` dev-vs-deployed AND `git -C ~/workspace/claude-hooks log --oneline -3 main -- skills/<name>/skill.md` before editing; if dev is behind, sync/merge first, then edit on top. Expect trivial frontmatter-date conflicts at ship time otherwise.",
   "files": [],
   "docs": [],
   "related": [],
-  "updated": "2026-07-14 14:16:07"
+  "updated": "2026-07-25 02:41:26"
 }

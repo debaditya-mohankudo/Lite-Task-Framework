@@ -1,0 +1,10 @@
+{
+  "name": "historical-task-bodies-can-describe-unbuilt-work",
+  "type": "feedback",
+  "tags": "task grooming, stale premise, verification, historical tasks, claude-hooks, task:e8c2646b",
+  "body": "A historical task's title/body can describe intended work that was never actually implemented, or was implemented differently than described — don't treat an old task's premise as ground truth without checking the current repo state.\n\nWhy: when scaffolding removal subtasks for epic e8c2646b from prior task titles, two of four premises were wrong: task 91dad030 (\"Migrate prompt_cache from sqlite table to Obsidian vault + vault_rag index\") never actually moved storage — it only added a domain-scoping column, storage stayed SQLite throughout; and task 3fb2dbc9 (\"Nudge Claude to cache findings via PreCompact hook\") — no PreCompact hook existed anywhere in the repo, only two unrelated PreToolUse reminders.\n\nHow to apply: [[grep-all-md-files-before-declaring-doc-removal-done]] — same principle for code, not just docs. Before implementing a removal/modification task derived from historical task descriptions, grep the current repo for the named symbols/files rather than assuming the description matches reality — this is exactly what /task-grooming's Step 1 (activation + context gathering) is for; don't skip it even when a task \"looks done already\" or self-explanatory.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-24 17:49:54"
+}

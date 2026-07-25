@@ -3,8 +3,10 @@
   "type": "reference",
   "tags": "claude cli flags safe-mode tools subprocess subagent bareclaudeagent haiku task:b9dded3e",
   "body": "The `claude` CLI supports `--safe-mode` (disables customizations/settings discovery) and `--tools \"\"` (empty string disables all tools; \"default\" enables all) as real, confirmed flags — verified via `claude --help` on 2026-07-04. Used in langchain_learning/subagent.py's BareClaudeAgent (safe_mode/no_tools constructor kwargs) for the task-context summarizer subprocess, so it runs as a pure text-in/text-out compressor with no tool access.\n\nWhy: needed a locked-down subprocess invocation of Claude for context summarization (task:b9dded3e) without inventing flags.\n\nHow to apply: reach for these flags whenever spawning a `claude -p` subprocess that should never read/write files or use tools — cheaper and more explicit than an empty settings.json alone (subagent.py already writes one for hook suppression, safe-mode/tools flags are the belt-and-suspenders addition).",
-  "files": [],
+  "files": [
+    "langchain_learning/subagent.py"
+  ],
   "docs": [],
   "related": [],
-  "updated": "2026-07-04 00:01:36"
+  "updated": "2026-07-25 20:17:35"
 }

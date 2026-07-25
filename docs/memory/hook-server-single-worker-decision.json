@@ -1,0 +1,10 @@
+{
+  "name": "hook-server-single-worker-decision",
+  "type": "project",
+  "tags": "uvicorn, workers, hook server, architecture, MemorySaver, sessions, scaling",
+  "body": "Decided against per-session worker processes for the claude-hooks FastAPI hook server. It stays a single uvicorn worker (no --workers N), single asyncio process handling all sessions via keyed dict lookups in the in-process MemorySaver checkpoint.\n\nWhy: per-session isolation (one process per session) would require either sticky-session routing via a reverse proxy in front of multi-process uvicorn, or spawning/tearing down a subprocess per session — the latter reintroduces the per-invocation subprocess-dispatcher overhead the FastAPI server was built to replace. It would also fragment the shared server_memory/event-log timeline across sessions. Discussed 2026-07-25/26; user's call: complexity isn't justified by the benefit at current scale.\n\nHow to apply: don't propose splitting the hook server into per-session workers/processes unless there's evidence one session's load or a crash is actually affecting others. If that happens, revisit — but default to the current single-worker design.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-25 20:05:43"
+}

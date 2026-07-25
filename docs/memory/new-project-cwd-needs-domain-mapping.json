@@ -1,0 +1,10 @@
+{
+  "name": "new-project-cwd-needs-domain-mapping",
+  "type": "feedback",
+  "tags": "cwd_domains.json new project domain mapping tasks memory epic scaffold workflow checklist",
+  "body": "Whenever a brand-new project directory is created (e.g. scaffolding a new repo for an epic, `mkdir` + `git init`), add an entry to cwd_domains.json right away — don't wait for it to come up as a problem later.\n\nLocation: `~/Library/Mobile Documents/com~apple~CloudDocs/Databases/cwd_domains.json` (iCloud-synced, path resolved via claude-hooks-dev's `src/config.py::Config.cwd_domains_json`). Format: flat `{\"<directory-name>\": \"<domain>\"}` map — usually the same string for both (e.g. `\"cypress-playwright-migrator\": \"cypress-playwright-migrator\"`).\n\nWhy: `src/tools/tasks.py::_domain_from_cwd` resolves a task's domain by walking the cwd's path components in reverse and matching against this map by EXACT component name (not substring, not full path) — see config.py's `_load_cwd_domain_map`/`cwd_domain_map`. A new project directory with no entry here means tasks__create/list calls with `cwd=<new project path>` silently fail to resolve a domain tag, which can affect task filtering/organization down the line even though task creation itself doesn't hard-fail on a missing mapping.\n\nHow to apply: as soon as a new project cwd is created (mkdir + git init, or scaffolding a sibling repo for an epic), immediately add `\"<dirname>\": \"<domain>\"` to cwd_domains.json in the same step — treat it as part of \"creating the project,\" not a separate followup. This was done for `cypress-playwright-migrator` (epic fd7c8e12) on 2026-07-15 right after creating the directory.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-24 15:07:39"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "claude-cli-wraps-json-in-markdown-fences",
+  "type": "feedback",
+  "tags": "claude -p, claude cli, json output, markdown fences, output-format json, system prompt ignored, task:a91133b8",
+  "body": "`claude -p --output-format json` can still return its `result` field wrapped in markdown code fences (` ```json ... ``` `) even when the system prompt explicitly says \"no markdown fences, JSON only.\" Confirmed live (task:a91133b8, claude-hooks-dev's concept_store/extractor.py): a real call ignored `_SYSTEM`'s instruction and fenced the response anyway. Any code that does `json.loads()` directly on a `claude -p` completion needs to strip leading/trailing ` ``` ` (and an optional `json` language tag) first — don't trust the system prompt alone to prevent this. SeniorDevAgent's `loop/pass2.py::_parse_json` already has this fence-stripping (plus a `raw_decode` fallback for trailing prose) for object-shaped responses; claude-hooks-dev's `concept_store/extractor.py::_strip_json_response` is the array-shaped port of the same fix. Related: [[surface-design-tradeoffs-as-tasks-not-unilateral-fixes]].",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-24 15:59:53"
+}

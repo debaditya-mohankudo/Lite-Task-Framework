@@ -1,0 +1,10 @@
+{
+  "name": "deploy-skip-tests-md-only",
+  "type": "feedback",
+  "tags": "deploy, tests, markdown, readme, skip gate, unit tests, integration tests",
+  "body": "Don't run the unit/integration test suite as part of /deploy when the dev→test diff is markdown-only (e.g. README changes). Merge straight through instead.\n\nWhy: user pointed out mid-deploy that running the full 602-unit + 69-integration suite for a 4-line README addition is wasted time — markdown changes can't break behavior the suite checks.\n\nHow to apply: before invoking ~/workspace/claude-hooks/scripts/deploy.sh, check `git diff origin/test --name-only`. If every changed path ends in .md, merge dev→test and test→main directly without running the full gate. If the diff mixes .md with .py/other code files, still run the full suite — only skip when the diff is markdown-only.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-25 02:58:58"
+}

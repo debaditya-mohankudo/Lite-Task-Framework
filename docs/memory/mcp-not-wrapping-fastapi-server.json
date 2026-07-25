@@ -1,0 +1,10 @@
+{
+  "name": "mcp-not-wrapping-fastapi-server",
+  "type": "project",
+  "tags": "mcp fastapi architecture decision hook server reliability deploy",
+  "body": "Decided NOT to auto-wrap the claude-hooks FastAPI server (test worktree, port 8766) as an MCP server (e.g. via fastapi-mcp), despite the simplicity win of auto-derived tool schemas.\n\n**Why:** the test server restarts on every `/deploy`. If MCP tool availability were tied to that same process, deploy-time restarts would drop MCP tools mid-session. Keeping the MCP layer separate/hand-rolled means it can stay up independently of hook-server deploys.\n\n**How to apply:** keep the current hand-rolled `mcp__claude-hooks__*` tool layer as-is. Do not suggest collapsing it into the FastAPI app for \"zero config\" reasons — the reliability cost (coupled failure/restart domain) outweighs the maintenance savings, per user's explicit reasoning.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-25 20:05:43"
+}

@@ -1,10 +1,13 @@
 {
   "name": "migration-test-keep-old-ddl",
   "type": "feedback",
-  "tags": "migration test DDL old schema refactor preserve integrity pragma alter table",
-  "body": "Do not refactor the DDL in tests that exist to verify the migration path.\n\n**Why:** A migration test must use the pre-migration schema to remain meaningful. If you replace its inline DDL with the canonical (post-migration) DDL from schema.py, the test no longer exercises the migration — it starts in the already-migrated state and the migrate_*() call becomes a no-op.\n\n**How to apply:** When updating tests to import from src/db/schema.py, skip any test that deliberately creates an old schema to test an ALTER TABLE migration. Leave those inline. A comment like `# intentional: pre-migration schema` is sufficient.",
-  "files": [],
+  "tags": "migration test isolation ddl schema inline pre-migration refactor preserve integrity pragma alter table task:cb357eb6",
+  "body": "Migration tests must keep the pre-migration DDL inline — never replace it with the canonical (post-migration) DDL from src/db/schema.py, and never refactor it away when updating other tests in the same file to import from schema.py.\n\n**Why:** A test named `test_migration_*` (e.g. `test_migration_backfill_from_tags` in tests/test_task_issue_type.py) exists specifically to exercise an `ALTER TABLE` backfill path. If its schema is replaced with the canonical post-migration DDL, the columns already exist before `migrate_*()` runs, so the migration becomes a no-op and the test passes vacuously without exercising anything (task:cb357eb6).\n\n**How to apply:** Any test that deliberately creates an old schema to test an `ALTER TABLE` migration must build the DB using the old schema manually, then call the prod migrate function — leave it inline even when sibling tests get updated to import from schema.py. A comment like `# intentional: pre-migration schema` is sufficient to mark it.",
+  "files": [
+    "tests/test_task_issue_type.py",
+    " src/db/schema.py"
+  ],
   "docs": [],
   "related": [],
-  "updated": "2026-07-05 07:10:37"
+  "updated": "2026-07-25 20:20:30"
 }

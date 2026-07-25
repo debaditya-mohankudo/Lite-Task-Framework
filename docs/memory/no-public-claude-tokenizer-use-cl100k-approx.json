@@ -3,8 +3,10 @@
   "type": "reference",
   "tags": "tokenizer token count tiktoken claude anthropic cl100k_base approximation context size budget task:3369b86a",
   "body": "Anthropic does not publish a Claude tokenizer, so exact token counts for Claude prompts aren't computable locally. tiktoken's cl100k_base encoding (GPT-3.5/4 family) is the closest practical stand-in.\n\nWhy: needed real token counts (not chars/4) for UPS context-size logging in claude-hooks; no Claude-specific option exists.\n\nHow to apply: for any future token-budget/context-size work against Claude prompts in this repo (or elsewhere), reach for src/tools/tokens.py's count_tokens() (cl100k_base) rather than re-deriving a heuristic — treat the result as a close approximation, not exact, especially for code-heavy or non-English text.",
-  "files": [],
+  "files": [
+    "src/tools/tokens.py"
+  ],
   "docs": [],
   "related": [],
-  "updated": "2026-07-03 03:07:12"
+  "updated": "2026-07-25 20:17:31"
 }

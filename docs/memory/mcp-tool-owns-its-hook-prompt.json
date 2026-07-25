@@ -3,8 +3,11 @@
   "type": "feedback",
   "tags": "mcp tool hook prompt injection additionalSystemPrompt ownership responsibility separation task:1ac0c420",
   "body": "Each MCP tool builds its own __hook__ prompt — claude-hooks is a dumb pipe. Do not let the prompt-building logic live in the hook layer.\n\n**Why:** The tool knows its own domain context (what iteration means, what confidence means, what the user should do next). The hook layer has no business interpreting that.\n\n**How to apply:** When adding __hook__ to a new MCP tool, write the full additionalSystemPrompt string inside the tool function itself. The bridge node never touches the content.",
-  "files": [],
+  "files": [
+    "langchain_learning/nodes/mcp_hook_bridge.py",
+    " src/tools/tasks.py"
+  ],
   "docs": [],
   "related": [],
-  "updated": "2026-07-09 00:05:24"
+  "updated": "2026-07-25 20:17:58"
 }

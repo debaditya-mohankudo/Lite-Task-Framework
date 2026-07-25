@@ -1,0 +1,10 @@
+{
+  "name": "tasks-index-task-upsert-bug",
+  "type": "project",
+  "tags": "index_task turbovec upsert bug fixed deployed main server reload mcp reconnect",
+  "body": "FIXED &amp; DEPLOYED 2026-07-17: tasks__index_task's \"id already present in index\" failure (TurboVec add_with_ids raises on duplicate; fix = index.remove(uid) before add, task:9c1a387f, commit 314e583). The fix existed in dev with regression tests but had never been deployed — shipped to main via /deploy (603 unit + 64 integration passed; merge 7af838b, which also carried c9b9b51 concept_store ACME-envelope migration). NOTE: an already-running Claude Code session's MCP server keeps the old code — verify only after /mcp reconnect or in a fresh session. Root lesson: a \"known bug\" in claude-hooks may already be fixed in dev; check `git log dev..main` deployment lag before writing any code.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-25 03:02:54"
+}

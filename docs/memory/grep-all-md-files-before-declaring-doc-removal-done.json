@@ -1,0 +1,10 @@
+{
+  "name": "grep-all-md-files-before-declaring-doc-removal-done",
+  "type": "feedback",
+  "tags": "documentation, feature removal, grep, doc drift, claude-hooks, task:e8c2646b",
+  "body": "When stripping documentation for a removed feature, grep ALL .md files repo-wide for the feature's key symbol names before declaring the doc-removal pass complete — don't trust the task's named file list (e.g. \"CLAUDE.md and CONTRIBUTING.md\").\n\nWhy: task:0537e805 was scoped to 2 files; a repo-wide grep for cache_check/prompt_cache/CacheCheckNode turned up 3 more files with the same stale topology diagram or live instruction duplicated (.github/copilot-instructions.md — 5 separate mentions; docs/arch/task_framework.md — a topology diagram; task_templates/research.md — a LIVE task-template instruction that would have kept injecting a dead-tool reference into every future research task if missed).\n\nHow to apply: for any \"remove feature docs\" task, run `grep -rln <feature_symbols> --include='*.md' .` across the whole repo as the first step, not the last.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-23 12:33:12"
+}

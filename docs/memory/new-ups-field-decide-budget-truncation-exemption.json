@@ -3,12 +3,14 @@
   "type": "feedback",
   "tags": "ups, context budget, truncation, task_body, execution_contract, new field, checkpoint, dispatcher, task:380140fa",
   "body": "When adding a new field to SessionState that gets rendered into the system prompt (_format_system_prompt), explicitly decide whether it should be subject to _enforce_context_budget (only trims ctx[\"memories\"]) and/or _TASK_BODY_CHAR_CAP (only applies to task_body) — don't assume either applies or doesn't without checking the actual code.\n\nWhy: task:380140fa needed a field (execution_contract) that stays byte-identical every turn regardless of context pressure. The risk wasn't _enforce_context_budget (it never touches anything but memories) — it was accidentally conflating the new field with task_body's rendering path and inheriting its char-cap truncation.\n\nHow to apply: give a fixed/must-not-truncate field its own section in _format_system_prompt with no shared truncation logic, rather than appending it to an existing capped field. Write a test proving it survives both a large-memories-list budget squeeze and an oversized-body truncation scenario.",
-  "files": [],
+  "files": [
+    "hooks/dispatcher.py"
+  ],
   "docs": [],
   "related": [
     "claude-hooks-context-token-budget",
     "ups-context-sources-all-capped",
     "claude-hooks-posttooluse-bridge"
   ],
-  "updated": "2026-07-05 03:27:11"
+  "updated": "2026-07-25 20:17:39"
 }

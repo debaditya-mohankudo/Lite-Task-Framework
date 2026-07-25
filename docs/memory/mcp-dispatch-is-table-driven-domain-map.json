@@ -1,0 +1,10 @@
+{
+  "name": "mcp-dispatch-is-table-driven-domain-map",
+  "type": "feedback",
+  "tags": "mcp, dispatcher, domain map, tool registration, src/dispatcher.py, claude-hooks, task:e8c2646b",
+  "body": "src/dispatcher.py registers MCP tools via a single DOMAIN_MAP dict: `{domain: (module_path, [action1, action2, ...])}`, and build_dispatcher() dynamically looks up `handle_<action>` on the module for each action, naming the tool `domain__action`. Removing an entire tool domain (e.g. prompt_cache__lookup/store/list/search/delete) is a ONE-LINE DOMAIN_MAP delete, not N separate handler-removal steps.\n\nWhy: task:f65bd34a's original checklist assumed 5 separate MCP tool registrations needed removing; the actual registration is table-driven, so the fix was a single dict-entry delete.\n\nHow to apply: when planning removal of an MCP tool domain in this repo, check src/dispatcher.py's DOMAIN_MAP first — the checklist item is almost always \"delete the DOMAIN_MAP entry,\" not a per-handler enumeration.",
+  "files": [],
+  "docs": [],
+  "related": [],
+  "updated": "2026-07-24 17:49:54"
+}

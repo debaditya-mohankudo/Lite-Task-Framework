@@ -3,8 +3,10 @@
   "type": "feedback",
   "tags": "tasks create, issue_type, template, misc, feature, body format, create gate rejects, task:d89a8445",
   "body": "tasks__create's required body sections differ by issue_type, and the create gate error message includes the exact missing section name and a full template to copy — e.g. issue_type=misc requires a \"Notes:\" section (not \"Motivation:\", which is the feature template's field). Why: guessing the template from memory of a different issue_type causes an avoidable round-trip. How to apply: on the first create-gate rejection for an issue_type you haven't used yet this session, just copy the template verbatim from the error message rather than guessing again.",
-  "files": [],
+  "files": [
+    "src/tools/tasks.py"
+  ],
   "docs": [],
   "related": [],
-  "updated": "2026-07-09 00:05:24"
+  "updated": "2026-07-25 20:17:55"
 }
