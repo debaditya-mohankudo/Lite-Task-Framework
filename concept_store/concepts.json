@@ -17,7 +17,7 @@
         "record_commit() returns an error dict (never raises) if task_id is unknown or either field is empty; both dispatcher capture functions treat any failure as fail-open (log a warning, never block the tool response)",
         "Table name deliberately avoids task_commits — that name was already used (and removed) for an unrelated LangGraph checkpoint-state key (task:c5628e95)"
       ],
-      "last_validated": "2026-07-23T04:38:06.635342+00:00",
+      "last_validated": "2026-07-25T18:53:03.872258+00:00",
       "module": "src/tools/tasks.py",
       "name": "commit-task-traceability-capture"
     },
@@ -178,7 +178,7 @@
         "subtask parent must be story, task, or bug",
         "feedback can attach to any type"
       ],
-      "last_validated": "2026-06-29T09:47:25.285609+00:00",
+      "last_validated": "2026-07-25T18:57:11.423541+00:00",
       "module": "hooks/gates.py",
       "name": "gates-jira-hierarchy"
     },
@@ -219,7 +219,7 @@
         "The COUNT(*) check runs on every emit() call (every log line), not on a schedule/batch -- this is an O(n) check per write, acceptable at this volume but a scaling consideration if log volume grows sharply.",
         "Pruning is silent -- emit() swallows all exceptions (bare except: pass), so a failed prune or count-check never surfaces as an error."
       ],
-      "last_validated": "2026-07-21T22:35:38.512586+00:00",
+      "last_validated": "2026-07-25T18:53:11.617148+00:00",
       "module": "src/logger.py",
       "name": "hook-logs-sqlite-autoprune-at-50k"
     },
@@ -238,7 +238,7 @@
         "CLAUDE_CWD env var is a fallback only, used when payload['cwd'] from stdin is missing/empty — it must never unconditionally overwrite a cwd Claude Code already supplied, since CLAUDE_CWD reflects whatever cwd the long-running server process happened to launch from, not the calling session's cwd (bug found 2026-07-08: unconditional overwrite clobbered every session's reported cwd with a stale/empty env var)",
         "Fails open: if the server is unreachable, exits 0 with an empty JSON object rather than blocking the hook event"
       ],
-      "last_validated": "2026-07-08T11:29:24.786447+00:00",
+      "last_validated": "2026-07-25T18:53:17.891901+00:00",
       "module": "hooks/client.py",
       "name": "hooks-client-cwd-forwarding"
     },
@@ -343,7 +343,7 @@
         "Truncation (when a domain exceeds batch_limit rows) always drops the stalest rows in that domain first, via ORDER BY updated DESC -- never an arbitrary rowid-order slice.",
         "A small or new domain must never be starved out of the candidate pool by a large domain growing past batch_limit -- each domain is queried independently."
       ],
-      "last_validated": "2026-07-21T22:21:23.339835+00:00",
+      "last_validated": "2026-07-25T18:53:24.366214+00:00",
       "module": "langchain_learning/nodes/_memory_scoring.py",
       "name": "memory-scoring-per-domain-batch-limit"
     },
@@ -370,7 +370,7 @@
       "name": "rag-core-turbovec-index"
     },
     "server-fastapi-hook-server": {
-      "confidence": 0.97,
+      "confidence": 0.95,
       "contracts": [
         "POST /hook/{event} calls dispatcher handler and returns hookSpecificOutput, a top-level decision/reason dict (Stop only, see dispatcher-hook-event-routing), or {}",
         "GET /health returns {status: ok}",
@@ -378,20 +378,20 @@
         "GET /session/current returns {session_id, turn} from the most recent checkpoint — no active task required, unlike GET /session/active"
       ],
       "created_at": "2026-06-29T09:47:25.286219+00:00",
-      "description": "Persistent FastAPI server replacing per-invocation subprocess dispatcher. Routes POST /hook/{event} to dispatcher handlers. Uses SqliteSaver for durable LangGraph checkpointing across turns. Trims checkpoint DB to 5 sessions, on every UserPromptSubmit (not just at startup). Forces WAL journal mode on the checkpoint DB connection at startup to eliminate per-write -journal sidecar files.",
+      "description": "Persistent FastAPI server replacing per-invocation subprocess dispatcher. Routes POST /hook/{event} to dispatcher handlers. Uses MemorySaver (in-process, in-memory LangGraph checkpointer) — does NOT survive server restarts. Replaced SqliteSaver (task:b3964f85) after two corruption incidents (a 1.7GB bloated .old file, then a 'database disk image is malformed' failure that silently broke every Stop-hook write). Per-thread checkpoint history is capped at 5000 rows, enforced from NoopNode on every Stop event (langchain_learning/nodes/noop.py) — MemorySaver has no built-in eviction, so without this a long-running session would grow RAM usage unboundedly instead of corrupting a file.",
       "evidence": [
-        "hooks/server.py:1",
-        "hooks/server.py:118",
+        "hooks/server.py:1-14",
+        "hooks/server.py:41-59 (lifespan, MemorySaver construction)",
         "hooks/server.py: session_current() -> get_current_session()",
-        "hooks/server.py: lifespan() PRAGMA journal_mode=WAL"
+        "hooks/server.py: session_active() -> get_active_session()"
       ],
       "invariants": [
-        "Checkpoint DB is trimmed to _CHECKPOINT_SESSION_CAP=5 sessions on EVERY UserPromptSubmit, not just at server startup — a session outside the top-N most-recently-active can be evicted mid-conversation by sibling sessions in other cwds",
-        "Checkpoint DB is also trimmed at server startup",
+        "Checkpoint state lives only in-process memory (MemorySaver) — it is discarded on every server restart/reload, unlike the prior SqliteSaver-backed design; nothing about session/task-activation state persists across a restart except what server_memory.py separately logs to SQLite",
+        "Per-thread checkpoint history is capped at 5000 rows via NoopNode on every Stop event, not by the server itself — MemorySaver has no built-in eviction so this cap is the only thing bounding RAM growth for a long-running session",
         "Server runs on port 8766",
-        "Checkpoint DB connection runs in WAL journal mode, forced via PRAGMA journal_mode=WAL at lifespan startup (before SqliteSaver is opened) — the file previously ran in SQLite's default rollback-journal ('delete') mode, where every write creates+deletes a `-journal` sidecar; a transient failure doing that surfaced as 'attempt to write a readonly database' independent of restart timing (task:ac5df3db, fixed 2026-07-08)"
+        "GET /session/active and GET /session/current both read live in-memory MemorySaver state (not a DB) so they reflect real-time state; /session/active requires an active task (returns {} otherwise), /session/current does not"
       ],
-      "last_validated": "2026-07-08T11:29:24.784934+00:00",
+      "last_validated": "2026-07-25T18:54:56.745425+00:00",
       "module": "hooks/server.py",
       "name": "server-fastapi-hook-server"
     },
