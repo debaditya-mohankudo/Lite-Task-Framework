@@ -83,3 +83,6 @@ All hook logs write to `claude_hooks.sqlite` in iCloud via `sqlite_log_handler.p
 ```text
 mcp__claude-hooks__hooks__read_logs_sqlite
 ```
+
+## Memory Store
+MEMORY.sqlite - Use memory__ mcp tools
