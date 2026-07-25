@@ -378,20 +378,23 @@
         "GET /session/current returns {session_id, turn} from the most recent checkpoint — no active task required, unlike GET /session/active"
       ],
       "created_at": "2026-06-29T09:47:25.286219+00:00",
-      "description": "Persistent FastAPI server replacing per-invocation subprocess dispatcher. Routes POST /hook/{event} to dispatcher handlers. Uses MemorySaver (in-process, in-memory LangGraph checkpointer) — does NOT survive server restarts. Replaced SqliteSaver (task:b3964f85) after two corruption incidents (a 1.7GB bloated .old file, then a 'database disk image is malformed' failure that silently broke every Stop-hook write). Per-thread checkpoint history is capped at 5000 rows, enforced from NoopNode on every Stop event (langchain_learning/nodes/noop.py) — MemorySaver has no built-in eviction, so without this a long-running session would grow RAM usage unboundedly instead of corrupting a file.",
+      "description": "Persistent FastAPI server replacing per-invocation subprocess dispatcher. Routes POST /hook/{event} to dispatcher handlers. Uses MemorySaver (in-process, in-memory LangGraph checkpointer) — does NOT survive server restarts. Replaced SqliteSaver (task:b3964f85) after two corruption incidents (a 1.7GB bloated .old file, then a 'database disk image is malformed' failure that silently broke every Stop-hook write). Per-thread checkpoint history is capped at 5000 rows, enforced from NoopNode on every Stop event (langchain_learning/nodes/noop.py) — MemorySaver has no built-in eviction, so without this a long-running session would grow RAM usage unboundedly instead of corrupting a file. Single uvicorn worker process (no --workers N), event loop is uvloop (task:53c9f817) rather than stdlib asyncio — picked up automatically by uvicorn's \"auto\" loop policy once uvloop is an installed dependency, no code or CLI-flag change needed.",
       "evidence": [
         "hooks/server.py:1-14",
         "hooks/server.py:41-59 (lifespan, MemorySaver construction)",
         "hooks/server.py: session_current() -> get_current_session()",
-        "hooks/server.py: session_active() -> get_active_session()"
+        "hooks/server.py: session_active() -> get_active_session()",
+        "pyproject.toml: uvloop dependency",
+        "~/Library/LaunchAgents/com.debaditya.claude-hooks-pipeline.plist: uvicorn launch args, single process, no --workers"
       ],
       "invariants": [
         "Checkpoint state lives only in-process memory (MemorySaver) — it is discarded on every server restart/reload, unlike the prior SqliteSaver-backed design; nothing about session/task-activation state persists across a restart except what server_memory.py separately logs to SQLite",
         "Per-thread checkpoint history is capped at 5000 rows via NoopNode on every Stop event, not by the server itself — MemorySaver has no built-in eviction so this cap is the only thing bounding RAM growth for a long-running session",
-        "Server runs on port 8766",
-        "GET /session/active and GET /session/current both read live in-memory MemorySaver state (not a DB) so they reflect real-time state; /session/active requires an active task (returns {} otherwise), /session/current does not"
+        "Server runs on port 8766 as a single uvicorn worker process — deliberately not multi-worker/per-session, since MemorySaver checkpoint state is process-local and would fragment across workers with no session-affinity routing in front (decision: hook-server-single-worker-decision memory)",
+        "GET /session/active and GET /session/current both read live in-memory MemorySaver state (not a DB) so they reflect real-time state; /session/active requires an active task (returns {} otherwise), /session/current does not",
+        "Event loop is uvloop, not stdlib asyncio — uvicorn's \"auto\" loop factory (uvicorn/loops/auto.py) silently prefers uvloop whenever it's importable, so this is controlled entirely by whether uvloop is installed, not by any explicit --loop flag or server.py code"
       ],
-      "last_validated": "2026-07-25T18:54:56.745425+00:00",
+      "last_validated": "2026-07-25T20:07:45.498135+00:00",
       "module": "hooks/server.py",
       "name": "server-fastapi-hook-server"
     },
