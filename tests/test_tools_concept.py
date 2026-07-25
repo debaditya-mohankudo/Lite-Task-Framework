@@ -9,6 +9,7 @@ from src.tools.concept import (
     handle_get,
     handle_list,
     handle_modules,
+    handle_search,
     handle_upsert,
 )
 
@@ -109,3 +110,24 @@ class TestModules:
         handle_upsert(repo, _concept(name="b", module="a.py"))
         handle_upsert(repo, _concept(name="c", module="a.py"))
         assert handle_modules(repo) == {"modules": ["a.py", "z.py"]}
+
+
+class TestSearch:
+    def test_missing_repo_arg_is_error(self):
+        assert "error" in handle_search("", "foo")
+
+    def test_empty_query_is_error(self, repo_with_store):
+        assert "error" in handle_search(repo_with_store, "")
+
+    def test_search_by_description(self, repo):
+        handle_upsert(repo, _concept(name="a", description="does foo things"))
+        handle_upsert(repo, _concept(
+            name="b", module="b.py", description="unrelated",
+            invariants=["never does baz"], contracts=["returns a Baz"],
+        ))
+        result = handle_search(repo, "foo")
+        assert len(result["concepts"]) == 1
+        assert result["concepts"][0]["name"] == "a"
+
+    def test_search_no_match_returns_empty_list(self, repo_with_store):
+        assert handle_search(repo_with_store, "nonexistent") == {"concepts": []}

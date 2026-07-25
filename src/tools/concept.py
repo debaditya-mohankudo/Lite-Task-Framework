@@ -92,3 +92,21 @@ def handle_modules(repo: str) -> dict:
     except ValueError as exc:
         return {"error": str(exc)}
     return {"modules": store.modules()}
+
+
+def handle_search(repo: str, query: str) -> dict:
+    """Free-text keyword search across name/description/invariants/contracts.
+
+    Unlike get() (needs the exact name) or list() (needs the exact module),
+    this finds concepts by what they say — case-insensitive substring match,
+    ranked by how many fields/entries matched. Use when you know roughly what
+    a concept is about (e.g. "caching", "task activation") but not its slug
+    or which file it's attached to.
+    """
+    if not query or not query.strip():
+        return {"error": "query is required"}
+    try:
+        store = _store_for(repo)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"concepts": store.search(query)}

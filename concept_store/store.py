@@ -98,5 +98,37 @@ class ConceptStore:
     def modules(self) -> list[str]:
         return sorted({c.get("module", "") for c in self._data.values() if c.get("module")})
 
+    def search(self, query: str) -> list[dict]:
+        """Keyword search across name/description/invariants/contracts.
+
+        Case-insensitive substring match. Ranks by number of matching fields
+        (name/description count once each; invariants/contracts count once
+        per matching list entry), most matches first, ties broken by name.
+        Closes the gap between get() (needs the exact name) and list()
+        (needs the exact module) — free-text lookup across the whole store.
+        """
+        needle = query.lower().strip()
+        if not needle:
+            return []
+
+        scored: list[tuple[int, dict]] = []
+        for concept in self._data.values():
+            score = 0
+            if needle in concept.get("name", "").lower():
+                score += 1
+            if needle in concept.get("description", "").lower():
+                score += 1
+            for inv in concept.get("invariants", []) or []:
+                if needle in str(inv).lower():
+                    score += 1
+            for con in concept.get("contracts", []) or []:
+                if needle in str(con).lower():
+                    score += 1
+            if score:
+                scored.append((score, concept))
+
+        scored.sort(key=lambda pair: (-pair[0], pair[1].get("name", "")))
+        return [c for _, c in scored]
+
     def __len__(self) -> int:
         return len(self._data)

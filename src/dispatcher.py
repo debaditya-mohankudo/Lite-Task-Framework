@@ -50,7 +50,7 @@ DOMAIN_MAP: dict[str, tuple[str, list[str]]] = {
     "diff_rag": ("tools.diff_rag", ["query", "smart_search", "index_commits"]),
     "think":    ("tools.think",    ["think"]),
     "scratch":  ("tools.scratch",  ["set", "get", "list", "delete", "clear"]),
-    "concept":  ("tools.concept",  ["get", "list", "upsert", "delete", "modules"]),
+    "concept":  ("tools.concept",  ["get", "list", "upsert", "delete", "modules", "search"]),
 }
 
 
