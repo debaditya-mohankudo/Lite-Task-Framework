@@ -211,12 +211,35 @@ def handle_checkpoint_query(thread_id: str = "") -> dict:
     }
 
 
+def _toon_cell(value: object) -> str:
+    s = "" if value is None else str(value)
+    if any(c in s for c in (",", "\n", '"')):
+        return '"' + s.replace('"', '""') + '"'
+    return s
+
+
+def _rows_to_toon(rows: list[dict]) -> str:
+    """Encode a list of uniform-schema dicts as TOON's tabular array format.
+
+    header[N]{field1,field2,...}:
+      val1,val2,...
+    """
+    if not rows:
+        return "rows[0]{}:"
+    fields = list(rows[0].keys())
+    lines = [f"rows[{len(rows)}]{{{','.join(fields)}}}:"]
+    for r in rows:
+        lines.append("  " + ",".join(_toon_cell(r.get(f)) for f in fields))
+    return "\n".join(lines)
+
+
 def handle_read_logs_sqlite(
     level: str = "",
     logger: str = "",
     search: str = "",
     limit: int = 50,
-) -> dict:
+    format: str = "toon",
+) -> dict | str:
     """Query hook_logs from claude_hooks.sqlite.
 
     Args:
@@ -224,6 +247,10 @@ def handle_read_logs_sqlite(
         logger: Filter by logger name substring. Empty = all.
         search: Substring to match in the message field. Empty = all.
         limit:  Max rows to return (default 50, max 200).
+        format: "toon" (default, token-efficient tabular text) or "json" (dict).
+                Rows are a uniform schema (id, ts, level, logger, message), which is
+                exactly what TOON's tabular encoding was designed to compress —
+                falls back to "json" for callers that need a dict/error shape.
     """
     if not _HOOKS_LOG_DB.exists():
         return {"error": f"DB not found: {_HOOKS_LOG_DB}"}
@@ -252,7 +279,12 @@ def handle_read_logs_sqlite(
             params,
         ).fetchall()
 
+    dict_rows = [dict(r) for r in rows]
+
+    if format == "toon":
+        return f"count: {len(dict_rows)}\n{_rows_to_toon(dict_rows)}"
+
     return {
-        "count": len(rows),
-        "rows": [dict(r) for r in rows],
+        "count": len(dict_rows),
+        "rows": dict_rows,
     }

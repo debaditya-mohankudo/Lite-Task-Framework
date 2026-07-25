@@ -144,14 +144,14 @@ class TestHandleReadLogsSqlite:
         db = tmp_path / "logs.sqlite"
         _make_logs_db(db)
         with patch("src.tools.hooks._HOOKS_LOG_DB", db):
-            result = handle_read_logs_sqlite()
+            result = handle_read_logs_sqlite(format="json")
         assert result["count"] == 3
 
     def test_filter_by_level(self, tmp_path):
         db = tmp_path / "logs.sqlite"
         _make_logs_db(db)
         with patch("src.tools.hooks._HOOKS_LOG_DB", db):
-            result = handle_read_logs_sqlite(level="ERROR")
+            result = handle_read_logs_sqlite(level="ERROR", format="json")
         assert result["count"] == 1
         assert result["rows"][0]["level"] == "ERROR"
 
@@ -159,14 +159,14 @@ class TestHandleReadLogsSqlite:
         db = tmp_path / "logs.sqlite"
         _make_logs_db(db)
         with patch("src.tools.hooks._HOOKS_LOG_DB", db):
-            result = handle_read_logs_sqlite(logger="tasks")
+            result = handle_read_logs_sqlite(logger="tasks", format="json")
         assert result["count"] == 1
 
     def test_filter_by_search(self, tmp_path):
         db = tmp_path / "logs.sqlite"
         _make_logs_db(db)
         with patch("src.tools.hooks._HOOKS_LOG_DB", db):
-            result = handle_read_logs_sqlite(search="memories")
+            result = handle_read_logs_sqlite(search="memories", format="json")
         assert result["count"] == 1
         assert "memories" in result["rows"][0]["message"]
 
@@ -174,7 +174,7 @@ class TestHandleReadLogsSqlite:
         db = tmp_path / "logs.sqlite"
         _make_logs_db(db)
         with patch("src.tools.hooks._HOOKS_LOG_DB", db):
-            result = handle_read_logs_sqlite(limit=9999)
+            result = handle_read_logs_sqlite(limit=9999, format="json")
         # limit is capped — all 3 rows still returned (< 200)
         assert result["count"] == 3
 
@@ -182,9 +182,45 @@ class TestHandleReadLogsSqlite:
         db = tmp_path / "logs.sqlite"
         _make_logs_db(db)
         with patch("src.tools.hooks._HOOKS_LOG_DB", db):
-            result = handle_read_logs_sqlite(level="ERROR", logger="memory")
+            result = handle_read_logs_sqlite(level="ERROR", logger="memory", format="json")
         assert result["count"] == 1
         assert "DB write failed" in result["rows"][0]["message"]
+
+    def test_toon_is_default_format(self, tmp_path):
+        db = tmp_path / "logs.sqlite"
+        _make_logs_db(db)
+        with patch("src.tools.hooks._HOOKS_LOG_DB", db):
+            result = handle_read_logs_sqlite()
+        assert isinstance(result, str)
+        assert result.startswith("count: 3")
+        assert "rows[3]{id,ts,level,logger,message}:" in result
+
+    def test_toon_empty_rows(self, tmp_path):
+        db = tmp_path / "logs.sqlite"
+        _make_logs_db(db)
+        with patch("src.tools.hooks._HOOKS_LOG_DB", db):
+            result = handle_read_logs_sqlite(level="DEBUG")
+        assert result == "count: 0\nrows[0]{}:"
+
+    def test_toon_escapes_commas_and_quotes(self, tmp_path):
+        db = tmp_path / "logs.sqlite"
+        with sqlite3.connect(str(db)) as conn:
+            conn.execute(
+                """CREATE TABLE hook_logs (
+                    id INTEGER PRIMARY KEY,
+                    ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    level TEXT,
+                    logger TEXT,
+                    message TEXT
+                )"""
+            )
+            conn.execute(
+                "INSERT INTO hook_logs (level, logger, message) VALUES (?, ?, ?)",
+                ("INFO", "hooks.memory", 'has, a comma and a "quote"'),
+            )
+        with patch("src.tools.hooks._HOOKS_LOG_DB", db):
+            result = handle_read_logs_sqlite()
+        assert '"has, a comma and a ""quote"""' in result
 
 
 # ---------------------------------------------------------------------------
