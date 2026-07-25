@@ -227,18 +227,20 @@
       "confidence": 0.9,
       "contracts": [
         "Usage: python3 client.py <HookEvent>",
-        "Reads hook payload JSON from stdin, POSTs to {CLAUDE_HOOKS_SERVER or http://127.0.0.1:8766}/hook/{EVENT}, prints the response JSON to stdout"
+        "Reads hook payload JSON from stdin, POSTs to {CLAUDE_HOOKS_SERVER or http://127.0.0.1:8766}/hook/{EVENT}, prints the response JSON to stdout",
+        "Prints 'claude-hooks: client.py invoked for {EVENT}' to stderr on every invocation, regardless of success/failure"
       ],
       "created_at": "2026-07-08T11:29:24.786447+00:00",
       "description": "Thin HTTP client for the FastAPI hook server. Reads the hook JSON payload from stdin (which already carries the real per-session cwd from Claude Code) and POSTs it to localhost:8766/hook/{event}.",
       "evidence": [
-        "hooks/client.py:1-44"
+        "hooks/client.py:1-47"
       ],
       "invariants": [
         "CLAUDE_CWD env var is a fallback only, used when payload['cwd'] from stdin is missing/empty — it must never unconditionally overwrite a cwd Claude Code already supplied, since CLAUDE_CWD reflects whatever cwd the long-running server process happened to launch from, not the calling session's cwd (bug found 2026-07-08: unconditional overwrite clobbered every session's reported cwd with a stale/empty env var)",
-        "Fails open: if the server is unreachable, exits 0 with an empty JSON object rather than blocking the hook event"
+        "Fails open: if the server is unreachable, exits 0 with an empty JSON object rather than blocking the hook event",
+        "Every invocation prints a one-line 'claude-hooks: client.py invoked for {EVENT}' announcement to stderr immediately after EVENT is resolved, unconditionally (before the try/except) — this exists because server-side dispatcher logs only show the server's view, giving no signal that client.py itself ran for a given hook event (task:fb7d3777)"
       ],
-      "last_validated": "2026-07-25T18:53:17.891901+00:00",
+      "last_validated": "2026-07-25T20:50:36.296661+00:00",
       "module": "hooks/client.py",
       "name": "hooks-client-cwd-forwarding"
     },
