@@ -27,6 +27,8 @@ if not EVENT:
 
 SERVER = os.environ.get("CLAUDE_HOOKS_SERVER", "http://127.0.0.1:8766")
 
+print(f"claude-hooks: client.py invoked for {EVENT}", file=sys.stderr)
+
 try:
     payload = json.load(sys.stdin)
     if not payload.get("cwd"):
