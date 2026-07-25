@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 
 from mcp.server.fastmcp import FastMCP
-from dispatcher import build_dispatcher
+from src.dispatcher import build_dispatcher
 
 mcp = FastMCP("claude-hooks")
 build_dispatcher(mcp)
