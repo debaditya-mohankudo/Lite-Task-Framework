@@ -39,12 +39,14 @@ _slog = setup("server")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
     from langgraph.checkpoint.memory import MemorySaver
     import langchain_learning.session_graph as sg
     import os as _os_mod
 
     pid = _os_mod.getpid()
-    log.info("hook-server[pid=%d]: lifespan startup begin", pid)
+    loop_impl = type(asyncio.get_running_loop()).__module__
+    log.info("hook-server[pid=%d]: lifespan startup begin, event_loop=%s", pid, loop_impl)
     checkpointer = MemorySaver()
     sg._graph = sg.build_session_graph(checkpointer=checkpointer)
     import hooks.server_memory as server_memory
