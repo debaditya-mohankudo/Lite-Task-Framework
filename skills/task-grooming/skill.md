@@ -153,16 +153,19 @@ If not today, identify the missing information, the blocking decision, or the mi
 ### 3. Are assumptions hidden?
 Look for assumptions that exist only in the author's head — architecture, API behavior, data format, ordering, deployment expectations. Validate what can be validated now; record the rest explicitly.
 
-### 4. Does historical context change the plan?
+### 4. Is the task's own stated premise verified, not just assumed?
+For infra/plumbing tasks especially — anything claiming "X is the authoritative file," "Y calls Z," "this is the production path," "this duplication is accidental drift" — spend one concrete verification step (git log/git show on the relevant file's history, grep for actual callers, live inspection of the running DB/service) before accepting the task body's framing at face value. Don't just implement what the task description says needs to happen. This caught three real bugs in one session (task:4b5bf21f: task description didn't mention 5 internal callers, only caught by the integration suite; task:46634a19: task named the wrong file for the actual production fix; task:9d3acbef: the task's entire premise — that a duplication was accidental — was wrong, and investigating why surfaced a separate real bug). See memory `verify-production-path-before-accepting-task-premise`.
+
+### 5. Does historical context change the plan?
 Review related tasks, related commits, code RAG, memories. Would you implement this differently after reading them? If yes, record it as a grooming note.
 
-### 5. Is this task a duplicate or orphan?
+### 6. Is this task a duplicate or orphan?
 Check it against its parent and siblings, not just unrelated related-tasks matches: does it restate the parent epic's own vision instead of a concrete piece of it? Does its `parent_id` actually match what its tags claim? Is its `project:` tag consistent with its siblings? Duplicate/orphan tasks are cheap to create by accident (parallel task creation, copy-paste) and expensive to leave live — they fragment ownership and waste future grooming passes. Flag explicitly, don't fold into a generic "conflicts" note.
 
-### 6. Is the task appropriately sized?
+### 7. Is the task appropriately sized?
 Can this reasonably be completed in one focused implementation session? If not, recommend splitting into smaller subtasks.
 
-### 7. What is most likely to stall implementation?
+### 8. What is most likely to stall implementation?
 Predict the largest remaining risk — hidden coupling, unclear ownership, missing design decision, unknown API, migration uncertainty, missing tests. Record it.
 
 This prediction is graded at introspection time (`/task-introspection` Step 3.0: materialized / avoided / wrong / missed), so state it concretely and falsifiably — "choosing the UPS injection mechanism will stall" can be graded; "there may be unknowns" cannot.
