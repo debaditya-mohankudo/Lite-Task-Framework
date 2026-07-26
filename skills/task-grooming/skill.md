@@ -213,14 +213,16 @@ Do **not** rewrite the body. Append a dated section:
 ```
 
 ```python
-mcp__claude-hooks__tasks__update(id="<task_id>", body="<existing body>\n\n## Grooming Notes (...)\n...")
+mcp__claude-hooks__tasks__update(id="<task_id>", body="<existing body>\n\n## Grooming Notes (...)\n...", mark_groomed=True)
 ```
+
+`mark_groomed=True` sets the task's `groomed_at` timestamp — the structured signal that grooming ran (task:46634a19), distinct from the `## Grooming Notes` prose section. Always pass it on the update call that appends the notes, even when the notes are minimal, so `tasks__list`/`tasks__get` can surface "groomed" without a body substring search. Compare `groomed_at` against `updated_at` to detect staleness: if the body was edited after the last groom, treat the task as no longer confidently groomed.
 
 If a duplicate/ownership consolidation was found, also call `tasks__link_tasks(from_id, to_id, relation_type="duplicates"|"depends_on"|"relates_to")` to record it structurally, not just in prose.
 
 If a task looks like a duplicate/orphan warranting `abandoned` status rather than a note, don't decide unilaterally — surface it to the user (e.g. via a clarifying question) before changing status.
 
-If no changes are required, leave the task untouched and note "ready as-is" in the report.
+If no changes are required, leave the body untouched but still call `mcp__claude-hooks__tasks__update(id="<task_id>", mark_groomed=True)` to record that grooming ran, and note "ready as-is" in the report.
 
 ---
 
