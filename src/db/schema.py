@@ -1,11 +1,24 @@
 """Central SQLite DDL definitions and migrate() functions.
 
+Purpose: this module is NOT the production schema/migration path. Every tool
+module (src/tools/tasks.py, memory.py, scratch.py, hooks.py) connects to its
+own DB directly and manages its own schema independently — most assume
+scripts/init_db.py already ran once; src/tools/tasks.py additionally
+self-heals via its own inline _ensure_db()/_migrate() on every connect. This
+split is deliberate (task:cb357eb6, commit de1ae61, 2026-06-27): it lets test
+fixtures and the one-time installer share DDL without giving schema.py any
+runtime authority over production connect-time behavior.
+
 Usage:
 - Tests: import DDL constants to build fixtures (no inline DDL in test files).
 - Setup: call migrate_*() once on first install via scripts/init_db.py.
 - Prod connect-time code (_ensure_db, _SCHEMA, etc.) is NOT replaced — it stays as-is.
 
-Adding a column: add it to the DDL constant + add an ALTER TABLE block in migrate_*().
+Adding a column/table: add it to the DDL constant + migrate_*() here, AND to the
+matching tool module's own inline schema code if that module self-heals (e.g.
+src/tools/tasks.py's _ensure_db()/_migrate()) — the two must be kept in sync by
+hand. See tests/test_task_issue_type.py::TestSchemaParity (task:9d3acbef) for
+the automated check that catches drift between the two.
 """
 from __future__ import annotations
 
@@ -83,7 +96,10 @@ CREATE TABLE IF NOT EXISTS task_events (
 )
 """
 
-# test-only: not yet managed by prod tasks.py
+# Also created by src/tools/tasks.py's own _ensure_db() (task:9d3acbef) — that's
+# the actual production path; this constant is for test fixtures / one-time
+# install only, per this module's docstring. Kept in sync manually; see the
+# schema-parity test in tests/test_task_issue_type.py for the automated guard.
 TASK_EDGES_DDL = """
 CREATE TABLE IF NOT EXISTS task_edges (
     from_id       TEXT NOT NULL,

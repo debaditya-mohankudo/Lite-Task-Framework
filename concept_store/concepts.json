@@ -446,24 +446,28 @@
       "name": "server-memory-tool-recording"
     },
     "tasks-db-schema-and-migration": {
-      "confidence": 0.9,
+      "confidence": 0.92,
       "contracts": [
         "handle_update(id, ..., mark_groomed=False) -> {ok, id, status, issue_type, tags, groomed: bool}",
         "_task_row(row)/_task_row_full(row) include groomed_at (None if never groomed)",
-        "handle_list's TOON/json output includes groomed_at in the uniform row schema"
+        "handle_list's TOON/json output includes groomed_at in the uniform row schema",
+        "_ensure_db() creates open_tasks, task_events, commit_task_map, AND task_edges — all four tables production code depends on"
       ],
       "created_at": "2026-07-26T03:03:10.089937+00:00",
-      "description": "open_tasks/task_events/commit_task_map schema and migrations for proj_tasks.db, the task management DB. Includes the groomed_at TIMESTAMP column (task:46634a19) tracking when /task-grooming last ran on a task, orthogonal to status (lifecycle: open/blocked/done/abandoned) since a blocked task can still be groomed.",
+      "description": "open_tasks/task_events/commit_task_map/task_edges schema and migrations for proj_tasks.db, the task management DB. Includes the groomed_at TIMESTAMP column (task:46634a19) tracking when /task-grooming last ran on a task, orthogonal to status (lifecycle: open/blocked/done/abandoned) since a blocked task can still be groomed.",
       "evidence": [
         "src/tools/tasks.py: _ensure_db(), _migrate(), handle_update(), _task_row()",
-        "src/db/schema.py: OPEN_TASKS_DDL, migrate_tasks_db() — test-fixture parity only, NOT the prod path"
+        "src/db/schema.py: OPEN_TASKS_DDL, TASK_EVENTS_DDL, TASK_EDGES_DDL, migrate_tasks_db() — test-fixture parity only, NOT the prod path",
+        "tests/test_task_issue_type.py: TestSchemaParity"
       ],
       "invariants": [
-        "CRITICAL: src/db/schema.py's OPEN_TASKS_DDL and migrate_tasks_db() are NOT the production schema/migration path for proj_tasks.db, despite the module docstring implying a central source of truth. src/tools/tasks.py's _connect() calls its own locally-defined _ensure_db()/_migrate() with a separate inline CREATE TABLE/ALTER TABLE implementation. schema.py's own docstring admits this: 'Prod connect-time code (_ensure_db, _SCHEMA, etc.) is NOT replaced — it stays as-is.' Any new open_tasks column MUST be added to BOTH src/tools/tasks.py's _ensure_db()/_migrate() (the real production path) AND schema.py's OPEN_TASKS_DDL/migrate_tasks_db() (test-fixture parity only) — editing schema.py alone ships nothing to production. This exact drift already happened once silently: TASK_EDGES_DDL in schema.py is commented 'test-only: not yet managed by prod tasks.py'.",
+        "src/db/schema.py's OPEN_TASKS_DDL/TASK_EVENTS_DDL/TASK_EDGES_DDL and migrate_tasks_db() are NOT the production schema/migration path for proj_tasks.db — src/tools/tasks.py's _connect() calls its own locally-defined _ensure_db()/_migrate() with a separate inline CREATE TABLE/ALTER TABLE implementation. This split is DELIBERATE, not accidental drift to be consolidated (confirmed task:9d3acbef via commit de1ae61/task:cb357eb6, 2026-06-27): schema.py's own docstring, written at the module's creation, states prod connect-time code is intentionally not replaced by it — schema.py exists for test fixtures (no inline DDL in test files) and scripts/init_db.py's one-time install bootstrap. Every other tool module (memory.py, scratch.py, hooks.py) follows the same repo-wide convention of managing its own DB independently of schema.py.",
+        "Any new open_tasks/task_events/task_edges column or table MUST still be added to BOTH src/tools/tasks.py's _ensure_db()/_migrate() (the real production path) AND schema.py's DDL constants/migrate_tasks_db() (test-fixture parity) — the split being deliberate does not mean the two can silently diverge. A schema-parity test (tests/test_task_issue_type.py::TestSchemaParity, task:9d3acbef) connects via tasks.py's real _connect() and asserts its column set matches what schema.py's DDL constants declare, so drift fails CI instead of relying on grooming/introspection to catch it by luck. Checks column NAMES only (not types/order) to avoid noise from legitimate formatting differences.",
+        "task_edges was missing entirely from tasks.py's self-healing _ensure_db() until task:9d3acbef, despite handle_link_tasks/handle_edges (live MCP actions) reading/writing it — it only existed in the live proj_tasks.db because scripts/init_db.py had been run once, manually. Fixed by adding a CREATE TABLE IF NOT EXISTS task_edges block to _ensure_db(), matching commit_task_map's existing pattern (no FOREIGN KEY to open_tasks, matching schema.py's TASK_EDGES_DDL shape exactly). tests/test_task_issue_type.py::TestSchemaParity::test_task_edges_table_created_by_ensure_db is the regression test.",
         "groomed_at is set via handle_update(id, mark_groomed=True) — reuses the existing tasks__update MCP action rather than a new dispatcher action, matching the param-passthrough pattern from task:d2165715/4b5bf21f. Staleness is detected by comparing groomed_at against updated_at: if updated_at is later, the body changed since the last groom.",
         "groomed_at is added inside _task_row() unconditionally (unlike _context_only, which is only bolted on for context-only parent rows in handle_list's DFS) — so it's always present in every row dict from _task_row/_task_row_full, needing no extra normalization for TOON's uniform-header requirement."
       ],
-      "last_validated": "2026-07-26T03:03:10.089937+00:00",
+      "last_validated": "2026-07-26T03:16:48.364180+00:00",
       "module": "src/tools/tasks.py",
       "name": "tasks-db-schema-and-migration"
     },

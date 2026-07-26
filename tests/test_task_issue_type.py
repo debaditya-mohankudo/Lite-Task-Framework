@@ -311,3 +311,62 @@ class TestGroomedAt:
             row = handle_get(id="x1")
         assert "groomed_at" in row
         assert row["groomed_at"] is None
+
+
+def _ddl_columns(ddl: str) -> set[str]:
+    """Column names sqlite actually creates from a DDL string (via a throwaway
+    in-memory DB), rather than regex-parsing the SQL text ourselves."""
+    import sqlite3 as _sq
+
+    conn = _sq.connect(":memory:")
+    conn.executescript(ddl)
+    table = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone()[0]
+    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    conn.close()
+    return cols
+
+
+class TestSchemaParity:
+    """Guards against schema.py's DDL constants silently drifting from
+    tasks.py's own self-healing _ensure_db() — the two are deliberately
+    independent (task:cb357eb6/commit de1ae61: schema.py is for test
+    fixtures + one-time install, not the production path), so nothing
+    forces them to stay in sync except this test. Checks column NAMES
+    only (a superset/equality check on names), not types or order —
+    stricter equality would be noisy for legitimate formatting differences.
+    """
+
+    def test_open_tasks_columns_match(self, tmp_path):
+        db = tmp_path / "parity.db"
+        with patch("src.tools.tasks._DB", db):
+            handle_create(title="x", body=BODY)
+        with __import__("sqlite3").connect(str(db)) as conn:
+            prod_cols = {row[1] for row in conn.execute("PRAGMA table_info(open_tasks)")}
+        assert prod_cols == _ddl_columns(OPEN_TASKS_DDL)
+
+    def test_task_events_columns_match(self, tmp_path):
+        db = tmp_path / "parity.db"
+        with patch("src.tools.tasks._DB", db):
+            handle_create(title="x", body=BODY)
+        with __import__("sqlite3").connect(str(db)) as conn:
+            prod_cols = {row[1] for row in conn.execute("PRAGMA table_info(task_events)")}
+        assert prod_cols == _ddl_columns(TASK_EVENTS_DDL)
+
+    def test_task_edges_columns_match(self, tmp_path):
+        db = tmp_path / "parity.db"
+        with patch("src.tools.tasks._DB", db):
+            handle_create(title="x", body=BODY)
+        with __import__("sqlite3").connect(str(db)) as conn:
+            prod_cols = {row[1] for row in conn.execute("PRAGMA table_info(task_edges)")}
+        assert prod_cols == _ddl_columns(TASK_EDGES_DDL)
+
+    def test_task_edges_table_created_by_ensure_db(self, tmp_path):
+        """Regression test for task:9d3acbef: task_edges was missing from
+        _ensure_db() entirely, only existing in production because
+        scripts/init_db.py happened to be run once, manually."""
+        db = tmp_path / "fresh.db"
+        with patch("src.tools.tasks._DB", db):
+            handle_create(title="x", body=BODY)
+        with __import__("sqlite3").connect(str(db)) as conn:
+            tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "task_edges" in tables

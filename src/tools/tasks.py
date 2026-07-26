@@ -191,6 +191,15 @@ def _ensure_db(conn: sqlite3.Connection) -> None:
             UNIQUE (task_id, commit_hash)
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS task_edges (
+            from_id       TEXT NOT NULL,
+            to_id         TEXT NOT NULL,
+            relation_type TEXT NOT NULL,
+            created_at    TIMESTAMP DEFAULT (datetime('now')),
+            PRIMARY KEY (from_id, to_id, relation_type)
+        )
+    """)
     # Migrate existing DBs that predate the issue_type / parent_id columns
     cols = {row[1] for row in conn.execute("PRAGMA table_info(open_tasks)")}
     if "issue_type" not in cols:
