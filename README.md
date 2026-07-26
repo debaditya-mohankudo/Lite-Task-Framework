@@ -4,8 +4,7 @@ A lightweight task framework for Claude Code — persistent task tracking, memor
 
 > **macOS only** — requires Claude Code, uv, Ollama, and iCloud Drive. See [setup](docs/setup.md) for prerequisites.
 
----
-![alt text](image.png)
+
 
 
 ---
