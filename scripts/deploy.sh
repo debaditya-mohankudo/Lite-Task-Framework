@@ -21,9 +21,13 @@ echo "=== claude-hooks deploy ==="
 
 if $SHIP; then
     # --- Phase 2: test → main (ship) ---
+    # --no-ff forces an explicit merge commit even when a fast-forward is
+    # possible (main/test rarely diverge otherwise) — without it, main's log
+    # is indistinguishable from a direct commit and the "this batch cleared
+    # the test gate" checkpoint disappears from history entirely.
     echo "Merging test → main..."
     cd "$MAIN_DIR"
-    git merge test --no-edit
+    git merge test --no-ff --no-edit -m "Merge branch 'test' into main (deploy.sh --ship)"
     echo "=== Shipped to main. ==="
     exit 0
 fi
