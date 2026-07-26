@@ -2,11 +2,11 @@
 name: task-framework
 description: Start or resume a task using the task graph framework. Creates a task, activates it for the session, and explains the lifecycle. Use when the user runs /task-framework or asks to work on a task with tracking.
 user-invocable: true
-updated: 2026-06-11
+updated: 2026-07-26
 wiki: "[[Documentation/Tools/claude-hooks/skills.md]]"
+repo: ~/workspace/claude-hooks/skills/task-framework/skill.md
+deployed: ~/.claude/skills/task-framework/skill.md
 ---
-
-<!-- source of truth: ~/workspace/claude-hooks/docs/skills.md -->
 
 You are now operating in task-framework mode. Read these instructions carefully — they define how to use the task graph throughout this session.
 
@@ -42,6 +42,7 @@ There is no MCP tool for this — always read from `## Turn state`.
 ### 0. Assess decomposition
 
 Before creating, assess if the task has 2–3 clearly distinct phases that can be worked sequentially. If yes:
+- **Check the concept store first** (if the repo has one — `concept_store/concepts.json` or `concepts.db`, see `/task-grooming` Step 2 for format detection). Look up which concepts match the files/modules this task touches (`concept__list`/`concept__get`, or read the JSON directly). Documented concepts encode existing architectural/module boundaries — let the split follow them: don't fragment a change that lives entirely inside one concept's evidence into multiple subtasks; do split along concept boundaries when the task genuinely spans several distinct ones. This is a proposal input, not a hard rule — phase/sequence still matters too, but a split that cuts against a documented boundary is a signal to reconsider, not just proceed.
 - Propose the subtask list to the user (one line each) with the intended sequence
 - Get confirmation before creating
 - **Create a parent task first** (e.g. `"Portfolio DB — implement JSON storage"`)
@@ -49,6 +50,8 @@ Before creating, assess if the task has 2–3 clearly distinct phases that can b
 - Activate the first subtask; work sequentially
 
 If the task is a single coherent piece of work, skip this step and create one task directly. Don't force a split.
+
+If no concept store exists for the repo, skip the concept-store check silently and decompose on phase/sequence alone.
 
 ### 0b. Pre-implementation grooming
 
