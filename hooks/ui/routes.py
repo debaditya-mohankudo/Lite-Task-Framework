@@ -46,7 +46,7 @@ async def ui_index(request: Request, status: str = "open", tag: str = ""):
     from collections import Counter
 
     status = valid_status(status)
-    all_tasks = handle_list(status=status)
+    all_tasks = handle_list(status=status, format="json")
 
     # Tag cloud: count label tags (skip structural prefixes)
     _SKIP = {"parent:", "project:", "domain:", "type:", "epic", "story", "task", "bug", "subtask"}
@@ -82,7 +82,7 @@ async def ui_body_fields(issue_type: str = "task"):
 async def ui_task_new(request: Request):
     """Create task form partial — loaded into the detail panel."""
     from src.tools.tasks import handle_list
-    epics = [t for t in handle_list(status="open") if t.get("issue_type") in ("epic", "story")]
+    epics = [t for t in handle_list(status="open", format="json") if t.get("issue_type") in ("epic", "story")]
     return render("ui/partials/create_form.html", epics=epics, error="", issue_type="task")
 
 
@@ -190,9 +190,9 @@ async def ui_task_create(
         )
         error = result.get("error")
     if error:
-        epics = [t for t in handle_list(status="open") if t.get("issue_type") in ("epic", "story")]
+        epics = [t for t in handle_list(status="open", format="json") if t.get("issue_type") in ("epic", "story")]
         return render("ui/partials/create_form.html", epics=epics, error=error)
-    tasks = handle_list(status="open")
+    tasks = handle_list(status="open", format="json")
     return render("ui/partials/sidebar.html", tasks=tasks, status="open")
 
 
@@ -205,7 +205,7 @@ async def ui_sidebar(request: Request, status: str = "open"):
     """Sidebar partial — returned by HTMX status-tab clicks."""
     from src.tools.tasks import handle_list
     status = valid_status(status)
-    tasks = handle_list(status=status)
+    tasks = handle_list(status=status, format="json")
     active = get_active_session()
     return render("ui/partials/sidebar.html", tasks=tasks, status=status,
                   active_task_id=active.get("task_id", ""))
