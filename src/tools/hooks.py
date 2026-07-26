@@ -18,6 +18,8 @@ from typing import Optional
 
 import msgpack
 
+from src.toon import rows_to_toon
+
 _DB_PATH = Path.home() / ".claude" / "langgraph_checkpoints.db"
 _HOOKS_LOG_DB = Path.home() / "Library" / "Mobile Documents" / "com~apple~CloudDocs" / "Databases" / "claude_hooks.sqlite"
 _SERVER_URL = "http://127.0.0.1:8766"
@@ -211,28 +213,6 @@ def handle_checkpoint_query(thread_id: str = "") -> dict:
     }
 
 
-def _toon_cell(value: object) -> str:
-    s = "" if value is None else str(value)
-    if any(c in s for c in (",", "\n", '"')):
-        return '"' + s.replace('"', '""') + '"'
-    return s
-
-
-def _rows_to_toon(rows: list[dict]) -> str:
-    """Encode a list of uniform-schema dicts as TOON's tabular array format.
-
-    header[N]{field1,field2,...}:
-      val1,val2,...
-    """
-    if not rows:
-        return "rows[0]{}:"
-    fields = list(rows[0].keys())
-    lines = [f"rows[{len(rows)}]{{{','.join(fields)}}}:"]
-    for r in rows:
-        lines.append("  " + ",".join(_toon_cell(r.get(f)) for f in fields))
-    return "\n".join(lines)
-
-
 def handle_read_logs_sqlite(
     level: str = "",
     logger: str = "",
@@ -282,7 +262,7 @@ def handle_read_logs_sqlite(
     dict_rows = [dict(r) for r in rows]
 
     if format == "toon":
-        return f"count: {len(dict_rows)}\n{_rows_to_toon(dict_rows)}"
+        return f"count: {len(dict_rows)}\n{rows_to_toon(dict_rows)}"
 
     return {
         "count": len(dict_rows),

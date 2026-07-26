@@ -257,16 +257,18 @@
         "src/tools/hooks.py:1",
         "src/tools/hooks.py:21",
         "src/tools/hooks.py: handle_session_id()",
-        "src/tools/hooks.py: handle_read_logs_sqlite() format param"
+        "src/tools/hooks.py: handle_read_logs_sqlite() format param",
+        "src/toon.py: shared rows_to_toon/toon_cell encoder"
       ],
       "invariants": [
         "server_memory hits the live FastAPI server at 127.0.0.1:8766 — fails if server is down",
         "read_logs_sqlite reads directly from iCloud DB path",
         "session_id retries once (0.5s sleep) if the first /session/current response has no session_id — absorbs the race where a brand-new session's first checkpoint write lags behind the query",
         "checkpoint_query reads langgraph_checkpoints.db directly via raw sqlite3 — this IS the live DB SqliteSaver writes to in production (hooks/server.py lifespan()); a prior version of this invariant incorrectly claimed it was deprecated/no-longer-written, never verified against hooks/server.py (corrected 2026-07-05, task:61703ef7)",
-        "read_logs_sqlite's `format` param defaults to \"toon\" (task:d2165715): rows share a uniform schema (id, ts, level, logger, message), which TOON's tabular header+rows encoding compresses well versus repeating JSON keys per row. format=\"json\" is kept as an explicit fallback returning the original {count, rows} dict shape — callers needing the dict shape (e.g. programmatic filtering) must pass format=\"json\" explicitly."
+        "read_logs_sqlite's `format` param defaults to \"toon\" (task:d2165715): rows share a uniform schema (id, ts, level, logger, message), which TOON's tabular header+rows encoding compresses well versus repeating JSON keys per row. format=\"json\" is kept as an explicit fallback returning the original {count, rows} dict shape — callers needing the dict shape (e.g. programmatic filtering) must pass format=\"json\" explicitly.",
+        "The TOON encoder itself (rows_to_toon/toon_cell) was extracted to src/toon.py (task:4b5bf21f) so src/tools/tasks.py's handle_list could reuse it — hooks.py now imports rows_to_toon rather than defining its own copy."
       ],
-      "last_validated": "2026-07-25T21:00:40.319054+00:00",
+      "last_validated": "2026-07-26T02:45:44.553756+00:00",
       "module": "src/tools/hooks.py",
       "name": "hooks-mcp-tools-observability"
     },

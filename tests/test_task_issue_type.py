@@ -106,7 +106,7 @@ class TestGetAndListIssueType:
             body="Type: feature\nTask: x\nResolution: y\nMotivation: z\nFiles: f",
             issue_type="epic",
         )
-        rows = handle_list()
+        rows = handle_list(format="json")
         assert any(t["issue_type"] == "epic" for t in rows)
 
 
@@ -130,7 +130,7 @@ class TestParentIdColumn:
 
     def test_list_depth_zero_for_roots(self):
         self._mk("Root epic", issue_type="epic")
-        rows = handle_list()
+        rows = handle_list(format="json")
         roots = [r for r in rows if not r.get("parent_id")]
         assert all(r["depth"] == 0 for r in roots)
 
@@ -138,7 +138,7 @@ class TestParentIdColumn:
         epic = self._mk("Epic", issue_type="epic")
         story = self._mk("Story", parent_id=epic, issue_type="story")
         subtask = self._mk("Subtask", parent_id=story, issue_type="subtask")
-        rows = handle_list()
+        rows = handle_list(format="json")
         ids = [r["id"] for r in rows]
         depths = {r["id"]: r["depth"] for r in rows}
         # DFS order: epic before story before subtask
@@ -150,7 +150,7 @@ class TestParentIdColumn:
     def test_list_all_tasks_have_depth_field(self):
         self._mk("A")
         self._mk("B")
-        rows = handle_list()
+        rows = handle_list(format="json")
         assert all("depth" in r for r in rows)
 
     def test_migration_backfill_from_tags(self, tmp_path):
@@ -195,7 +195,7 @@ class TestParentIdColumn:
         conn.close()
 
         with patch("src.tools.tasks._DB", db):
-            rows = handle_list()
+            rows = handle_list(format="json")
         child_row = next(r for r in rows if r["id"] == child_id)
         assert child_row["parent_id"] == parent_id
 
@@ -217,5 +217,33 @@ class TestParentIdColumn:
         conn.close()
 
         with patch("src.tools.tasks._DB", db):
-            rows = handle_list()
+            rows = handle_list(format="json")
         assert len(rows) == 2  # both returned, no crash
+
+
+class TestListToonFormat:
+    def _mk(self, title, parent_id="", issue_type="task"):
+        return handle_create(title=title, body=BODY, parent_id=parent_id, issue_type=issue_type)["id"]
+
+    def test_toon_is_default_format(self):
+        self._mk("A")
+        result = handle_list()
+        assert isinstance(result, str)
+        assert result.startswith("count: 1")
+        assert "rows[1]{id,title,tags,status,issue_type,parent_id,keywords,created_at,updated_at,depth,_context_only}:" in result
+
+    def test_toon_empty_list(self):
+        result = handle_list(status="abandoned")
+        assert result == "count: 0\nrows[0]{}:"
+
+    def test_toon_normalizes_context_only_field(self):
+        # A context-only parent row (pulled in despite not matching the status
+        # filter) must not break the shared TOON header across all rows.
+        epic = self._mk("Epic", issue_type="epic")
+        self._mk("Story", parent_id=epic, issue_type="story")
+        # Filter to a status the epic doesn't have but the story does, forcing
+        # the epic to appear as a context-only parent.
+        from src.tools.tasks import handle_update
+        handle_update(id=epic, status="done")
+        result = handle_list(status="open")
+        assert "count: 2" in result

@@ -16,6 +16,7 @@ from typing import Optional
 import numpy as np
 
 from src.logger import get_logger
+from src.toon import rows_to_toon
 
 _log = get_logger(__name__)
 _DB = Path.home() / ".claude" / "proj_tasks.db"
@@ -421,7 +422,7 @@ def handle_create_feedback(task_id: str, decision: str = "", constraint: str = "
     return handle_create(title=title, body=body, parent_id=task_id, session_id=session_id, issue_type="feedback")
 
 
-def handle_list(status: str = "open,blocked", limit: int = 50) -> list:
+def handle_list(status: str = "open,blocked", limit: int = 50, format: str = "toon") -> list | str:
     """List tasks filtered by status (comma-separated). Default: open,blocked.
 
     Tasks are returned in DFS tree order (parent → children → grandchildren).
@@ -435,6 +436,10 @@ def handle_list(status: str = "open,blocked", limit: int = 50) -> list:
     Args:
         status: Comma-separated statuses to include. Values: open, blocked, done, abandoned.
         limit: Max number of tasks to return (default 50).
+        format: "toon" (default, token-efficient tabular text) or "json" (list of dicts).
+                Rows share a uniform schema (id, title, tags, status, issue_type,
+                parent_id, keywords, created_at, updated_at, depth, _context_only) —
+                the same shape TOON's tabular encoding compresses well.
     """
     statuses = [s.strip() for s in status.split(",") if s.strip()]
     placeholders = ",".join("?" * len(statuses))
@@ -502,6 +507,13 @@ def handle_list(status: str = "open,blocked", limit: int = 50) -> list:
     for tid in task_map:
         if tid not in visited:
             _dfs(tid, 0, visited)
+
+    if format == "toon":
+        # _context_only is only set on context parents pulled in for their status
+        # doesn't match the filter — normalize it onto every row so the header
+        # stays valid across the whole table.
+        normalized = [{**t, "_context_only": t.get("_context_only", False)} for t in result]
+        return f"count: {len(normalized)}\n{rows_to_toon(normalized)}"
 
     return result
 
