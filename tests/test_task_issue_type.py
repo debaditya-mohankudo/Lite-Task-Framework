@@ -230,7 +230,7 @@ class TestListToonFormat:
         result = handle_list()
         assert isinstance(result, str)
         assert result.startswith("count: 1")
-        assert "rows[1]{id,title,tags,status,issue_type,parent_id,keywords,created_at,updated_at,depth,_context_only}:" in result
+        assert "rows[1]{id,title,tags,status,issue_type,parent_id,keywords,created_at,updated_at,groomed_at,depth,_context_only}:" in result
 
     def test_toon_empty_list(self):
         result = handle_list(status="abandoned")
@@ -247,3 +247,67 @@ class TestListToonFormat:
         handle_update(id=epic, status="done")
         result = handle_list(status="open")
         assert "count: 2" in result
+
+
+class TestGroomedAt:
+    def _mk(self, title="A"):
+        return handle_create(title=title, body=BODY)["id"]
+
+    def test_default_groomed_at_is_none(self):
+        tid = self._mk()
+        row = handle_get(id=tid)
+        assert row["groomed_at"] is None
+
+    def test_mark_groomed_sets_timestamp(self):
+        tid = self._mk()
+        result = handle_update(id=tid, mark_groomed=True)
+        assert result["groomed"] is True
+        row = handle_get(id=tid)
+        assert row["groomed_at"] is not None
+
+    def test_update_without_mark_groomed_leaves_it_unset(self):
+        tid = self._mk()
+        handle_update(id=tid, title="renamed")
+        row = handle_get(id=tid)
+        assert row["groomed_at"] is None
+
+    def test_mark_groomed_does_not_require_other_fields(self):
+        tid = self._mk()
+        result = handle_update(id=tid, mark_groomed=True)
+        assert "error" not in result
+
+    def test_list_json_surfaces_groomed_at(self):
+        tid = self._mk()
+        handle_update(id=tid, mark_groomed=True)
+        rows = handle_list(format="json")
+        row = next(r for r in rows if r["id"] == tid)
+        assert row["groomed_at"] is not None
+
+    def test_list_toon_includes_groomed_at_field(self):
+        self._mk()
+        result = handle_list()
+        assert "groomed_at" in result
+
+    def test_migration_adds_groomed_at_to_existing_db(self, tmp_path):
+        """A DB predating the groomed_at column gets it added on connect."""
+        import sqlite3 as _sq
+
+        db = tmp_path / "old.db"
+        conn = _sq.connect(str(db))
+        conn.execute("""
+            CREATE TABLE open_tasks (
+                id TEXT PRIMARY KEY, title TEXT NOT NULL,
+                body TEXT DEFAULT '', tags TEXT DEFAULT '',
+                status TEXT DEFAULT 'open', issue_type TEXT DEFAULT 'task',
+                created_at TIMESTAMP DEFAULT (datetime('now')),
+                updated_at TIMESTAMP DEFAULT (datetime('now'))
+            )
+        """)
+        conn.execute("INSERT INTO open_tasks (id, title) VALUES ('x1', 'Old task')")
+        conn.commit()
+        conn.close()
+
+        with patch("src.tools.tasks._DB", db):
+            row = handle_get(id="x1")
+        assert "groomed_at" in row
+        assert row["groomed_at"] is None

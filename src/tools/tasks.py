@@ -100,6 +100,7 @@ def _task_row(row: sqlite3.Row) -> dict:
         "keywords":   row["keywords"] if "keywords" in keys else None,
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+        "groomed_at": row["groomed_at"] if "groomed_at" in keys else None,
     }
 
 
@@ -161,7 +162,8 @@ def _ensure_db(conn: sqlite3.Connection) -> None:
             parent_id            TEXT DEFAULT NULL REFERENCES open_tasks(id),
             keywords   TEXT DEFAULT NULL,
             created_at TIMESTAMP DEFAULT (datetime('now')),
-            updated_at TIMESTAMP DEFAULT (datetime('now'))
+            updated_at TIMESTAMP DEFAULT (datetime('now')),
+            groomed_at TIMESTAMP DEFAULT NULL
         )
     """)
     conn.execute("""
@@ -201,6 +203,8 @@ def _ensure_db(conn: sqlite3.Connection) -> None:
             pid = _extract_parent_id(row["tags"] or "")
             if pid:
                 conn.execute("UPDATE open_tasks SET parent_id=? WHERE id=?", (pid, row["id"]))
+    if "groomed_at" not in cols:
+        conn.execute("ALTER TABLE open_tasks ADD COLUMN groomed_at TIMESTAMP DEFAULT NULL")
     conn.commit()
 
 
@@ -438,8 +442,8 @@ def handle_list(status: str = "open,blocked", limit: int = 50, format: str = "to
         limit: Max number of tasks to return (default 50).
         format: "toon" (default, token-efficient tabular text) or "json" (list of dicts).
                 Rows share a uniform schema (id, title, tags, status, issue_type,
-                parent_id, keywords, created_at, updated_at, depth, _context_only) —
-                the same shape TOON's tabular encoding compresses well.
+                parent_id, keywords, created_at, updated_at, groomed_at, depth,
+                _context_only) — the same shape TOON's tabular encoding compresses well.
     """
     statuses = [s.strip() for s in status.split(",") if s.strip()]
     placeholders = ",".join("?" * len(statuses))
@@ -531,16 +535,20 @@ def handle_get(id: str) -> dict:
         return _task_row_full(row)
 
 
-def handle_update(id: str, title: str = "", body: str = "", status: str = "", issue_type: str = "", tags: str = "") -> dict:
+def handle_update(id: str, title: str = "", body: str = "", status: str = "", issue_type: str = "", tags: str = "", mark_groomed: bool = False) -> dict:
     """Update task fields. Only provided fields are changed.
 
     Args:
-        id:         Task id.
-        title:      New title (optional).
-        body:       New or appended body text (optional).
-        status:     New status: open, done, abandoned, blocked (optional). Transitions enforced.
-        issue_type: New issue type: epic, story, task, bug, subtask (optional).
-        tags:       Comma-separated tags to append to existing tags (optional).
+        id:           Task id.
+        title:        New title (optional).
+        body:         New or appended body text (optional).
+        status:       New status: open, done, abandoned, blocked (optional). Transitions enforced.
+        issue_type:   New issue type: epic, story, task, bug, subtask (optional).
+        tags:         Comma-separated tags to append to existing tags (optional).
+        mark_groomed: If True, sets groomed_at to now — the structured signal that
+                      /task-grooming ran on this task. Compare against updated_at to
+                      detect staleness: if updated_at is later than groomed_at, the
+                      body changed since the last groom.
     """
     if issue_type and issue_type not in _ISSUE_TYPES:
         return {"error": f"Invalid issue_type '{issue_type}'. Valid: {sorted(_ISSUE_TYPES)}"}
@@ -566,12 +574,19 @@ def handle_update(id: str, title: str = "", body: str = "", status: str = "", is
         else:
             new_tags = existing_tags
         new_keywords = _extract_keywords(new_title, new_body)
-        conn.execute(
-            """UPDATE open_tasks SET title=?, body=?, status=?, issue_type=?, tags=?, keywords=?, updated_at=datetime('now') WHERE id=?""",
-            (new_title, new_body, new_status, new_issue_type, new_tags, new_keywords, id),
-        )
-    _log.info("[tasks__update] id=%s status=%s issue_type=%s", id, new_status, new_issue_type)
-    return {"ok": True, "id": id, "status": new_status, "issue_type": new_issue_type, "tags": new_tags}
+        if mark_groomed:
+            conn.execute(
+                """UPDATE open_tasks SET title=?, body=?, status=?, issue_type=?, tags=?, keywords=?,
+                   updated_at=datetime('now'), groomed_at=datetime('now') WHERE id=?""",
+                (new_title, new_body, new_status, new_issue_type, new_tags, new_keywords, id),
+            )
+        else:
+            conn.execute(
+                """UPDATE open_tasks SET title=?, body=?, status=?, issue_type=?, tags=?, keywords=?, updated_at=datetime('now') WHERE id=?""",
+                (new_title, new_body, new_status, new_issue_type, new_tags, new_keywords, id),
+            )
+    _log.info("[tasks__update] id=%s status=%s issue_type=%s mark_groomed=%s", id, new_status, new_issue_type, mark_groomed)
+    return {"ok": True, "id": id, "status": new_status, "issue_type": new_issue_type, "tags": new_tags, "groomed": mark_groomed}
 
 
 def handle_pause(task_id: str, pending: list[str], session_id: str = "") -> dict:
