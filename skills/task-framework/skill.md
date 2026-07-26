@@ -2,11 +2,11 @@
 name: task-framework
 description: Start or resume a task using the task graph framework. Creates a task, activates it for the session, and explains the lifecycle. Use when the user runs /task-framework or asks to work on a task with tracking.
 user-invocable: true
-updated: 2026-06-11
+updated: 2026-07-26
 wiki: "[[Documentation/Tools/claude-hooks/skills.md]]"
+repo: ~/workspace/claude-hooks/skills/task-framework/skill.md
+deployed: ~/.claude/skills/task-framework/skill.md
 ---
-
-<!-- source of truth: ~/workspace/claude-hooks/docs/skills.md -->
 
 You are now operating in task-framework mode. Read these instructions carefully — they define how to use the task graph throughout this session.
 

@@ -2,7 +2,7 @@
 name: task-create
 description: Quick reference for creating Jira-style issues — epic, story, task, bug, subtask. Which args to pass, hierarchy rules, when to use cwd vs domain. Use when about to call tasks__create or when the user says /task-create.
 user-invocable: true
-updated: 2026-06-24
+updated: 2026-07-26
 wiki: "[[Documentation/Tools/claude-hooks/skills.md]]"
 repo: ~/workspace/claude-hooks/skills/task-create/skill.md
 deployed: ~/.claude/skills/task-create/skill.md
@@ -148,6 +148,36 @@ Notes:
 Files:
 <file1>, <file2>
 ```
+
+**epic** — large initiative (normally auto-filled by `tasks__create_epic`, shown here for completeness)
+```
+Type: epic
+Task:
+<goal and scope>
+
+Resolution:
+[ ] <outcome / stories — or "(pending)" while open>
+
+Notes:
+<design decisions, constraints>
+
+Files:
+<key files>
+```
+
+**feedback** — task-specific learning captured post-completion (created automatically by `tasks__create_feedback` from `/task-introspection` Step 4 — not normally hand-written)
+```
+Type: feedback
+Decision:
+<design decision made and why — optional>
+
+Constraint:
+<constraint or gotcha discovered — optional>
+
+Pattern:
+<pattern that worked or failed — optional>
+```
+At least one of Decision/Constraint/Pattern is required. Always parented to the finished task it documents.
 
 ## Checklist format in Resolution
 

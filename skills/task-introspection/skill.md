@@ -2,7 +2,7 @@
 name: task-introspection
 description: Post-task retrospective that improves the engineering system. Review completed work, capture unlogged decisions, identify surprises, evolve memories, concepts, skills, and workflows so future executions become easier. Use when the user says /task-introspection or "retrospect on task:<id>".
 user-invocable: true
-updated: 2026-07-14
+updated: 2026-07-26
 repo: ~/workspace/claude-hooks/skills/task-introspection/skill.md
 deployed: ~/.claude/skills/task-introspection/skill.md
 ---
@@ -72,7 +72,7 @@ This context is used to understand what changed and what the system now knows �
 
 This is the feedback loop that tells us whether grooming works — without it, grooming's predictions are write-only.
 
-Look for `## Grooming Notes (YYYY-MM-DD)` sections in the task body (grade the most recent; mention older ones only if they contradict it). **If the task was never groomed, skip this step silently** — same escape hatch as Step 1's no-turn-history case.
+Check `groomed_at` on the task (via `tasks__get`) — this is the structured signal that grooming ran (set by `/task-grooming`'s Step 6 via `tasks__update(mark_groomed=True)`, task:46634a19), more reliable than a body substring search. **If `groomed_at` is unset, skip this step silently** — same escape hatch as Step 1's no-turn-history case. If it's set, look for the `## Grooming Notes (YYYY-MM-DD)` section in the task body (grade the most recent; mention older ones only if they contradict it) — `groomed_at` tells you grooming happened, the body section is what to grade it against.
 
 For each item under **Risks**, **Hidden Assumptions**, and any "most likely to stall" prediction, grade it against what actually happened:
 
