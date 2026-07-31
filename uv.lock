@@ -735,12 +735,24 @@ dev = [
     { name = "pytest" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "anyio" },
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "mcp", specifier = ">=1.2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "anyio", specifier = ">=4.14.2" },
+    { name = "pytest", specifier = ">=9.1.1" },
+]
 
 [[package]]
 name = "truststore"

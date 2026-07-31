@@ -21,3 +21,9 @@ packages = ["taskfw"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "anyio>=4.14.2",
+    "pytest>=9.1.1",
+]
