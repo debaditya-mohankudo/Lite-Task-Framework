@@ -51,6 +51,16 @@ class TaskStore:
         step with the JSON they are projected from.
         """
         task.updated_at = utcnow()
+        prior = self.conn.execute("SELECT status FROM tasks WHERE id=?", (task.id,)).fetchone()
+        if prior is None:
+            log.info("save task=%s CREATE type=%s status=%s title=%r",
+                     task.id, task.type, task.status, task.title[:60])
+        elif prior["status"] != task.status:
+            # A status change is the single most useful thing to see in a log
+            # when reconstructing what happened to a task.
+            log.info("save task=%s STATUS %s -> %s", task.id, prior["status"], task.status)
+        else:
+            log.debug("save task=%s UPDATE status=%s", task.id, task.status)
         with transaction(self.conn):
             self.conn.execute(
                 """INSERT INTO tasks (id, type, status, parent, title, data, created_at, updated_at)
@@ -128,6 +138,7 @@ class TaskStore:
             self.conn.execute(
                 "INSERT INTO task_events (task_id, kind, text) VALUES (?,?,?)", (task_id, kind, text)
             )
+        log.info("event task=%s kind=%s %r", task_id, kind, text[:80])
 
     def events(self, task_id: str, limit: int = 100) -> list[dict]:
         rows = self.conn.execute(
@@ -145,7 +156,10 @@ class TaskStore:
                 "INSERT OR IGNORE INTO task_edges (from_id, to_id, rel) VALUES (?,?,?)",
                 (from_id, to_id, rel),
             )
-        return cur.rowcount > 0
+        created = cur.rowcount > 0
+        log.info("link %s -%s-> %s %s", from_id, rel, to_id,
+                 "created" if created else "already existed")
+        return created
 
     def unlink(self, from_id: str, to_id: str, rel: str | None = None) -> int:
         """Remove an edge, or every edge between two tasks when rel is None.
@@ -161,6 +175,7 @@ class TaskStore:
             params.append(rel)
         with transaction(self.conn):
             cur = self.conn.execute(sql, params)
+        log.info("unlink %s -> %s rel=%s removed=%d", from_id, to_id, rel or "*", cur.rowcount)
         return cur.rowcount
 
     def edges(self, task_id: str) -> dict[str, list[dict]]:
@@ -181,7 +196,10 @@ class TaskStore:
                 "INSERT OR IGNORE INTO task_commits (task_id, sha, repo) VALUES (?,?,?)",
                 (task_id, sha, repo),
             )
-        return cur.rowcount > 0
+        recorded = cur.rowcount > 0
+        log.info("commit task=%s sha=%s repo=%s %s", task_id, sha[:12], repo or "-",
+                 "recorded" if recorded else "already recorded")
+        return recorded
 
     def commits(self, task_id: str) -> list[dict]:
         rows = self.conn.execute(
@@ -205,6 +223,7 @@ class TaskStore:
                                                     updated_at=excluded.updated_at""",
                 (scope, task_id, utcnow()),
             )
+        log.info("active task=%s scope=%s", task_id, scope)
 
     def get_active(self, scope: str = "global") -> str | None:
         row = self.conn.execute("SELECT task_id FROM active_task WHERE scope=?", (scope,)).fetchone()
@@ -213,3 +232,4 @@ class TaskStore:
     def clear_active(self, scope: str = "global") -> None:
         with transaction(self.conn):
             self.conn.execute("DELETE FROM active_task WHERE scope=?", (scope,))
+        log.info("active cleared scope=%s", scope)

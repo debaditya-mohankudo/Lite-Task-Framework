@@ -25,7 +25,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from taskfw.log import get_logger
 from taskfw.models import STATUSES, TASK_TYPES, Task
+
+log = get_logger(__name__)
 
 #: Transitions, transcribed from the state model rather than inferred.
 #: `done` and `abandoned` are terminal. Any non-terminal state may go to
@@ -64,20 +67,43 @@ class Decision:
         return cls(False, rule, reason)
 
 
+def _allow(rule: str, **ctx) -> Decision:
+    """Allowed — logged at DEBUG so a full trace is available on request only."""
+    log.debug("ALLOW %s %s", rule, _fmt(ctx))
+    return Decision.ok()
+
+
+def _deny(rule: str, reason: str, **ctx) -> Decision:
+    """Denied — logged at INFO because refusals are what people debug.
+
+    Every denial is explicable from this one line: which rule fired, why, and
+    against which ids. Anything less means reaching for a debugger in exactly
+    the situation where that is most awkward.
+    """
+    log.info("DENY %s %s — %s", rule, _fmt(ctx), reason)
+    return Decision.deny(rule, reason)
+
+
+def _fmt(ctx: dict) -> str:
+    return " ".join(f"{k}={v!r}" for k, v in ctx.items() if v is not None) or "-"
+
+
 # ---------------------------------------------------------------------------
 # Rules
 # ---------------------------------------------------------------------------
 
 def check_status(status: str) -> Decision:
     if status not in STATUSES:
-        return Decision.deny("status", f"Unknown status {status!r}. Valid: {', '.join(STATUSES)}.")
-    return Decision.ok()
+        return _deny("status", f"Unknown status {status!r}. Valid: {', '.join(STATUSES)}.",
+                     status=status)
+    return _allow("status", status=status)
 
 
 def check_type(task_type: str) -> Decision:
     if task_type not in TASK_TYPES:
-        return Decision.deny("type", f"Unknown type {task_type!r}. Valid: {', '.join(TASK_TYPES)}.")
-    return Decision.ok()
+        return _deny("type", f"Unknown type {task_type!r}. Valid: {', '.join(TASK_TYPES)}.",
+                     type=task_type)
+    return _allow("type", type=task_type)
 
 
 def check_transition(current: str, target: str) -> Decision:
@@ -91,21 +117,24 @@ def check_transition(current: str, target: str) -> Decision:
         if not bad:
             return bad
     if current == target:
-        return Decision.ok()
+        return _allow("transition", current=current, target=target, note="same-status")
     if target == "abandoned":
         # Anything may be abandoned — special-cased rather than listed against
         # every state, matching how the state model expresses it.
-        return Decision.ok() if current not in TERMINAL else Decision.deny(
-            "transition", f"Task is already {current}; terminal states cannot transition."
-        )
+        if current in TERMINAL:
+            return _deny("transition",
+                         f"Task is already {current}; terminal states cannot transition.",
+                         current=current, target=target)
+        return _allow("transition", current=current, target=target, note="any->abandoned")
     if target not in TRANSITIONS[current]:
         allowed = sorted(TRANSITIONS[current] | ({"abandoned"} if current not in TERMINAL else set()))
-        return Decision.deny(
+        return _deny(
             "transition",
             f"Cannot move from {current!r} to {target!r}. "
             + (f"Allowed: {', '.join(allowed)}." if allowed else f"{current!r} is terminal."),
+            current=current, target=target,
         )
-    return Decision.ok()
+    return _allow("transition", current=current, target=target)
 
 
 def check_parent(task_type: str, parent: Task | None) -> Decision:
@@ -116,8 +145,9 @@ def check_parent(task_type: str, parent: Task | None) -> Decision:
     it would buy nothing a user cannot express with an epic.
     """
     if task_type == "epic" and parent is not None:
-        return Decision.deny("parent", "An epic cannot have a parent.")
-    return Decision.ok()
+        return _deny("parent", "An epic cannot have a parent.",
+                     type=task_type, parent_id=parent.id)
+    return _allow("parent", type=task_type, parent_id=parent.id if parent else None)
 
 
 def check_save(task: Task, *, previous: Task | None = None, parent: Task | None = None) -> Decision:
@@ -127,6 +157,9 @@ def check_save(task: Task, *, previous: Task | None = None, parent: Task | None 
     individual checks themselves — doing so is how one caller ends up enforcing
     a different set than another.
     """
+    log.debug("check_save task=%s type=%s status=%s parent=%s previous_status=%s",
+              task.id, task.type, task.status, task.parent,
+              previous.status if previous else None)
     for check in (check_type(task.type), check_status(task.status)):
         if not check:
             return check
@@ -134,7 +167,7 @@ def check_save(task: Task, *, previous: Task | None = None, parent: Task | None 
     if not parent_check:
         return parent_check
     if task.parent == task.id:
-        return Decision.deny("parent", "A task cannot be its own parent.")
+        return _deny("parent", "A task cannot be its own parent.", task=task.id)
     if previous is not None:
         return check_transition(previous.status, task.status)
-    return Decision.ok()
+    return _allow("save", task=task.id)
