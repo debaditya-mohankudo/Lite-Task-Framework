@@ -243,6 +243,28 @@ class TestGroomingAccuracy:
         assert m.tasks__grooming_accuracy()["skipped_introspection"] == [tid]
 
 
+class TestSkillInvocationLogging:
+    def test_writes_a_log_line_naming_the_skill_and_task(self):
+        """get_logger() routes through JsonlHandler during tests (see
+        test_logging.py's TestJsonlSink) — tasks__logs (SQL-only) intentionally
+        never sees test-mode log calls, same as any other taskfw log line, so
+        this asserts against the same session jsonl file real calls land in.
+        In production both this and tasks__logs(logger="skill.<name>") see it.
+        """
+        import os
+
+        r = m.tasks__log_skill_invocation("a-test-skill", task_id="abc123")
+        assert r["ok"] is True
+
+        path = os.environ["TASKFW_LOG_JSONL"]
+        with open(path) as f:
+            assert any("skill.a-test-skill" in line and "abc123" in line for line in f)
+
+    def test_empty_task_id_does_not_error(self):
+        r = m.tasks__log_skill_invocation("another-skill")
+        assert r["ok"] is True and r["task_id"] == ""
+
+
 class TestIntrospection:
     """memory_nudge — see taskfw.dispatcher.introspection_nudge for the logic itself."""
 

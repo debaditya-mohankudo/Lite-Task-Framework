@@ -159,6 +159,24 @@ def tasks__logs(logger: str = "", level: str = "", limit: int = 50) -> dict[str,
 
 
 @mcp.tool()
+def tasks__log_skill_invocation(skill: str, task_id: str = "") -> dict[str, Any]:
+    """Record that a skill was invoked, for skill-usage observability.
+
+    Thin wrapper around the existing get_logger()/SQLiteHandler machinery —
+    no new sink, no new table. Scoped narrowly to invocation tracking rather
+    than a generic log-write tool, so it can't become a second home for
+    decisions or notes, which already have one. Query back with
+    tasks__logs(logger=f"skill.{skill}").
+
+    task_id is not validated — this is an observability signal, not a
+    referentially-integral record, matching `logs` having no foreign key to
+    tasks at all.
+    """
+    get_logger(f"skill.{skill}").info(f"invoked task={task_id or '-'}")
+    return {"ok": True, "skill": skill, "task_id": task_id}
+
+
+@mcp.tool()
 def tasks__get(task_id: str) -> dict[str, Any]:
     """Return one task object."""
     task = store().get(task_id)
