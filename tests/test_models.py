@@ -73,33 +73,41 @@ class TestSingleAllocation:
 
 
 class TestParts:
-    def test_the_five_parts_are_defined(self, system):
+    def test_the_four_parts_are_defined(self, system):
         assert set(PART_DEF.findall(system)) == {
-            "TaskStore", "LifecycleRules", "TaskMCPTools", "HostAdapter", "System"
+            "TaskStore", "LifecycleRules", "TaskMCPTools", "System"
         }
 
     def test_no_part_is_named_for_a_specific_host(self, system):
         """Host names belong to instances, not to the structure.
 
-        A part named for one host makes a second host either a new part — a
-        change to the decomposition — or a squatter inside someone else's name.
-        The adapter contract is the same whoever implements it.
+        There is no host-specific part left to name — the one that existed
+        (HostAdapter) was removed once every behaviour it carried either
+        duplicated what TaskMCPTools already does explicitly, or could just be
+        a skill's own step. This test stays as a guard against one reappearing.
         """
         for part in PART_DEF.findall(system):
             assert "ClaudeCode" not in part and "Claude" not in part, (
-                f"part {part!r} names a specific host; use HostAdapter and make it an instance"
+                f"part {part!r} names a specific host — host-specific behaviour "
+                f"belongs in a skill, not a part"
             )
 
-    def test_both_interfaces_depend_on_the_rules(self, system):
+    def test_the_interface_depends_on_the_rules(self, system):
         """The structural form of 'rules cannot be bypassed'.
 
-        If either interface stopped composing LifecycleRules it could reach the
+        If TaskMCPTools stopped composing LifecycleRules it could reach the
         store directly, and the project's central claim would quietly become
         false while every test still passed.
         """
-        for part in ("TaskMCPTools", "HostAdapter"):
-            block = system.split(f"part def {part}")[1].split("part def")[0]
-            assert "rules : LifecycleRules" in block, f"{part} does not depend on the rules"
+        block = system.split("part def TaskMCPTools")[1].split("part def")[0]
+        assert "rules : LifecycleRules" in block, "TaskMCPTools does not depend on the rules"
+
+    def test_no_host_adapter_part_reappeared(self, system):
+        """A host-specific adapter part was removed deliberately — see the
+        package doc comment. If host-specific automaticity is wanted again,
+        the argument is a skill's own step, not a part of this model."""
+        assert "part def HostAdapter" not in system
+        assert "part hooks" not in system
 
     def test_no_daemon_part_reappeared(self, system):
         """An earlier revision centred a daemon; it was abandoned deliberately."""

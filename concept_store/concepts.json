@@ -4,21 +4,22 @@
       "confidence": 0.92,
       "contracts": [
         "backfill(repo, since=None, dry_run=False) -> {scanned, linked, already_linked, unknown_tasks, dry_run}",
-        "git_log(repo, since) -> [(sha, message)], empty when the path is not a git repo"
+        "git_log(repo, since) -> [(sha, message)], empty when the path is not a git repo",
+        "extract_task_ids(text) -> every task:<id> reference, de-duplicated, order preserved"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "Rebuilds commit-to-task links by scanning git history for task:<id> references. Exists because commit capture fails open, and that failure is invisible by construction: a task with no commits looks identical to one whose commits were missed.",
+      "description": "Rebuilds commit-to-task links by scanning git history for task:<id> references. There is no automatic capture: a commit is linked by an explicit tasks__add_commit call, made by the commit skill after a successful commit, and nothing enforces that call happens. This exists because that gap is invisible by construction: a task with no commits looks identical to one whose commits were never linked.",
       "evidence": [
         "taskfw/backfill.py:backfill",
-        "tests/test_hooks.py:TestBackfill"
+        "tests/test_backfill.py:TestBackfill"
       ],
       "invariants": [
         "Idempotent \u2014 add_commit is a no-op for an already-recorded pair, so repeated runs are safe",
         "A non-git directory is not an error, it is zero commits scanned",
-        "Git history is the durable record; the commit map is a cache over it, and this rebuilds the cache",
-        "This is what makes commit capture's fail-open acceptable rather than quietly lossy"
+        "Git history is the durable record; the commit map is a cache over it, and this rebuilds the cache from scratch",
+        "Never depends on tasks__add_commit having been called \u2014 re-derives every link straight from git log"
       ],
-      "last_validated": "2026-08-01T00:00:00+00:00",
+      "last_validated": "2026-08-01T06:05:35.208983+00:00",
       "module": "taskfw/backfill.py",
       "name": "commit-backfill-recovery"
     },
@@ -100,32 +101,6 @@
       "last_validated": "2026-08-01T00:00:00+00:00",
       "module": "taskfw/accuracy.py",
       "name": "grooming-accuracy-aggregate"
-    },
-    "hooks-observational-fail-open": {
-      "confidence": 0.94,
-      "contracts": [
-        "handle_user_prompt_submit -> hookSpecificOutput.additionalContext with ONE line, or {}",
-        "handle_post_tool_use -> {} always; it observes and never blocks",
-        "main() always prints valid JSON and always exits 0"
-      ],
-      "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "The only host-specific surface, and optional \u2014 everything is reachable through MCP tools, so a host without hooks loses automaticity and nothing else. Two observational behaviours, independently switchable: a one-line active-task pointer on prompt submit, and commit capture on post-tool. Neither can block a tool call.",
-      "evidence": [
-        "taskfw/hooks/claude_code.py:handle_user_prompt_submit",
-        "taskfw/hooks/claude_code.py:main",
-        "tests/test_hooks.py:TestFailOpen"
-      ],
-      "invariants": [
-        "Fail-open is absolute: malformed input, unknown events, and handler exceptions all yield {} and exit 0",
-        "The pointer is one line naming the task and directing the agent to tasks__context \u2014 never an assembled context block",
-        "This IS prompt injection, just minimal; the docs say so rather than defending 'pull only' on a technicality",
-        "cwd supplied by the host is never overwritten with an env fallback",
-        "A pointer whose task no longer exists is cleared rather than naming a ghost",
-        "Each behaviour is independently switchable, since commit capture is useful without injection"
-      ],
-      "last_validated": "2026-08-01T00:00:00+00:00",
-      "module": "taskfw/hooks/claude_code.py",
-      "name": "hooks-observational-fail-open"
     },
     "lifecycle-single-rule-implementation": {
       "confidence": 0.96,
@@ -352,6 +327,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse \u2014 code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-01T02:51:02.590797+00:00"
+    "updated_at": "2026-08-01T06:05:35.209029+00:00"
   }
 }

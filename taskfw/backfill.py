@@ -1,31 +1,44 @@
 """Backfill commit links from git history.
 
-The commit-capture hook fails open, so a commit made while the hook was
-disabled, misconfigured, or simply not installed leaves no link — and the gap
-is invisible, since a task with no commits looks exactly like a task whose
-commits were missed.
+There is no automatic capture. A commit gets linked to a task by an explicit
+tasks__add_commit call — the commit skill (.claude/skills/commit/skill.md)
+makes that call after a successful commit — but nothing enforces it happens.
+A commit made outside the skill, or one where the call was skipped, forgotten,
+or failed, leaves no link, and the gap is invisible: a task with no commits
+looks exactly like a task whose commits were never made.
 
 This makes that recoverable. Git history is the durable record; the commit map
-is a cache over it, and this rebuilds the cache. Without this, "fail open" for
-commit capture would mean "lose data quietly", which is not an acceptable
-trade even for a purely observational hook.
+is a cache over it, and this rebuilds the cache from scratch by re-deriving
+every task:<id> reference straight from git log. Nothing here depends on the
+skill having run, or on anything having called tasks__add_commit at all.
 
     python -m taskfw.backfill [--repo PATH] [--since REV] [--dry-run]
 """
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 
-from taskfw.hooks.claude_code import extract_task_ids
 from taskfw.log import get_logger
 from taskfw.store import TaskStore
 
 log = get_logger(__name__)
 
+#: Matches task:<id> anywhere in a commit message.
+TASK_REF = re.compile(r"\btask:([0-9a-f]{6,32})\b", re.IGNORECASE)
+
 #: Unit separator between sha and subject — safe against both in commit text.
 _SEP = "\x1f"
+
+
+def extract_task_ids(text: str) -> list[str]:
+    """Every task:<id> reference in a string, de-duplicated, order preserved."""
+    seen: dict[str, None] = {}
+    for match in TASK_REF.finditer(text or ""):
+        seen.setdefault(match.group(1).lower(), None)
+    return list(seen)
 
 
 def git_log(repo: str, since: str | None = None) -> list[tuple[str, str]]:

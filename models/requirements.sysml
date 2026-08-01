@@ -58,8 +58,8 @@ package Requirements {
     requirement def ConcurrentWriterSafetyRequirement {
         doc /* Source: taskfw/db/connect.py:connect. WAL, busy_timeout, and
              * foreign_keys are set in one place, never by callers. Several
-             * processes — one MCP server per host window, plus hook
-             * invocations — write the same file concurrently. */
+             * processes — one MCP server per host window, plus taskfw-backfill
+             * runs — write the same file concurrently. */
     }
     satisfy requirement ConcurrentWriterSafetyRequirement by system.foundation;
 
@@ -73,7 +73,7 @@ package Requirements {
 
     requirement def SingleRuleImplementationRequirement {
         doc /* Source: taskfw/lifecycle.py. Every task rule has exactly one
-             * implementation, imported by both interface parts. The guarantee
+             * implementation, imported by the interface part. The guarantee
              * that rules cannot be bypassed comes from single-sourcing the
              * rule, NOT from a transport boundary — conflating the two is what
              * motivated an abandoned daemon design. */
@@ -197,31 +197,25 @@ package Requirements {
     satisfy requirement HostPortabilityRequirement by system.mcpTools;
 
     requirement def CommitTaskTraceabilityRequirement {
-        doc /* Source: taskfw/hooks/claude_code.py:handle_post_tool_use.
-             * A commit referencing task:<id> is linked to that task by
-             * observation after the fact.
+        doc /* Source: taskfw/mcp_server.py:tasks__add_commit,
+             * .claude/skills/commit/skill.md, taskfw/backfill.py.
+             * A commit referencing task:<id> is linked to that task — by an
+             * explicit tasks__add_commit call the commit skill makes after a
+             * successful commit, or by backfill scanning git history for
+             * whatever that call missed.
              *
-             * SINGLE allocation, and the reason is worth stating: there is no
-             * pre-commit gate, so this is observation rather than enforcement
-             * and therefore not a rule at all — which is exactly why it does
-             * not also belong to LifecycleRules. Add a gate and it would
-             * become a rule, immediately needing a home in both parts. The
-             * single allocation is a consequence of not enforcing, not
-             * something arranged on top of enforcing. */
+             * SINGLE allocation, and the reason is worth stating: nothing
+             * enforces the call happens, so this is not a rule LifecycleRules
+             * could own — add a pre-commit gate and it would become one,
+             * immediately needing a home in both parts. There used to be a
+             * host-specific adapter here observing commits automatically; it
+             * was removed once nothing distinguished what it did from a skill
+             * making the same call on purpose. backfill is part of this
+             * requirement rather than a separate convenience: a call that can
+             * be skipped, forgotten, or never made at all loses data invisibly
+             * — a task with no commits looks identical to one whose commits
+             * were never linked — so the recovery path is what makes that
+             * acceptable rather than quietly lossy. */
     }
-    satisfy requirement CommitTaskTraceabilityRequirement by system.hooks;
-
-    requirement def HookFailOpenRequirement {
-        doc /* Source: taskfw/hooks/claude_code.py:main, taskfw/backfill.py.
-             * A hook never blocks and never raises: malformed input, unknown
-             * events, and handler exceptions all yield an empty result and
-             * exit 0.
-             *
-             * backfill is part of this requirement rather than a separate
-             * convenience. Failing open on an observational hook loses data
-             * invisibly — a task with no commits looks identical to one whose
-             * commits were missed — so the recovery path is what makes the
-             * silence acceptable. */
-    }
-    satisfy requirement HookFailOpenRequirement by system.hooks;
+    satisfy requirement CommitTaskTraceabilityRequirement by system.mcpTools;
 }

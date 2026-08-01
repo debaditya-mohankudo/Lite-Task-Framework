@@ -43,9 +43,10 @@ task's context calls `tasks__context` and gets the whole bundle in one
 response.
 
 The practical consequence for every document here: **activating a task does not
-make its context appear.** Call `tasks__context` explicitly. Where a host
-supports hooks, a one-line pointer names the active task and reminds the agent
-to make that call — but the call is still the agent's to make.
+make its context appear.** Call `tasks__context` explicitly, every time — there
+is no host-side pointer that reminds you, on purpose. A host that wants a
+reminder builds it into the skill that does the activating, not into a hook
+that runs behind the agent's back.
 
 ## Tool surface
 

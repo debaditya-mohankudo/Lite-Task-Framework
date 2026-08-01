@@ -73,6 +73,23 @@ Heredocs and `-m` chains mangle multi-paragraph bodies, and a pasted block of
 shell can end up as the message itself. Write the message to a file in the
 scratchpad, then pass it with `-F`.
 
+## Link the commit to its task
+
+There is no hook watching for this. After the commit succeeds, call it
+yourself:
+
+```python
+sha = <output of git rev-parse HEAD>
+tasks__add_commit(task_id="<id>", sha=sha, repo="<absolute repo path>")
+```
+
+**This step is easy to skip and nothing will stop you.** That is deliberate —
+a pre-commit gate would make this a rule, and it isn't one — but it means the
+link only exists if you make it. If you forget, or the call fails, the commit
+is not lost: `python -m taskfw.backfill` re-derives every link from git
+history regardless of whether this step ever ran. Prefer calling it anyway;
+backfill is the recovery path, not a substitute for doing this.
+
 ## Splitting
 
 Prefer one commit per idea. But `tests/test_concepts.py` binds each module to a

@@ -1,5 +1,5 @@
 package TaskFrameworkSystem {
-    doc /* Structural model of task-framework: five parts over a shared
+    doc /* Structural model of task-framework: four parts over a shared
          * Foundation.
          *
          * WHY THE DECOMPOSITION LOOKS LIKE THIS. A rule and the data it governs
@@ -10,14 +10,27 @@ package TaskFrameworkSystem {
          * tests/test_models.py fails the build if a second appears.
          *
          * BEFORE DESIGNING A FIX FOR A COUPLING, CHECK WHETHER THE COUPLED
-         * THING NEEDS TO EXIST. This decomposition began with two such split
-         * requirements and solved neither: after simplification one became
-         * trivial (with two issue types, the hierarchy rule is "an epic has no
-         * parent") and the other stopped being a rule at all (with no
-         * pre-commit gate, commit linkage is observation, not enforcement).
-         * The coupling dissolved rather than being resolved — most of it was
-         * complexity that did not need to exist. That is the most transferable
-         * lesson in this model.
+         * THING NEEDS TO EXIST. This decomposition began with three such split
+         * requirements and solved none of them by splitting harder: after
+         * simplification one became trivial (with two issue types, the
+         * hierarchy rule is "an epic has no parent"), one stopped being a rule
+         * at all (with no pre-commit gate, commit linkage was observation, not
+         * enforcement), and the third — the HostAdapter part that used to sit
+         * here, injecting a one-line active-task pointer on every prompt — was
+         * removed outright once every host-specific behaviour it existed to
+         * carry either duplicated what a skill already does explicitly
+         * (tasks__context) or could simply be a skill's own step
+         * (tasks__add_commit, called from .claude/skills/commit/skill.md). The
+         * coupling dissolved rather than being resolved each time — most of it
+         * was complexity that did not need to exist. That is the most
+         * transferable lesson in this model.
+         *
+         * PULL, NOT PUSH, ALL THE WAY DOWN. Removing HostAdapter is not a
+         * missing feature — it is the framework becoming consistent with its
+         * own stated principle. The adapter's own module docstring admitted
+         * "this IS prompt injection, just one line of it" before it was
+         * deleted; a system that says context is never pushed should not carry
+         * an acknowledged exception to that rule as one of its four parts.
          *
          * NO SINGLE POINT OF FAILURE, and that is designed rather than
          * incidental. A daemon owning store, rules, and ephemeral context was
@@ -39,51 +52,30 @@ package TaskFrameworkSystem {
 
     part def LifecycleRules {
         doc /* taskfw/lifecycle.py. The single implementation of every task
-             * rule, imported by both interface parts. Pure functions over
+             * rule, imported by the interface part. Pure functions over
              * (inputs, store) — no session, prompt, or host state, which is
              * what lets every caller share them.
              *
              * The project's central claim, that rules cannot be bypassed,
-             * rests on this part having exactly one implementation and both
-             * interfaces depending on it. It is a structural claim, visible in
+             * rests on this part having exactly one implementation and the
+             * interface depending on it. It is a structural claim, visible in
              * the composition below rather than asserted in prose. */
         part foundation : Foundation;
     }
 
     part def TaskMCPTools {
-        doc /* taskfw/mcp_server.py, taskfw/context.py. The portable interface:
-             * MCP is the portability layer, so any MCP host reaches the whole
-             * framework here with no neutral abstraction on top.
+        doc /* taskfw/mcp_server.py, taskfw/context.py. The ONLY interface: MCP
+             * is the portability layer, so any MCP host reaches the whole
+             * framework here with no host-specific adapter on top of it.
              *
              * In-process — tools import the library directly. tasks__context is
              * the headline tool and the sole replacement for per-turn prompt
-             * injection. */
-        part foundation : Foundation;
-        part rules : LifecycleRules;
-        part store : TaskStore;
-    }
-
-    part def HostAdapter {
-        doc /* The only host-specific part, and optional by construction:
-             * everything the framework does is reachable through TaskMCPTools,
-             * so a host with no adapter loses automaticity and nothing else.
-             *
-             * DELIBERATELY NOT NAMED FOR ONE HOST. An adapter covers only what
-             * a pull interface structurally cannot do for itself — noticing
-             * events the framework does not own. Claude Code is the shipped
-             * instance (taskfw/hooks/claude_code.py) and adds two behaviours,
-             * both observational and independently switchable: a one-line
-             * active-task pointer, and commit capture. A second host would be
-             * another instance, not another part.
-             *
-             * THE CONTRACT BELONGS TO THE ABSTRACTION, not to any instance. No
-             * adapter may block a tool call or reject a write; fail-open is
-             * absolute. An adapter that observes rather than enforces will miss
-             * events, so anything it captures must be recoverable by other
-             * means — taskfw/backfill.py rebuilds commit links from git history,
-             * which is what makes silent failure acceptable rather than
-             * quietly lossy. An adapter with no recovery path is not
-             * permitted. */
+             * injection. tasks__add_commit is called explicitly by a host's
+             * commit skill after a successful commit, rather than observed
+             * automatically — nothing enforces that call happens, which is why
+             * taskfw/backfill.py exists as the recovery path: it rebuilds
+             * commit links from git history regardless of whether the call was
+             * ever made. */
         part foundation : Foundation;
         part rules : LifecycleRules;
         part store : TaskStore;
@@ -94,6 +86,5 @@ package TaskFrameworkSystem {
         part store : TaskStore;
         part rules : LifecycleRules;
         part mcpTools : TaskMCPTools;
-        part hooks : HostAdapter;
     }
 }
