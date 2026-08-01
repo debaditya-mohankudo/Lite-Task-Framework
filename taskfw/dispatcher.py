@@ -122,6 +122,15 @@ class tool_called:
     visible in what the function actually returns: `return call.result`
     evaluates the reference before `__exit__` runs as part of unwinding the
     `with` block, and `post` mutates that same dict in place.
+
+    Call sites build `post` with a lambda, not `functools.partial`: the
+    `apply_*_nudge` functions take `result` first, but `partial` appends new
+    positional args after the ones it pre-binds, so `partial(fn, report,
+    task_id, conn)` called as `p(result)` would call `fn(report, task_id,
+    conn, result)` — the wrong order. A lambda reads left-to-right in the
+    same order as the function signature it calls; `partial` would need
+    every pre-bound argument passed by keyword to avoid that, for no benefit
+    at a single call site.
     """
 
     def __init__(
