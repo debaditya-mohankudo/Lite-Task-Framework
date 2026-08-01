@@ -100,6 +100,19 @@ def _reported_totals(task: Task) -> dict[str, int]:
     return dict(totals)
 
 
+def _nonzero(counts: dict[str, int]) -> dict[str, int]:
+    """Drop zero entries so two tallies compare on content, not on shape.
+
+    A self-reported tally usually names every grade including the ones that did
+    not occur (`{"avoided": 1, "materialized": 0, "wrong": 0}`), while a derived
+    Counter only holds grades actually seen (`{"avoided": 1}`). Comparing those
+    directly made every task that graded a single risk type look like a
+    disagreement — an alarm this module raised against itself, in the one place
+    it claims a derived count cannot disagree with what it counts.
+    """
+    return {grade: count for grade, count in counts.items() if count}
+
+
 def _missed(task: Task) -> int:
     return sum(len(r.get("missed_surprises") or []) for r in task.introspection or [])
 
@@ -162,9 +175,10 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
             skipped.append(task.id)
 
         reported = _reported_totals(task)
-        if reported and reported != dict(graded_here):
+        derived = dict(graded_here)
+        if _nonzero(reported) and _nonzero(reported) != _nonzero(derived):
             disagreements.append({
-                "task": task.id, "reported": reported, "derived": dict(graded_here),
+                "task": task.id, "reported": reported, "derived": derived,
             })
 
     graded_total = sum(tallies.values())

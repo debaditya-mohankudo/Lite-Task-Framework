@@ -172,6 +172,36 @@ class TestDerivedNotReported:
                  [{"grooming_accuracy": {"avoided": 1}}])
         assert grooming_accuracy(store)["self_report_disagreements"] == []
 
+    def test_explicit_zeros_are_not_a_disagreement(self, store):
+        """A report naming grades that did not occur still agrees.
+
+        The test above passes a SPARSE tally, which is why it never caught
+        this: a report written out in full carries `materialized: 0` and
+        `wrong: 0`, and comparing that against a Counter holding only the
+        grades seen made the dicts differ by key set while agreeing on every
+        value. Five real tasks were flagged before anything noticed.
+        """
+        finished(store, "t",
+                 [{"text": "a", "graded": "avoided"}],
+                 [{"grooming_accuracy": {"avoided": 1, "materialized": 0, "wrong": 0}}])
+        assert grooming_accuracy(store)["self_report_disagreements"] == []
+
+    def test_a_real_disagreement_still_survives_zero_stripping(self, store):
+        """Dropping zeros must not drop the alarm it was hiding."""
+        finished(store, "t",
+                 [{"text": "a", "graded": "avoided"}],
+                 [{"grooming_accuracy": {"avoided": 3, "materialized": 0}}])
+        d = grooming_accuracy(store)["self_report_disagreements"]
+        assert len(d) == 1
+        assert d[0]["derived"] == {"avoided": 1}
+
+    def test_an_all_zero_report_is_not_a_disagreement(self, store):
+        """A report claiming nothing is not a claim that conflicts with one."""
+        finished(store, "t",
+                 [{"text": "a", "graded": "avoided"}],
+                 [{"grooming_accuracy": {"materialized": 0, "wrong": 0}}])
+        assert grooming_accuracy(store)["self_report_disagreements"] == []
+
     def test_missed_surprises_are_summed_across_reports(self, store):
         finished(store, "t",
                  [{"text": "a", "graded": "materialized"}],
