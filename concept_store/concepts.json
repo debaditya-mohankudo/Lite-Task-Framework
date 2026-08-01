@@ -1,0 +1,244 @@
+{
+  "concepts": {
+    "commit-backfill-recovery": {
+      "confidence": 0.92,
+      "contracts": [
+        "backfill(repo, since=None, dry_run=False) -> {scanned, linked, already_linked, unknown_tasks, dry_run}",
+        "git_log(repo, since) -> [(sha, message)], empty when the path is not a git repo"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "Rebuilds commit-to-task links by scanning git history for task:<id> references. Exists because commit capture fails open, and that failure is invisible by construction: a task with no commits looks identical to one whose commits were missed.",
+      "evidence": [
+        "taskfw/backfill.py:backfill",
+        "tests/test_hooks.py:TestBackfill"
+      ],
+      "invariants": [
+        "Idempotent \u2014 add_commit is a no-op for an already-recorded pair, so repeated runs are safe",
+        "A non-git directory is not an error, it is zero commits scanned",
+        "Git history is the durable record; the commit map is a cache over it, and this rebuilds the cache",
+        "This is what makes commit capture's fail-open acceptable rather than quietly lossy"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/backfill.py",
+      "name": "commit-backfill-recovery"
+    },
+    "connection-pragmas-single-point": {
+      "confidence": 0.93,
+      "contracts": [
+        "connect(path=None) -> sqlite3.Connection with row_factory=Row, migrated on first use per path",
+        "transaction(conn) commits on success and rolls back on any exception"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "connect() is the only place connection pragmas are set, and runs migrations once per database path. WAL, busy_timeout, and foreign_keys are applied here rather than left to callers because several processes write the same file concurrently.",
+      "evidence": [
+        "taskfw/db/connect.py:connect",
+        "tests/test_foundation.py:TestConnectionPragmas"
+      ],
+      "invariants": [
+        "WAL, busy_timeout, and foreign_keys are set for every connection, never by a caller",
+        "WAL is skipped for :memory:, where it does not apply",
+        "Migration runs at most once per path per process"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/db/connect.py",
+      "name": "connection-pragmas-single-point"
+    },
+    "hooks-observational-fail-open": {
+      "confidence": 0.94,
+      "contracts": [
+        "handle_user_prompt_submit -> hookSpecificOutput.additionalContext with ONE line, or {}",
+        "handle_post_tool_use -> {} always; it observes and never blocks",
+        "main() always prints valid JSON and always exits 0"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "The only host-specific surface, and optional \u2014 everything is reachable through MCP tools, so a host without hooks loses automaticity and nothing else. Two observational behaviours, independently switchable: a one-line active-task pointer on prompt submit, and commit capture on post-tool. Neither can block a tool call.",
+      "evidence": [
+        "taskfw/hooks/claude_code.py:handle_user_prompt_submit",
+        "taskfw/hooks/claude_code.py:main",
+        "tests/test_hooks.py:TestFailOpen"
+      ],
+      "invariants": [
+        "Fail-open is absolute: malformed input, unknown events, and handler exceptions all yield {} and exit 0",
+        "The pointer is one line naming the task and directing the agent to tasks__context \u2014 never an assembled context block",
+        "This IS prompt injection, just minimal; the docs say so rather than defending 'pull only' on a technicality",
+        "cwd supplied by the host is never overwritten with an env fallback",
+        "A pointer whose task no longer exists is cleared rather than naming a ghost",
+        "Each behaviour is independently switchable, since commit capture is useful without injection"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/hooks/claude_code.py",
+      "name": "hooks-observational-fail-open"
+    },
+    "lifecycle-single-rule-implementation": {
+      "confidence": 0.96,
+      "contracts": [
+        "Every check returns Decision(allowed, rule, reason); Decision is falsy when denied",
+        "check_save(task, previous=None, parent=None) is the single entry point for validating a mutation"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "The single implementation of every task rule, imported by both the MCP tools and the hooks. Pure functions over (inputs, store) with no session, prompt, or host state. Deliberately small: body-template validation became schema validation, the hierarchy matrix collapsed to one sentence with two issue types, and commit traceability left entirely once the pre-commit gate was dropped.",
+      "evidence": [
+        "taskfw/lifecycle.py:check_transition",
+        "taskfw/lifecycle.py:check_save",
+        "tests/test_lifecycle.py"
+      ],
+      "invariants": [
+        "Rules are pure \u2014 the tests need no fixtures at all, which is the observable signal that portability holds",
+        "Same-status is checked BEFORE the terminal rule, so re-saving a done or abandoned task is never an error; this is what makes tasks__finish idempotent",
+        "done and abandoned are terminal; any non-terminal state may be abandoned",
+        "The entire hierarchy rule is: an epic has no parent, and a task cannot be its own parent",
+        "Denials log at INFO with rule, reason, and ids; allows log at DEBUG"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/lifecycle.py",
+      "name": "lifecycle-single-rule-implementation"
+    },
+    "mcp-portable-interface": {
+      "confidence": 0.93,
+      "contracts": [
+        "Every tool returns a dict; a refusal is {'error': reason, 'rule': which_rule}",
+        "tasks__context with no argument falls back to the active task for the workspace",
+        "tasks__finish is idempotent on an already-done task and refuses an abandoned one",
+        "tasks__add_introspection appends where tasks__update(grooming=...) replaces"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process \u2014 they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store.",
+      "evidence": [
+        "taskfw/mcp_server.py:tasks__create",
+        "taskfw/mcp_server.py:tasks__finish",
+        "tests/test_mcp_tools.py"
+      ],
+      "invariants": [
+        "No tool enforces a rule itself \u2014 all validation goes through lifecycle.check_*, so a tool cannot enforce a different set than a hook",
+        "The store is opened lazily, so importing the module never touches disk",
+        "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/mcp_server.py",
+      "name": "mcp-portable-interface"
+    },
+    "pull-context-bundle": {
+      "confidence": 0.94,
+      "contracts": [
+        "build_context(store, task_id, verbosity) -> bundle, or {'error': ...} for an unknown task",
+        "Sections in fixed order: task, decisions, grooming, graph, commits, related",
+        "verbosity='summary' returns identity, status, progress, and open items only"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "build_context assembles the whole working bundle for a task in one call \u2014 the sole replacement for per-turn prompt injection. Fixed section order, a documented trim order dropping whole sections least-useful-first, and a truncated list so an omitted section is distinguishable from an empty one.",
+      "evidence": [
+        "taskfw/context.py:build_context",
+        "taskfw/context.py:TRIM_ORDER",
+        "tests/test_context.py:TestBudget"
+      ],
+      "invariants": [
+        "The task section is NEVER trimmed \u2014 a bundle without its task is useless rather than merely large",
+        "Trimming drops whole sections, never parts of one: a half-listed set reads as complete and is more misleading than an absent section that says so",
+        "Anything dropped is named in `truncated`",
+        "related is the only approximate section and is always trimmed first; every other section is an exact lookup"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/context.py",
+      "name": "pull-context-bundle"
+    },
+    "schema-single-source-additive-migration": {
+      "confidence": 0.95,
+      "contracts": [
+        "migrate(conn) -> {'created': [...], 'added': ['table.column'], 'orphaned': ['table.column']}",
+        "Table.create_sql() generates DDL from the same columns migration diffs against"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "TABLES is one declarative structure of Table/Column dataclasses that generates DDL, drives migration, and is read directly by tests. migrate() creates missing tables and adds missing columns, reporting created/added/orphaned. Additive-only is enforced by construction rather than policy: no code path emits DROP or a rewriting ALTER.",
+      "evidence": [
+        "taskfw/db/schema.py:TABLES",
+        "taskfw/db/schema.py:migrate",
+        "tests/test_foundation.py:TestAdditiveOnly"
+      ],
+      "invariants": [
+        "Only CREATE TABLE IF NOT EXISTS and ALTER TABLE ADD COLUMN are ever emitted",
+        "A column present in the DB but absent from TABLES is reported as orphaned and never dropped",
+        "There is exactly one DDL definition \u2014 tests read TABLES rather than restating it, so no schema-parity check is needed",
+        "ALTER TABLE ADD COLUMN cannot take a non-constant DEFAULT, so _addable_decl strips it; a migrated column is therefore not byte-identical to the same column created fresh"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/db/schema.py",
+      "name": "schema-single-source-additive-migration"
+    },
+    "stderr-only-logging": {
+      "confidence": 0.92,
+      "contracts": [
+        "get_logger(name) -> logger under the 'taskfw' root, configured on first call",
+        "Level comes from TASKFW_LOG_LEVEL, default INFO"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "All logging goes to stderr, configured once. An MCP server speaks JSON-RPC over stdout, so a stray write corrupts the protocol \u2014 this is a correctness constraint for the whole project rather than a formatting preference.",
+      "evidence": [
+        "taskfw/log.py:get_logger",
+        "tests/test_logging.py:TestLogDestination"
+      ],
+      "invariants": [
+        "No handler under the taskfw logger may write to stdout \u2014 pinned by tests/test_logging.py",
+        "The root taskfw logger does not propagate, so host logging config cannot redirect it to stdout",
+        "Denials log at INFO and allows at DEBUG, so a full trace is one env var away and costs nothing normally"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/log.py",
+      "name": "stderr-only-logging"
+    },
+    "taskstore-data-access-only": {
+      "confidence": 0.94,
+      "contracts": [
+        "save(task) upserts and returns the task; get(id) -> Task | None",
+        "link() and add_commit() return True when a row was created, False when it already existed",
+        "unlink(from_id, to_id, rel=None) -> rows removed; omitting rel removes every edge between the pair",
+        "search(query) falls back to LIKE when FTS5 is unavailable or the query is malformed"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "Persistence for tasks, events, edges, commits, and the active-task pointer. Contains no rule enforcement at all, so LifecycleRules keeps a single allocation; a store method rejects only what it structurally cannot do. save() is the sole writer of both the scalar columns and the JSON blob, which is what keeps them from drifting.",
+      "evidence": [
+        "taskfw/store.py:TaskStore.save",
+        "taskfw/store.py:TaskStore.unlink",
+        "tests/test_store.py"
+      ],
+      "invariants": [
+        "No store method ever rejects a write for a policy reason \u2014 that is LifecycleRules' job",
+        "save() is the only writer of the scalar columns and `data`, which is what prevents projection drift",
+        "Edge and commit inserts are idempotent via table constraints, not application checks",
+        "The active-task pointer is durable, scoped by workspace, and survives restarts",
+        "FTS5 absence degrades search rather than failing at import"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/store.py",
+      "name": "taskstore-data-access-only"
+    },
+    "typed-task-object": {
+      "confidence": 0.95,
+      "contracts": [
+        "Task.to_dict()/to_json() and Task.from_dict()/from_json() round-trip every field",
+        "Task.progress -> (done, total), derived from resolution on every read",
+        "Task.search_text() flattens the fields worth indexing"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "A task is one typed dataclass serialised to JSON. Two issue types only (epic, task) and four statuses. Typing removes two things outright rather than relocating them: required-section validation becomes schema validation, and 'resolution must be a checklist' becomes unrepresentable because resolution IS a list of items.",
+      "evidence": [
+        "taskfw/models.py:Task",
+        "taskfw/models.py:Task.progress",
+        "tests/test_store.py:TestRoundTrip"
+      ],
+      "invariants": [
+        "from_dict drops unknown keys rather than raising, so a store written by a newer version stays readable by an older one",
+        "progress is never stored \u2014 it cannot drift from the list it counts",
+        "notes exists deliberately as the escape hatch for anything the schema did not anticipate, and must survive later tidying",
+        "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/models.py",
+      "name": "typed-task-object"
+    }
+  },
+  "meta": {
+    "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse \u2014 code -> concepts -> model, one direction only.",
+    "repo": "task-framework",
+    "seeded_at": "2026-08-01"
+  }
+}
