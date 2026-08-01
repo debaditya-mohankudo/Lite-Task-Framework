@@ -222,6 +222,22 @@ def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
 
 
 @mcp.tool()
+def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
+    """Append an introspection report to a task's history.
+
+    Appends rather than replaces, unlike grooming: grooming records the current
+    best understanding and only the latest pass is useful, whereas each
+    introspection is evidence about a distinct execution and reads as a series.
+    """
+    task = store().get(task_id)
+    if task is None:
+        return {"error": f"No task {task_id!r}"}
+    task.introspection.append(report)
+    store().save(task)
+    return {"ok": True, "id": task_id, "reports": len(task.introspection)}
+
+
+@mcp.tool()
 def tasks__add_decision(task_id: str, decision: str) -> dict[str, Any]:
     """Record a design decision. Surfaces in tasks__context, where it explains the task's shape."""
     if store().get(task_id) is None:
