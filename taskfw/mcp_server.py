@@ -15,7 +15,7 @@ from typing import Any
 
 from mcp.server import MCPServer
 
-from taskfw import lifecycle
+from taskfw import dispatcher, lifecycle
 from taskfw.accuracy import grooming_accuracy
 from taskfw.concepts import ConceptStore
 from taskfw.context import build_context
@@ -268,13 +268,23 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
     Appends rather than replaces, unlike grooming: grooming records the current
     best understanding and only the latest pass is useful, whereas each
     introspection is evidence about a distinct execution and reads as a series.
+
+    A report with lessons and a report with none otherwise leave the same
+    trace in loop memory — nothing. See taskfw.dispatcher: when this report
+    carries a lesson and the task has never cited a memory, the response
+    carries a non-blocking `memory_nudge` so the omission is visible instead
+    of silent.
     """
     task = store().get(task_id)
     if task is None:
         return {"error": f"No task {task_id!r}"}
     task.introspection.append(report)
     store().save(task)
-    return {"ok": True, "id": task_id, "reports": len(task.introspection)}
+    result: dict[str, Any] = {"ok": True, "id": task_id, "reports": len(task.introspection)}
+    nudge = dispatcher.introspection_nudge(report, task_id, store().conn)
+    if nudge:
+        result["memory_nudge"] = nudge
+    return result
 
 
 @mcp.tool()

@@ -1,5 +1,27 @@
 {
   "concepts": {
+    "advisory-nudge-dispatcher": {
+      "confidence": 0.8,
+      "contracts": [
+        "introspection_nudge(report, task_id, conn) returns None or a string; never raises, never mutates the report or the task",
+        "Fires only when the report has an unpromoted lesson AND the task has never cited any memory (any learned_from link, not specifically about this report's lesson)",
+        "Reads report['new_knowledge'] (canonical, per task-introspection skill.md Step 6 and the only shape taskfw.accuracy also reads) and report['surprises'][].lesson (legacy shape already present in historical reports) as equally valid lesson sources"
+      ],
+      "created_at": "2026-08-01T10:02:54.174596+00:00",
+      "description": "Single home for advisory, non-blocking response annotations (nudges) on MCP tool results. Distinct from lifecycle.py (blocking rule enforcement, checked before a write) and store.py (persistence) — a nudge never refuses a write and never changes what's stored, it only surfaces something true that would otherwise be silent. Exists to prevent mcp_server.py tools from each growing their own private _foo_check() helper.",
+      "evidence": [
+        "taskfw/dispatcher.py:introspection_nudge",
+        "taskfw/mcp_server.py:tasks__add_introspection",
+        "tests/test_dispatcher.py"
+      ],
+      "invariants": [
+        "Never blocks or changes a write — advisory only, because 'does this lesson generalize' is a judgment call that a hard gate cannot check",
+        "Does not require a lesson to cite this exact report — any prior memory citation on the task silences the nudge, since recording is the caller's judgment call, not a per-report threshold this module enforces"
+      ],
+      "last_validated": "2026-08-01T10:02:54.174640+00:00",
+      "module": "taskfw/dispatcher.py",
+      "name": "advisory-nudge-dispatcher"
+    },
     "commit-backfill-recovery": {
       "confidence": 0.92,
       "contracts": [
@@ -14,10 +36,10 @@
         "tests/test_backfill.py:TestBackfill"
       ],
       "invariants": [
-        "Idempotent \u2014 add_commit is a no-op for an already-recorded pair, so repeated runs are safe",
+        "Idempotent — add_commit is a no-op for an already-recorded pair, so repeated runs are safe",
         "A non-git directory is not an error, it is zero commits scanned",
         "Git history is the durable record; the commit map is a cache over it, and this rebuilds the cache from scratch",
-        "Never depends on tasks__add_commit having been called \u2014 re-derives every link straight from git log"
+        "Never depends on tasks__add_commit having been called — re-derives every link straight from git log"
       ],
       "last_validated": "2026-08-01T06:05:35.208983+00:00",
       "module": "taskfw/backfill.py",
@@ -30,10 +52,10 @@
         "list(module=\"\") / get(name) / modules() / search(query) / uncovered(modules) are reads",
         "upsert(concept) MERGES and returns the merged concept; delete(name) -> bool",
         "concept__* MCP tools take repo explicitly, with no default",
-        "concept__get returns {found: bool, concept: {...}} on both branches \u2014 never the concept's fields flattened onto the response"
+        "concept__get returns {found: bool, concept: {...}} on both branches — never the concept's fields flattened onto the response"
       ],
       "created_at": "2026-08-01T01:03:15.785905+00:00",
-      "description": "JSON-backed store of architectural concepts for a repo, plus the concept__* MCP tools over it. Makes the framework self-contained: before this, task-framework had a concept store it could not read without another project running its server. The on-disk format is deliberately identical to the established one so a store stays readable by either implementation and neither project owns the format. As of task:756c14db, this is the SOLE concept__* MCP surface for JSON-format concept stores \u2014 claude-hooks' own duplicate (src/tools/concept.py) was removed once concept__get's response shape was corrected here to match what claude-hooks' skills already depended on by bare tool name.",
+      "description": "JSON-backed store of architectural concepts for a repo, plus the concept__* MCP tools over it. Makes the framework self-contained: before this, task-framework had a concept store it could not read without another project running its server. The on-disk format is deliberately identical to the established one so a store stays readable by either implementation and neither project owns the format. As of task:756c14db, this is the SOLE concept__* MCP surface for JSON-format concept stores — claude-hooks' own duplicate (src/tools/concept.py) was removed once concept__get's response shape was corrected here to match what claude-hooks' skills already depended on by bare tool name.",
       "evidence": [
         "taskfw/concepts.py:ConceptStore.load",
         "taskfw/concepts.py:ConceptStore.save",
@@ -42,13 +64,13 @@
         "tests/test_concept_tools.py:TestTools"
       ],
       "invariants": [
-        "concepts is a NAME-KEYED MAP on disk, never a list \u2014 a list is rejected at load with a message naming the problem rather than failing later with AttributeError",
+        "concepts is a NAME-KEYED MAP on disk, never a list — a list is rejected at load with a message naming the problem rather than failing later with AttributeError",
         "Every accessor iterates self._concepts, never the loaded file: calling .values()/.items() on the top level yields \"concepts\" and \"meta\" as if they were concepts",
         "A store without the {concepts, meta} wrapper is treated as the bare map, detected by absence of the key rather than by inspecting contents",
         "upsert merges rather than overwrites, so updating one field cannot silently drop invariants the caller did not mention; an explicit empty list still clears",
         "created_at survives an update; last_validated is restamped on every upsert",
-        "repo is always an explicit argument \u2014 a store is never tied to whichever server is running",
-        "save() writes with ensure_ascii=False \u2014 without it, every em-dash and non-ASCII character in an untouched concept gets re-escaped on any single-entry write, producing a whole-file diff for a one-entry change",
+        "repo is always an explicit argument — a store is never tied to whichever server is running",
+        "save() writes with ensure_ascii=False — without it, every em-dash and non-ASCII character in an untouched concept gets re-escaped on any single-entry write, producing a whole-file diff for a one-entry change",
         "concept__get's found:True branch nests under concept: {...} rather than flattening fields onto the response, so \"found\" cannot collide with a real field name and a caller does not need to know which implementation answered the call"
       ],
       "last_validated": "2026-08-01T06:15:42.002982+00:00",
@@ -85,7 +107,7 @@
         "Exposed as tasks__grooming_accuracy"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "Aggregates grooming risk grades across recent finished tasks \u2014 the only read that spans tasks rather than descending into one. Closes the feedback edge at the level of the loop itself: without it, 'repeated wrong grades mean grooming asks the wrong questions' is advice nothing can act on, because grades live inside each task and a pattern across tasks was writable but unreadable.",
+      "description": "Aggregates grooming risk grades across recent finished tasks — the only read that spans tasks rather than descending into one. Closes the feedback edge at the level of the loop itself: without it, 'repeated wrong grades mean grooming asks the wrong questions' is advice nothing can act on, because grades live inside each task and a pattern across tasks was writable but unreadable.",
       "evidence": [
         "taskfw/accuracy.py:grooming_accuracy",
         "taskfw/accuracy.py:_signals",
@@ -94,14 +116,14 @@
         "tests/test_accuracy.py:TestSkippedIntrospection"
       ],
       "invariants": [
-        "Tallies are DERIVED from per-risk `graded` values and never read from an introspection report's self-reported grooming_accuracy count \u2014 the same reason progress is derived from the checklist",
+        "Tallies are DERIVED from per-risk `graded` values and never read from an introspection report's self-reported grooming_accuracy count — the same reason progress is derived from the checklist",
         "A disagreement between the self-reported tally and the derived one is reported, never silently resolved",
         "risks.total counts every risk seen, independently of the grade buckets, so an unrecognised grade cannot make a risk vanish from the total",
         "An unrecognised grade is bucketed and reported rather than dropped",
         "Only a FINISHED task with ungraded risks is a skipped introspection; an open one is work in progress",
         "predictive_value excludes ungraded risks from its denominator, so skipping the grading never flatters the score",
         "Ratio signals require MIN_SAMPLE graded risks; the skipped-introspection signal requires no sample, because one is already the loop not running",
-        "A risk recurs only across DISTINCT tasks \u2014 a repeat within one task is a duplicate, not a pattern"
+        "A risk recurs only across DISTINCT tasks — a repeat within one task is a duplicate, not a pattern"
       ],
       "last_validated": "2026-08-01T00:00:00+00:00",
       "module": "taskfw/accuracy.py",
@@ -121,7 +143,7 @@
         "tests/test_lifecycle.py"
       ],
       "invariants": [
-        "Rules are pure \u2014 the tests need no fixtures at all, which is the observable signal that portability holds",
+        "Rules are pure — the tests need no fixtures at all, which is the observable signal that portability holds",
         "Same-status is checked BEFORE the terminal rule, so re-saving a done or abandoned task is never an error; this is what makes tasks__finish idempotent",
         "done and abandoned are terminal; any non-terminal state may be abandoned",
         "The entire hierarchy rule is: an epic has no parent, and a task cannot be its own parent",
@@ -142,7 +164,7 @@
         "Exposed as task_memory__record / recall / get / link / supersede / forget"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "Memory scoped to the loop: the lessons introspection produces that nothing else can hold \u2014 a constraint discovered the hard way, a technique worth reusing, a recurring pitfall. Graded risks, decisions, and architectural facts already have homes, so this deliberately covers only what is left over, and must not grow into a general knowledge store.",
+      "description": "Memory scoped to the loop: the lessons introspection produces that nothing else can hold — a constraint discovered the hard way, a technique worth reusing, a recurring pitfall. Graded risks, decisions, and architectural facts already have homes, so this deliberately covers only what is left over, and must not grow into a general knowledge store.",
       "evidence": [
         "taskfw/memory.py:MemoryStore.record",
         "taskfw/memory.py:_standing",
@@ -151,14 +173,14 @@
         "tests/test_memory.py:TestSupersede"
       ],
       "invariants": [
-        "Standing is DERIVED from the confirm/contradict links on every read and is never stored \u2014 a stored confidence would agree with whatever was typed",
+        "Standing is DERIVED from the confirm/contradict links on every read and is never stored — a stored confidence would agree with whatever was typed",
         "A `disputed` memory is reported as disputed rather than resolved: the store cannot know which side is right, and returning it as settled would be an omission indistinguishable from an absence",
-        "Every memory cites the task it was learned from \u2014 an uncited lesson is an opinion and cannot be checked against the work that produced it",
+        "Every memory cites the task it was learned from — an uncited lesson is an opinion and cannot be checked against the work that produced it",
         "Superseding keeps the row and names the replacement; forgetting is reserved for a lesson that was WRONG rather than outdated",
         "Superseded memories leave recall by default, because stale knowledge that keeps surfacing reads as current",
         "Links are idempotent, so re-running introspection cannot inflate a memory's standing",
         "Lives in the task database as one file rather than a second store; the memory-to-task citation is validated at the tool layer, NOT by a foreign key, so the single file is about having one source to check rather than about referential integrity",
-        "Nothing is injected \u2014 a memory reaches an agent only via task_memory__recall"
+        "Nothing is injected — a memory reaches an agent only via task_memory__recall"
       ],
       "last_validated": "2026-08-01T00:00:00+00:00",
       "module": "taskfw/memory.py",
@@ -173,14 +195,14 @@
         "tasks__add_introspection appends where tasks__update(grooming=...) replaces"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process \u2014 they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store.",
+      "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process — they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store.",
       "evidence": [
         "taskfw/mcp_server.py:tasks__create",
         "taskfw/mcp_server.py:tasks__finish",
         "tests/test_mcp_tools.py"
       ],
       "invariants": [
-        "No tool enforces a rule itself \u2014 all validation goes through lifecycle.check_*, so a tool cannot enforce a different set than a hook",
+        "No tool enforces a rule itself — all validation goes through lifecycle.check_*, so a tool cannot enforce a different set than a hook",
         "The store is opened lazily, so importing the module never touches disk",
         "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global"
       ],
@@ -202,7 +224,7 @@
         "Tasks are written only through TaskStore.save(), never by direct INSERT into tasks",
         "Re-running changes nothing: save() upserts by id and side tables use INSERT OR IGNORE against their natural keys",
         "Parents are saved before children; a row whose parent is missing or cyclic is reported as unplaceable, never silently reparented",
-        "Every source row is accounted for in the Report \u2014 migrated, empty, or orphaned \u2014 so a dropped row is never indistinguishable from one that never existed",
+        "Every source row is accounted for in the Report — migrated, empty, or orphaned — so a dropped row is never indistinguishable from one that never existed",
         "No status outside STATUSES is ever written; an unrecognised one becomes open and is tagged with what it was"
       ],
       "last_validated": "2026-08-01T02:51:02.589879+00:00",
@@ -217,14 +239,14 @@
         "verbosity='summary' returns identity, status, progress, and open items only"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "build_context assembles the whole working bundle for a task in one call \u2014 the sole replacement for per-turn prompt injection. Fixed section order, a documented trim order dropping whole sections least-useful-first, and a truncated list so an omitted section is distinguishable from an empty one.",
+      "description": "build_context assembles the whole working bundle for a task in one call — the sole replacement for per-turn prompt injection. Fixed section order, a documented trim order dropping whole sections least-useful-first, and a truncated list so an omitted section is distinguishable from an empty one.",
       "evidence": [
         "taskfw/context.py:build_context",
         "taskfw/context.py:TRIM_ORDER",
         "tests/test_context.py:TestBudget"
       ],
       "invariants": [
-        "The task section is NEVER trimmed \u2014 a bundle without its task is useless rather than merely large",
+        "The task section is NEVER trimmed — a bundle without its task is useless rather than merely large",
         "Trimming drops whole sections, never parts of one: a half-listed set reads as complete and is more misleading than an absent section that says so",
         "Anything dropped is named in `truncated`",
         "related is the only approximate section and is always trimmed first; every other section is an exact lookup"
@@ -249,7 +271,7 @@
       "invariants": [
         "Only CREATE TABLE IF NOT EXISTS and ALTER TABLE ADD COLUMN are ever emitted",
         "A column present in the DB but absent from TABLES is reported as orphaned and never dropped",
-        "There is exactly one DDL definition \u2014 tests read TABLES rather than restating it, so no schema-parity check is needed",
+        "There is exactly one DDL definition — tests read TABLES rather than restating it, so no schema-parity check is needed",
         "ALTER TABLE ADD COLUMN cannot take a non-constant DEFAULT, so _addable_decl strips it; a migrated column is therefore not byte-identical to the same column created fresh"
       ],
       "last_validated": "2026-08-01T00:00:00+00:00",
@@ -263,13 +285,13 @@
         "Level comes from TASKFW_LOG_LEVEL, default INFO"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "All logging goes to stderr, configured once. An MCP server speaks JSON-RPC over stdout, so a stray write corrupts the protocol \u2014 this is a correctness constraint for the whole project rather than a formatting preference.",
+      "description": "All logging goes to stderr, configured once. An MCP server speaks JSON-RPC over stdout, so a stray write corrupts the protocol — this is a correctness constraint for the whole project rather than a formatting preference.",
       "evidence": [
         "taskfw/log.py:get_logger",
         "tests/test_logging.py:TestLogDestination"
       ],
       "invariants": [
-        "No handler under the taskfw logger may write to stdout \u2014 pinned by tests/test_logging.py",
+        "No handler under the taskfw logger may write to stdout — pinned by tests/test_logging.py",
         "The root taskfw logger does not propagate, so host logging config cannot redirect it to stdout",
         "Denials log at INFO and allows at DEBUG, so a full trace is one env var away and costs nothing normally"
       ],
@@ -293,7 +315,7 @@
         "tests/test_store.py"
       ],
       "invariants": [
-        "No store method ever rejects a write for a policy reason \u2014 that is LifecycleRules' job",
+        "No store method ever rejects a write for a policy reason — that is LifecycleRules' job",
         "save() is the only writer of the scalar columns and `data`, which is what prevents projection drift",
         "Edge and commit inserts are idempotent via table constraints, not application checks",
         "The active-task pointer is durable, scoped by workspace, and survives restarts",
@@ -319,7 +341,7 @@
       ],
       "invariants": [
         "from_dict drops unknown keys rather than raising, so a store written by a newer version stays readable by an older one",
-        "progress is never stored \u2014 it cannot drift from the list it counts",
+        "progress is never stored — it cannot drift from the list it counts",
         "notes exists deliberately as the escape hatch for anything the schema did not anticipate, and must survive later tidying",
         "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent"
       ],
@@ -329,9 +351,9 @@
     }
   },
   "meta": {
-    "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse \u2014 code -> concepts -> model, one direction only.",
+    "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-01T06:15:42.003138+00:00"
+    "updated_at": "2026-08-01T10:02:54.174726+00:00"
   }
 }

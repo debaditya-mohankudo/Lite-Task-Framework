@@ -199,6 +199,37 @@ class TestGroomingAccuracy:
         assert m.tasks__grooming_accuracy()["skipped_introspection"] == [tid]
 
 
+class TestIntrospection:
+    """memory_nudge — see taskfw.dispatcher.introspection_nudge for the logic itself."""
+
+    def test_nudges_on_the_canonical_new_knowledge_shape(self):
+        tid = create(title="Had a surprise")["id"]
+        r = m.tasks__add_introspection(
+            tid, {"new_knowledge": ["verify the coupling before designing around it"]})
+        assert "memory_nudge" in r
+
+    def test_nudges_on_the_legacy_surprises_lesson_shape(self):
+        tid = create(title="Had a surprise")["id"]
+        r = m.tasks__add_introspection(tid, {"surprises": [
+            {"surprise": "x", "lesson": "verify the coupling before designing around it"}
+        ]})
+        assert "memory_nudge" in r
+
+    def test_no_nudge_once_the_lesson_is_recorded(self):
+        tid = create(title="Had a surprise")["id"]
+        report = {"new_knowledge": ["verify the coupling first"]}
+        m.task_memory__record(slug="verify-coupling-first", task_id=tid,
+                               text="Verify an assumed coupling is real before designing a fix for it.")
+        r = m.tasks__add_introspection(tid, report)
+        assert "memory_nudge" not in r
+
+    def test_no_nudge_when_there_is_nothing_to_promote(self):
+        tid = create(title="Uneventful")["id"]
+        r = m.tasks__add_introspection(tid, {"surprises": [{"surprise": "x"}],
+                                              "missed_surprises": ["nothing generalized"]})
+        assert "memory_nudge" not in r
+
+
 class TestLoopMemory:
     """Scoped to what introspection produces; everything else has a home."""
 
