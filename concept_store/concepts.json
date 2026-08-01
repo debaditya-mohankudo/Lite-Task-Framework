@@ -208,6 +208,27 @@
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface"
     },
+    "migration-writes-through-the-store": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-01T02:51:02.588824+00:00",
+      "description": "One-time import of claude-hooks' task store (~/.claude/proj_tasks.db) into taskfw. Every task is written through TaskStore.save() rather than by raw INSERT, because tasks.data holds the typed object while the scalar columns are projected from it, and save() is the sole writer of both. A bulk INSERT here would be a second writer whose rows disagree with themselves the moment either side changes. Side tables (events, edges, commits) are inserted directly since they carry no projected duplication. The type collapse is lossy by decision, not by accident: five claude-hooks issue types become taskfw's two, with the original preserved as a tag, because the extra four enforced no rule and were therefore already labels.",
+      "evidence": [
+        "taskfw/migrate_hooks.py",
+        "taskfw/store.py",
+        "taskfw/db/schema.py"
+      ],
+      "invariants": [
+        "Tasks are written only through TaskStore.save(), never by direct INSERT into tasks",
+        "Re-running changes nothing: save() upserts by id and side tables use INSERT OR IGNORE against their natural keys",
+        "Parents are saved before children; a row whose parent is missing or cyclic is reported as unplaceable, never silently reparented",
+        "Every source row is accounted for in the Report \u2014 migrated, empty, or orphaned \u2014 so a dropped row is never indistinguishable from one that never existed",
+        "No status outside STATUSES is ever written; an unrecognised one becomes open and is tagged with what it was"
+      ],
+      "last_validated": "2026-08-01T02:51:02.589879+00:00",
+      "module": "taskfw/migrate_hooks.py",
+      "name": "migration-writes-through-the-store"
+    },
     "pull-context-bundle": {
       "confidence": 0.94,
       "contracts": [
@@ -331,6 +352,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse \u2014 code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-01T01:03:15.786155+00:00"
+    "updated_at": "2026-08-01T02:51:02.590797+00:00"
   }
 }
