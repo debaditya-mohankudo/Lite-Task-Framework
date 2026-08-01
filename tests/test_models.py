@@ -1,0 +1,114 @@
+"""SysML model tests — the single-allocation criterion, enforced mechanically.
+
+The model's whole acceptance criterion is that NO REQUIREMENT MAY BE SATISFIED
+BY MORE THAN ONE PART. A second allocation means a rule and its data have
+drifted apart, which is the defect this project's decomposition exists to
+avoid.
+
+That criterion was stated in the predecessor's model too, and nothing checked
+it — which is how it ended up with two dual allocations. An acceptance
+criterion nobody runs is a comment, so this runs on every commit.
+"""
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+MODELS = Path(__file__).parent.parent / "models"
+EXPECTED = {"foundation.sysml", "requirements.sysml",
+            "task_framework_system.sysml", "task_lifecycle.sysml"}
+
+REQUIREMENT_DEF = re.compile(r"requirement\s+def\s+(\w+)")
+SATISFY = re.compile(r"satisfy\s+requirement\s+(\w+)\s+by\s+([\w.]+)\s*;")
+PART_DEF = re.compile(r"part\s+def\s+(\w+)")
+#: `part <name> : <Type>;` — the composition inside System.
+PART_INSTANCE = re.compile(r"part\s+(\w+)\s*:\s*(\w+)\s*;")
+
+
+@pytest.fixture(scope="module")
+def requirements() -> str:
+    return (MODELS / "requirements.sysml").read_text()
+
+
+@pytest.fixture(scope="module")
+def system() -> str:
+    return (MODELS / "task_framework_system.sysml").read_text()
+
+
+class TestPresence:
+    def test_every_model_file_exists(self):
+        assert {p.name for p in MODELS.glob("*.sysml")} == EXPECTED
+
+
+class TestSingleAllocation:
+    def test_no_requirement_has_more_than_one_satisfy(self, requirements):
+        """THE acceptance criterion. A second allocation is a design defect."""
+        counts: dict[str, list[str]] = {}
+        for name, part in SATISFY.findall(requirements):
+            counts.setdefault(name, []).append(part)
+        duplicates = {n: p for n, p in counts.items() if len(p) > 1}
+        assert not duplicates, (
+            "requirements allocated to more than one part — a rule and its data "
+            f"have drifted apart: {duplicates}"
+        )
+
+    def test_every_requirement_is_allocated(self, requirements):
+        defined = set(REQUIREMENT_DEF.findall(requirements))
+        allocated = {name for name, _ in SATISFY.findall(requirements)}
+        assert defined == allocated, (
+            f"unallocated: {sorted(defined - allocated)}; "
+            f"allocated but undefined: {sorted(allocated - defined)}"
+        )
+
+    def test_allocations_name_real_parts(self, requirements, system):
+        """Every `by system.X` must match a part actually composed into System."""
+        composed = {name for name, _ in PART_INSTANCE.findall(system)}
+        for requirement, target in SATISFY.findall(requirements):
+            assert target.startswith("system."), f"{requirement} allocated to {target}"
+            part = target.split(".", 1)[1]
+            assert part in composed, f"{requirement} allocated to unknown part {part!r}"
+
+
+class TestParts:
+    def test_the_five_parts_are_defined(self, system):
+        assert set(PART_DEF.findall(system)) == {
+            "TaskStore", "LifecycleRules", "TaskMCPTools", "ClaudeCodeHooks", "System"
+        }
+
+    def test_both_interfaces_depend_on_the_rules(self, system):
+        """The structural form of 'rules cannot be bypassed'.
+
+        If either interface stopped composing LifecycleRules it could reach the
+        store directly, and the project's central claim would quietly become
+        false while every test still passed.
+        """
+        for part in ("TaskMCPTools", "ClaudeCodeHooks"):
+            block = system.split(f"part def {part}")[1].split("part def")[0]
+            assert "rules : LifecycleRules" in block, f"{part} does not depend on the rules"
+
+    def test_no_daemon_part_reappeared(self, system):
+        """An earlier revision centred a daemon; it was abandoned deliberately."""
+        assert "RuntimeServer" not in system
+        assert "part def Daemon" not in system
+
+
+class TestLifecycleMatchesCode:
+    def test_modelled_states_match_the_implementation(self):
+        from taskfw.models import STATUSES
+
+        text = (MODELS / "task_lifecycle.sysml").read_text()
+        for status in STATUSES:
+            assert f"state {status}State" in text, f"{status} missing from the state model"
+
+    def test_modelled_transitions_match_the_implementation(self):
+        from taskfw.lifecycle import TERMINAL, TRANSITIONS
+
+        text = (MODELS / "task_lifecycle.sysml").read_text()
+        for current, targets in TRANSITIONS.items():
+            for target in targets:
+                name = f"{current}To{target.capitalize()}"
+                assert name in text, f"transition {current}->{target} missing from the model"
+        for terminal in TERMINAL:
+            assert f"transition {terminal}To" not in text, f"{terminal} must have no transitions"
