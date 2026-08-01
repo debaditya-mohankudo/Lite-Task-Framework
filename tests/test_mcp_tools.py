@@ -112,6 +112,22 @@ class TestFinish:
         m.tasks__update(t["id"], status="abandoned")
         assert m.tasks__finish(t["id"])["rule"] == "transition"
 
+    def test_nudges_toward_introspection_when_none_was_recorded(self):
+        t = create()
+        r = m.tasks__finish(t["id"])
+        assert "introspection_nudge" in r
+
+    def test_no_nudge_once_a_report_exists(self):
+        t = create()
+        m.tasks__add_introspection(t["id"], {"new_knowledge": ["a lesson"]})
+        r = m.tasks__finish(t["id"])
+        assert "introspection_nudge" not in r
+
+    def test_no_nudge_on_a_refused_finish(self):
+        t = create()
+        m.tasks__update(t["id"], status="abandoned")
+        assert "introspection_nudge" not in m.tasks__finish(t["id"])
+
 
 class TestListAndSearch:
     def test_list_defaults_to_open_and_blocked(self):

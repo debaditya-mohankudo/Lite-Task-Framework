@@ -2,13 +2,14 @@
 
 The property worth protecting: introspection_nudge never mistakes an absence
 of lessons for an absence of memory, and never nudges twice about the same
-gap once anything has been promoted.
+gap once anything has been promoted. tool_called's own property: `post` runs
+exactly on a clean, successful exit — never on a refusal, never on a raise.
 """
 from __future__ import annotations
 
 import pytest
 
-from taskfw.dispatcher import introspection_nudge
+from taskfw.dispatcher import finish_nudge, introspection_nudge, tool_called
 from taskfw.memory import MemoryStore
 from taskfw.models import Task
 from taskfw.store import TaskStore
@@ -63,3 +64,62 @@ class TestIntrospectionNudge:
         memories.record("a-slug", "A lesson long enough to pass the minimum length check.", tid)
         nudge = introspection_nudge({"new_knowledge": ["another lesson"]}, tid, tasks.conn)
         assert nudge is None
+
+
+class TestFinishNudge:
+    def test_fires_when_introspection_is_empty(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task")
+        tasks.save(t)
+        nudge = finish_nudge(t)
+        assert nudge is not None and t.id in nudge
+
+    def test_none_once_a_report_exists(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", introspection=[{"date": "2026-08-01"}])
+        tasks.save(t)
+        assert finish_nudge(t) is None
+
+
+class TestToolCalled:
+    def test_post_runs_on_a_successful_result(self):
+        calls = []
+        with tool_called(post=calls.append) as call:
+            call.result = {"ok": True, "id": "x"}
+        assert calls == [{"ok": True, "id": "x"}]
+
+    def test_post_does_not_run_on_a_refusal(self):
+        calls = []
+        with tool_called(post=calls.append) as call:
+            call.result = {"error": "No task 'x'"}
+        assert calls == []
+
+    def test_post_does_not_run_when_the_block_raises(self):
+        calls = []
+        with pytest.raises(ValueError):
+            with tool_called(post=calls.append) as call:
+                call.result = {"ok": True}
+                raise ValueError("boom")
+        assert calls == []
+
+    def test_post_mutation_is_visible_in_the_returned_dict(self):
+        def add_marker(result):
+            result["marker"] = True
+
+        def call_it():
+            with tool_called(post=add_marker) as call:
+                call.result = {"ok": True}
+                return call.result
+
+        assert call_it() == {"ok": True, "marker": True}
+
+    def test_pre_runs_on_entry(self):
+        calls = []
+        with tool_called(pre=lambda: calls.append("pre")):
+            pass
+        assert calls == ["pre"]
+
+    def test_no_hooks_is_a_no_op(self):
+        with tool_called() as call:
+            call.result = {"ok": True}
+        # no exception, nothing to assert beyond "this doesn't blow up"

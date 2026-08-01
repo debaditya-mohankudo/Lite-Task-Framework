@@ -247,6 +247,11 @@ def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
     which follows from the same-status rule and makes retries safe. Finishing
     an abandoned task IS refused — abandoned is terminal and is not the state
     the caller asked for.
+
+    See taskfw.dispatcher: when the task closes with no introspection report
+    yet, the response carries a non-blocking `introspection_nudge` — the
+    host-agnostic equivalent of a hook reminding you to run
+    /task-introspection while the context is fresh.
     """
     task = store().get(task_id)
     if task is None:
@@ -258,7 +263,9 @@ def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
     store().save(task)
     if reason:
         store().add_event(task_id, reason, kind="status")
-    return {"ok": True, "id": task_id, "status": "done"}
+    with dispatcher.tool_called(post=lambda result: dispatcher.apply_finish_nudge(result, task)) as call:
+        call.result = {"ok": True, "id": task_id, "status": "done"}
+        return call.result
 
 
 @mcp.tool()
@@ -280,11 +287,11 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
         return {"error": f"No task {task_id!r}"}
     task.introspection.append(report)
     store().save(task)
-    result: dict[str, Any] = {"ok": True, "id": task_id, "reports": len(task.introspection)}
-    nudge = dispatcher.introspection_nudge(report, task_id, store().conn)
-    if nudge:
-        result["memory_nudge"] = nudge
-    return result
+    with dispatcher.tool_called(
+        post=lambda result: dispatcher.apply_introspection_nudge(result, report, task_id, store().conn)
+    ) as call:
+        call.result = {"ok": True, "id": task_id, "reports": len(task.introspection)}
+        return call.result
 
 
 @mcp.tool()

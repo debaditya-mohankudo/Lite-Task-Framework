@@ -18,10 +18,20 @@ only teach callers to write throwaway records to get past the gate — the
 underlying defect this module exists to fix is that an omission (nothing
 promoted to loop memory) currently looks identical to an absence (nothing to
 promote). A nudge makes that difference visible instead of collapsing it.
+
+`tool_called` is the pre/post-hook shape this module's nudges run through.
+It is the same shape as claude-hooks' own Bash/MCP gates (task:7b25ee0d
+weighed this deliberately before building it) — the difference that made it
+worth building here is scope, not kind: it is self-contained inside taskfw's
+own server, with no dependency on an external hook process, and it only ever
+sees taskfw's own tools, never another server's calls. `post` runs once,
+after the block exits with no exception and a result the caller marked `ok`
+— a tool that returned an `{"error": ...}` refusal is never nudged.
 """
 from __future__ import annotations
 
 import sqlite3
+from typing import Any, Callable
 
 
 def _lesson_texts(report: dict) -> list[str]:
@@ -66,3 +76,68 @@ def introspection_nudge(report: dict, task_id: str, conn: sqlite3.Connection) ->
         f"{len(lessons)} lesson(s) in this report aren't in loop memory yet. "
         "Call task_memory__record for any that generalize beyond this task."
     )
+
+
+def apply_introspection_nudge(
+    result: dict[str, Any], report: dict, task_id: str, conn: sqlite3.Connection
+) -> None:
+    """Mutate `result` with a `memory_nudge` key, or leave it untouched."""
+    nudge = introspection_nudge(report, task_id, conn)
+    if nudge:
+        result["memory_nudge"] = nudge
+
+
+def finish_nudge(task) -> str | None:
+    """Advisory nudge for tasks__finish, or None when there's nothing to say.
+
+    Host-agnostic replacement for the reminder claude-hooks' external
+    PostToolUse hook currently prints after a task closes — this fires from
+    inside taskfw itself, so it holds regardless of host or whether that
+    separate hook process happens to be running.
+    """
+    if task.introspection:
+        return None
+    return f"task:{task.id} closed with no introspection report yet. Consider running /task-introspection."
+
+
+def apply_finish_nudge(result: dict[str, Any], task) -> None:
+    """Mutate `result` with an `introspection_nudge` key, or leave it untouched."""
+    nudge = finish_nudge(task)
+    if nudge:
+        result["introspection_nudge"] = nudge
+
+
+class tool_called:
+    """Pre/post hook around one MCP tool call.
+
+    Usage:
+
+        with dispatcher.tool_called(post=lambda r: ...) as call:
+            call.result = {"ok": True, ...}
+            return call.result
+
+    `pre` runs on entry. `post` runs on exit, but only when the block raised
+    nothing and `call.result` is a dict with a truthy "ok" — a refusal
+    ({"error": ...}) is never nudged. Mutating `call.result` in `post` is
+    visible in what the function actually returns: `return call.result`
+    evaluates the reference before `__exit__` runs as part of unwinding the
+    `with` block, and `post` mutates that same dict in place.
+    """
+
+    def __init__(
+        self,
+        pre: Callable[[], None] | None = None,
+        post: Callable[[dict[str, Any]], None] | None = None,
+    ):
+        self.pre = pre
+        self.post = post
+        self.result: dict[str, Any] = {}
+
+    def __enter__(self) -> "tool_called":
+        if self.pre:
+            self.pre()
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if exc_type is None and self.post and self.result.get("ok"):
+            self.post(self.result)
