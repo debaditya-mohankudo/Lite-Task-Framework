@@ -163,6 +163,24 @@ concept__upsert(repo="<abs repo path>", concept={
 
 Skip where the change was test-only or doc-only with no new behaviour to capture. Skip silently if the repo has no store.
 
+## Step 8b — SysML diagnostics, if a model exists
+
+```bash
+find models -name "*.sysml" 2>/dev/null
+```
+
+Skip silently if nothing matches — most repos have no SysML model, and this is not a gap to note.
+
+If any exist, run diagnostics on each and report what comes back:
+
+```
+getDiagnostics(uri="<path>")
+```
+
+Repo-scoped, not task-scoped: run this whether or not the task's own `Files:` touched a `.sysml` file. A model can drift from a manual edit or a `generate-sysml` rerun that never shows up in any task's file list, so gating this on the task's own diff would miss exactly the drift worth catching.
+
+Report unresolved types, duplicate definitions, and unused definitions as findings — do not fix them unilaterally, same standard as a stale concept or memory. `missing-doc` is the one class worth closing inline if it's a single line, matching `generate-sysml`'s own bar for what's cheap enough to fix on sight.
+
 ## Step 9 — Output
 
 ```text
