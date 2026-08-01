@@ -22,6 +22,33 @@
       "module": "taskfw/backfill.py",
       "name": "commit-backfill-recovery"
     },
+    "concept-store-name-keyed-map": {
+      "confidence": 0.93,
+      "contracts": [
+        "ConceptStore(repo) loads on construction; missing file is empty, not an error",
+        "list(module=\"\") / get(name) / modules() / search(query) / uncovered(modules) are reads",
+        "upsert(concept) MERGES and returns the merged concept; delete(name) -> bool",
+        "concept__* MCP tools take repo explicitly, with no default"
+      ],
+      "created_at": "2026-08-01T01:03:15.785905+00:00",
+      "description": "JSON-backed store of architectural concepts for a repo, plus the concept__* MCP tools over it. Makes the framework self-contained: before this, task-framework had a concept store it could not read without another project running its server. The on-disk format is deliberately identical to the established one so a store stays readable by either implementation and neither project owns the format.",
+      "evidence": [
+        "taskfw/concepts.py:ConceptStore.load",
+        "taskfw/concepts.py:ConceptStore.upsert",
+        "tests/test_concept_tools.py:TestShapeHandling"
+      ],
+      "invariants": [
+        "concepts is a NAME-KEYED MAP on disk, never a list \u2014 a list is rejected at load with a message naming the problem rather than failing later with AttributeError",
+        "Every accessor iterates self._concepts, never the loaded file: calling .values()/.items() on the top level yields \"concepts\" and \"meta\" as if they were concepts",
+        "A store without the {concepts, meta} wrapper is treated as the bare map, detected by absence of the key rather than by inspecting contents",
+        "upsert merges rather than overwrites, so updating one field cannot silently drop invariants the caller did not mention; an explicit empty list still clears",
+        "created_at survives an update; last_validated is restamped on every upsert",
+        "repo is always an explicit argument \u2014 a store is never tied to whichever server is running"
+      ],
+      "last_validated": "2026-08-01T01:03:15.786122+00:00",
+      "module": "taskfw/concepts.py",
+      "name": "concept-store-name-keyed-map"
+    },
     "connection-pragmas-single-point": {
       "confidence": 0.93,
       "contracts": [
@@ -239,6 +266,7 @@
   "meta": {
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse \u2014 code -> concepts -> model, one direction only.",
     "repo": "task-framework",
-    "seeded_at": "2026-08-01"
+    "seeded_at": "2026-08-01",
+    "updated_at": "2026-08-01T01:03:15.786155+00:00"
   }
 }

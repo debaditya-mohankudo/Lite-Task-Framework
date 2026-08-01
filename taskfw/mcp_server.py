@@ -16,6 +16,7 @@ from typing import Any
 from mcp.server import MCPServer
 
 from taskfw import lifecycle
+from taskfw.concepts import ConceptStore
 from taskfw.context import build_context
 from taskfw.log import get_logger
 from taskfw.models import ResolutionItem, Task
@@ -304,6 +305,71 @@ def tasks__clear_active() -> dict[str, Any]:
     """Clear the active task for this workspace."""
     store().clear_active(_scope())
     return {"ok": True, "scope": _scope()}
+
+
+# ---------------------------------------------------------------------------
+# Concepts
+#
+# `repo` is required rather than defaulting to a global, so these work against
+# this repo or any other holding a concept_store/concepts.json. That explicit
+# argument is exactly what made the equivalent tools reusable here, and it is
+# why a store is never tied to whichever server happens to be running.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def concept__list(repo: str, module: str = "") -> dict[str, Any]:
+    """Architectural concepts for a repo, optionally filtered to one module."""
+    return {"concepts": ConceptStore(repo).list(module)}
+
+
+@mcp.tool()
+def concept__get(repo: str, name: str) -> dict[str, Any]:
+    """One concept by slug."""
+    concept = ConceptStore(repo).get(name)
+    return concept or {"found": False, "error": f"No concept {name!r} in {repo}"}
+
+
+@mcp.tool()
+def concept__modules(repo: str) -> dict[str, Any]:
+    """Every module that has at least one concept."""
+    return {"modules": ConceptStore(repo).modules()}
+
+
+@mcp.tool()
+def concept__search(repo: str, query: str) -> dict[str, Any]:
+    """Substring search over name, module, description, contracts, and invariants."""
+    return {"concepts": ConceptStore(repo).search(query)}
+
+
+@mcp.tool()
+def concept__upsert(repo: str, concept: dict) -> dict[str, Any]:
+    """Insert or merge a concept.
+
+    Merges rather than overwrites, so updating one field cannot silently drop
+    invariants the caller did not mention. Requires name, module, description.
+    """
+    try:
+        merged = ConceptStore(repo).upsert(concept)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"ok": True, "name": merged["name"], "module": merged["module"]}
+
+
+@mcp.tool()
+def concept__delete(repo: str, name: str) -> dict[str, Any]:
+    """Remove a concept. Returns deleted=False when it was not there."""
+    return {"ok": True, "deleted": ConceptStore(repo).delete(name)}
+
+
+@mcp.tool()
+def concept__uncovered(repo: str, modules: list[str]) -> dict[str, Any]:
+    """Which of the given modules have no concept — the coverage check.
+
+    Has no counterpart in the original tool surface. Added because coverage is
+    the thing that actually lapses: a store stays accurate about what it
+    describes while silently falling behind what exists.
+    """
+    return {"uncovered": ConceptStore(repo).uncovered(modules)}
 
 
 def main() -> None:
