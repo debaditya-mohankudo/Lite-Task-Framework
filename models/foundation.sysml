@@ -16,5 +16,8 @@ package Foundation {
          *   2. Connection pragmas (WAL, busy_timeout, foreign_keys) are set in
          *      connect() and nowhere else. Several processes write the same
          *      SQLite file concurrently, so this is correctness, not tuning. */
-    part def Foundation;
+    part def Foundation {
+        doc /* One declarative schema, one set of connection pragmas —
+             * see the package doc for why both are load-bearing. */
+    }
 }

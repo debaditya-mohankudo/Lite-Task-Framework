@@ -21,6 +21,8 @@ package TaskLifecycle {
          * That is a cross-task side effect, not a same-task transition. */
 
     state def TaskLifecycle {
+        doc /* Transcribed from taskfw/lifecycle.py — see the package doc
+             * for what is deliberately not modelled here. */
         entry;
 
         state openState;

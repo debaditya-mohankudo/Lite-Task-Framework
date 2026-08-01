@@ -82,6 +82,9 @@ package TaskFrameworkSystem {
     }
 
     part def System {
+        doc /* The whole framework, composed for Requirements.sysml to
+             * satisfy against: every requirement there is allocated to
+             * exactly one of this part's four children. */
         part foundation : Foundation;
         part store : TaskStore;
         part rules : LifecycleRules;
