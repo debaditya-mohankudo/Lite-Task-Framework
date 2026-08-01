@@ -363,9 +363,21 @@ def concept__list(repo: str, module: str = "") -> dict[str, Any]:
 
 @mcp.tool()
 def concept__get(repo: str, name: str) -> dict[str, Any]:
-    """One concept by slug."""
+    """One concept by slug.
+
+    {"found": bool, "concept": {...}} on both branches — not the concept
+    fields flattened onto the response — so "found" is unambiguous rather than
+    a key that happens to collide with a real field name, and so a caller
+    checking result["found"] never has to also know whether this shape or a
+    flat one answered the call. Matches the shape claude-hooks' own
+    concept__get already established and several of its skills depend on by
+    bare name (task:756c14db) — a second implementation with a different shape
+    would have made removing that duplicate unsafe.
+    """
     concept = ConceptStore(repo).get(name)
-    return concept or {"found": False, "error": f"No concept {name!r} in {repo}"}
+    if concept is None:
+        return {"found": False, "error": f"No concept {name!r} in {repo}"}
+    return {"found": True, "concept": concept}
 
 
 @mcp.tool()

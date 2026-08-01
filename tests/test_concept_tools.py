@@ -40,8 +40,9 @@ class TestSelfContained:
 
     def test_the_shipped_store_round_trips_through_the_tools(self):
         got = m.concept__get(str(REAL_REPO), "lifecycle-single-rule-implementation")
-        assert got["module"] == "taskfw/lifecycle.py"
-        assert got["invariants"]
+        assert got["found"] is True
+        assert got["concept"]["module"] == "taskfw/lifecycle.py"
+        assert got["concept"]["invariants"]
 
 
 class TestShapeHandling:
@@ -74,6 +75,20 @@ class TestShapeHandling:
         raw = json.loads((repo / "concept_store" / "concepts.json").read_text())
         assert isinstance(raw["concepts"], dict)
         assert raw["concepts"]["a-concept"]["name"] == "a-concept"
+
+    def test_non_ascii_is_written_literally_not_escaped(self, repo):
+        """Regression: json.dumps defaults to ensure_ascii=True, which
+        re-escapes every em-dash and non-ASCII character in an UNTOUCHED
+        concept to \\uXXXX on any single-entry write — a whole-file diff for a
+        one-entry change. Caught cross-repo (task:756c14db) when this store's
+        own writer mangled claude-hooks' concepts.json. Checking the raw bytes,
+        not the round-tripped value, since json.loads silently accepts either
+        encoding — only the file on disk shows the bug."""
+        store = ConceptStore(repo)
+        store.upsert(concept(description="Uses an em dash — like this."))
+        raw_bytes = (repo / "concept_store" / "concepts.json").read_text()
+        assert "—" in raw_bytes
+        assert "\\u2014" not in raw_bytes
 
 
 class TestUpsert:
@@ -152,6 +167,18 @@ class TestDelete:
 class TestTools:
     def test_get_missing_reports_found_false(self, repo):
         assert m.concept__get(str(repo), "nope")["found"] is False
+
+    def test_get_found_nests_the_concept_rather_than_flattening_it(self, repo):
+        """{"found": bool, "concept": {...}} on both branches — not the fields
+        flattened onto the response. Matches claude-hooks' own concept__get,
+        which several of its skills already depend on by bare name
+        (task:756c14db) — a caller checking result["found"] must get the same
+        answer regardless of which server's tool actually answered the call."""
+        ConceptStore(repo).upsert(concept())
+        got = m.concept__get(str(repo), "a-concept")
+        assert got["found"] is True
+        assert got["concept"]["name"] == "a-concept"
+        assert "name" not in got, "fields must not also be flattened onto the response"
 
     def test_upsert_rejects_incomplete_concepts_without_raising(self, repo):
         assert "error" in m.concept__upsert(str(repo), {"name": "x"})

@@ -82,7 +82,14 @@ class ConceptStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._meta["updated_at"] = _utcnow()
         payload = {"concepts": self._concepts, "meta": self._meta}
-        self.path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        # ensure_ascii=False: without it, every em-dash and non-ASCII character
+        # in an untouched concept gets re-escaped to \uXXXX on any write,
+        # producing a diff across the whole file for a change to one entry.
+        # Matches claude-hooks' own concept_store/store.py convention — writing
+        # this file with either implementation must not visibly disagree.
+        self.path.write_text(
+            json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+        )
         log.info("concept store: wrote %d concepts to %s", len(self._concepts), self.path)
 
     # -- reads --------------------------------------------------------------
