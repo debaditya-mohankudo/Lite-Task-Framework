@@ -5,9 +5,10 @@ BY MORE THAN ONE PART. A second allocation means a rule and its data have
 drifted apart, which is the defect this project's decomposition exists to
 avoid.
 
-That criterion was stated in the predecessor's model too, and nothing checked
-it — which is how it ended up with two dual allocations. An acceptance
-criterion nobody runs is a comment, so this runs on every commit.
+A criterion stated in a model and checked by nothing is a comment: the model
+stays plausible while the code drifts under it, and the drift is found only
+when someone tries to extract a part and discovers it does not come away
+clean. So this runs on every commit.
 """
 from __future__ import annotations
 
@@ -74,8 +75,20 @@ class TestSingleAllocation:
 class TestParts:
     def test_the_five_parts_are_defined(self, system):
         assert set(PART_DEF.findall(system)) == {
-            "TaskStore", "LifecycleRules", "TaskMCPTools", "ClaudeCodeHooks", "System"
+            "TaskStore", "LifecycleRules", "TaskMCPTools", "HostAdapter", "System"
         }
+
+    def test_no_part_is_named_for_a_specific_host(self, system):
+        """Host names belong to instances, not to the structure.
+
+        A part named for one host makes a second host either a new part — a
+        change to the decomposition — or a squatter inside someone else's name.
+        The adapter contract is the same whoever implements it.
+        """
+        for part in PART_DEF.findall(system):
+            assert "ClaudeCode" not in part and "Claude" not in part, (
+                f"part {part!r} names a specific host; use HostAdapter and make it an instance"
+            )
 
     def test_both_interfaces_depend_on_the_rules(self, system):
         """The structural form of 'rules cannot be bypassed'.
@@ -84,7 +97,7 @@ class TestParts:
         store directly, and the project's central claim would quietly become
         false while every test still passed.
         """
-        for part in ("TaskMCPTools", "ClaudeCodeHooks"):
+        for part in ("TaskMCPTools", "HostAdapter"):
             block = system.split(f"part def {part}")[1].split("part def")[0]
             assert "rules : LifecycleRules" in block, f"{part} does not depend on the rules"
 

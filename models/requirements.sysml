@@ -6,17 +6,38 @@ package Requirements {
          *
          * A second `satisfy` statement means a rule and its data have drifted
          * apart — a design defect to fix in code, not a modelling inconvenience
-         * to route around. The predecessor system had exactly two such dual
-         * allocations, and they are why its task framework could not be
-         * extracted. tests/test_models.py enforces this mechanically, because
-         * an acceptance criterion nobody runs is just a comment.
+         * to route around. A requirement split across two parts cannot be
+         * satisfied by taking either one, so neither part is independently
+         * useful and the pair has to move together forever.
+         * tests/test_models.py enforces this mechanically, because an
+         * acceptance criterion nobody runs is just a comment.
          *
          * SOURCING: each requirement cites the code that implements it. None is
          * aspirational — every one below is satisfied by shipped, tested code.
          *
          * DELIBERATELY ABSENT, dropped along with the subsystems that motivated
          * them: checkpoint non-persistence (no runtime state to lose) and
-         * per-domain memory scoring (no memory store). */
+         * per-domain memory scoring (no scoring, no injection).
+         *
+         * NO EXTERNAL DEPENDENCY, decided rather than inherited. The framework
+         * calls no other MCP server — not for memory, code search, or history
+         * search — and must not: a framework that needs a second server to
+         * close its own loop is not portable, which is the whole claim. The
+         * scope test is end-to-end sufficiency — a capability earns a place
+         * here only if create/groom/implement/introspect cannot close without
+         * it. Codebase and history search are the agent's own tools, not the
+         * framework's, and do not meet that test.
+         *
+         * LOOP MEMORY DOES meet it, and the distinction is the point rather
+         * than a softening of the rule. A GENERAL memory store — arbitrary
+         * facts across arbitrary domains, retrieved by score and injected —
+         * remains out of scope and is what the absent note above still
+         * refuses. What is in scope is narrower: the lessons introspection
+         * itself produces and no other part can hold. Graded risks live in a
+         * task's grooming, decisions in its events, architectural facts in the
+         * concept store; a constraint learned the hard way and a technique
+         * worth reusing belong to no single task and no single module, and
+         * before this had nowhere to go. See LoopMemoryEvidenceRequirement. */
 
     private import TaskFrameworkSystem::*;
 
@@ -72,10 +93,12 @@ package Requirements {
         doc /* Source: taskfw/lifecycle.py:check_parent. An epic has no parent;
              * a task cannot be its own parent. That is the entire hierarchy.
              *
-             * This is the descendant of the predecessor's Jira hierarchy
-             * matrix, which needed five issue types and a parent-child table.
-             * With two types it reduces to one sentence — the requirement
-             * survived, most of its complexity did not. */
+             * Recorded as a requirement because of how little it takes to
+             * satisfy. A Jira-style set of five issue types needs a matrix of
+             * which type may parent which, and a table to hold it; two types
+             * reduce the same requirement to one sentence with no matrix at
+             * all. The rule survived the simplification, almost none of its
+             * machinery did. */
     }
     satisfy requirement ParentRuleRequirement by system.rules;
 
@@ -85,9 +108,11 @@ package Requirements {
              * "resolution must be a checklist" is unrepresentable — resolution
              * IS a list.
              *
-             * Recorded as a requirement because it names a rule that no longer
-             * needs a home: the predecessor needed a body-format gate plus a
-             * scaffolding tool to work around it. Neither exists here. */
+             * Recorded as a requirement because it names a rule with no home
+             * and no need for one. Enforcing the same thing over a free-text
+             * body takes a format gate to reject malformed sections, and then
+             * a scaffolding tool to generate bodies that satisfy the gate.
+             * Neither exists here, because neither has anything left to do. */
     }
     satisfy requirement SchemaValidationReplacesBodyGateRequirement by system.store;
 
@@ -100,11 +125,35 @@ package Requirements {
 
     requirement def EdgeLifecycleRequirement {
         doc /* Source: taskfw/store.py:link/unlink. Edges are idempotent to
-             * create AND removable. The predecessor could create and read
-             * edges but never delete them, so stale edges pointing at abandoned
-             * tasks accumulated with no way to clear them. */
+             * create AND removable. An edge that can only be added is
+             * permanent: a relation to an abandoned or superseded task
+             * survives forever, and every later reader has to judge for
+             * themselves whether it still means anything. Creation without
+             * removal is half a lifecycle. */
     }
     satisfy requirement EdgeLifecycleRequirement by system.store;
+
+    requirement def LoopMemoryEvidenceRequirement {
+        doc /* Source: taskfw/memory.py. A loop memory cites the task it was
+             * learned from, and later tasks confirm or contradict it. Its
+             * standing — unverified, confirmed, disputed, contradicted — is
+             * computed from those links on every read and never stored.
+             *
+             * The same construction as DerivedProgressRequirement and
+             * taskfw/accuracy.py: a stored confidence is a self-assessment
+             * that drifts from its own evidence, and a computed one cannot.
+             * A disputed memory is REPORTED as disputed rather than resolved,
+             * because the store cannot know which side is right and returning
+             * it as settled would be an omission indistinguishable from an
+             * absence.
+             *
+             * Obsolete memories are superseded, never removed — the row
+             * survives and names its replacement, matching the methodology's
+             * own rule that stale knowledge is flagged rather than deleted
+             * unilaterally. Nothing is injected; a memory reaches an agent
+             * only because it called task_memory__recall. */
+    }
+    satisfy requirement LoopMemoryEvidenceRequirement by system.store;
 
     requirement def PullContextRequirement {
         doc /* Source: taskfw/context.py. tasks__context returns the whole
@@ -115,6 +164,30 @@ package Requirements {
              * empty one. The task itself is never trimmed. */
     }
     satisfy requirement PullContextRequirement by system.mcpTools;
+
+    requirement def GroomingFeedbackEdgeRequirement {
+        doc /* Source: taskfw/accuracy.py:grooming_accuracy. Risk grades are
+             * aggregated across finished tasks, so a pattern spanning several
+             * executions is readable rather than merely writable.
+             *
+             * Records the requirement the framework's central claim depends on.
+             * Grooming predicts and introspection grades, but the methodology
+             * also says repeated `wrong` grades mean grooming is asking the
+             * wrong questions — a statement about the SERIES. Grades live
+             * inside each task, so nothing could see the series, and the
+             * instruction to change grooming itself was unactionable. Per task
+             * the loop closed; across tasks it did not.
+             *
+             * Tallies are derived from the per-risk grades and never read back
+             * from an introspection report's self-reported count — the same
+             * construction as DerivedProgressRequirement, for the same reason.
+             * A stored count can disagree with what it counts.
+             *
+             * Allocated to mcpTools, not store: this is a derivation over
+             * persisted data, exactly as PullContextRequirement is, and the
+             * store holds no rules and no analysis. */
+    }
+    satisfy requirement GroomingFeedbackEdgeRequirement by system.mcpTools;
 
     requirement def HostPortabilityRequirement {
         doc /* Source: taskfw/mcp_server.py. MCP is the portability layer: any
@@ -128,11 +201,13 @@ package Requirements {
              * A commit referencing task:<id> is linked to that task by
              * observation after the fact.
              *
-             * SINGLE allocation, where the predecessor needed two. There is no
+             * SINGLE allocation, and the reason is worth stating: there is no
              * pre-commit gate, so this is observation rather than enforcement
-             * and is therefore not a rule — which is exactly why it does not
-             * also belong to LifecycleRules. Dropping the gate is what
-             * collapsed the dual allocation. */
+             * and therefore not a rule at all — which is exactly why it does
+             * not also belong to LifecycleRules. Add a gate and it would
+             * become a rule, immediately needing a home in both parts. The
+             * single allocation is a consequence of not enforcing, not
+             * something arranged on top of enforcing. */
     }
     satisfy requirement CommitTaskTraceabilityRequirement by system.hooks;
 

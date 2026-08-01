@@ -164,9 +164,10 @@ class TaskStore:
     def unlink(self, from_id: str, to_id: str, rel: str | None = None) -> int:
         """Remove an edge, or every edge between two tasks when rel is None.
 
-        Exists because its absence is a real gap: claude-hooks can create and
-        read edges but never delete them, so stale edges pointing at abandoned
-        tasks accumulate with no way to clear them. Returns rows removed.
+        Edges must be removable, not merely creatable. An edge that can only be
+        added is permanent, so a relation to an abandoned or superseded task
+        survives forever and every later reader has to judge for themselves
+        whether it still means anything. Returns rows removed.
         """
         sql = "DELETE FROM task_edges WHERE from_id=? AND to_id=?"
         params: list = [from_id, to_id]

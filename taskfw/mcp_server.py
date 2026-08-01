@@ -16,9 +16,11 @@ from typing import Any
 from mcp.server import MCPServer
 
 from taskfw import lifecycle
+from taskfw.accuracy import grooming_accuracy
 from taskfw.concepts import ConceptStore
 from taskfw.context import build_context
 from taskfw.log import get_logger
+from taskfw.memory import MemoryStore, Rejected
 from taskfw.models import ResolutionItem, Task
 from taskfw.store import TaskStore
 
@@ -42,8 +44,29 @@ def store() -> TaskStore:
 
 def set_store(s: TaskStore) -> None:
     """Point the tools at a specific store — used by tests."""
-    global _store
+    global _store, _memory
     _store = s
+    # Memories live in the same database as tasks, so a test store swap must
+    # move both or the two halves point at different files.
+    _memory = MemoryStore(conn=s.conn) if s is not None else None
+
+
+_memory: MemoryStore | None = None
+
+
+def memory() -> MemoryStore:
+    """Lazily open the memory store. Shares the task database by design.
+
+    ONE FILE, because a second one would be a second source to check and keep
+    track of without buying anything. The citation from a memory to its task is
+    validated here at the tool layer, not by a foreign key, so splitting the
+    files would cost nothing — and gain nothing either. A fresh environment
+    starts with an empty database whichever way it is arranged.
+    """
+    global _memory
+    if _memory is None:
+        _memory = MemoryStore(conn=store().conn)
+    return _memory
 
 
 def _scope() -> str:
@@ -71,6 +94,21 @@ def tasks__context(task_id: str = "", verbosity: str = "full") -> dict[str, Any]
     if not task_id:
         return {"error": "No task_id given and no active task set."}
     return build_context(store(), task_id, verbosity)
+
+
+@mcp.tool()
+def tasks__grooming_accuracy(limit: int = 25) -> dict[str, Any]:
+    """How well grooming has been predicting, across recent finished tasks.
+
+    The only tool that reads across tasks rather than into one. Grades live
+    inside each task's grooming, so without this a pattern is writable and
+    unreadable — and "repeated `wrong` means grooming asks the wrong questions"
+    stays advice nobody can act on.
+
+    Tallies are recomputed from the per-risk grades, never read from an
+    introspection report's self-reported count.
+    """
+    return grooming_accuracy(store(), limit=limit)
 
 
 @mcp.tool()
@@ -152,9 +190,10 @@ def tasks__update(
     """Update a task. Only the fields you pass are changed.
 
     Every field is replace-not-append, and that is explicit per field rather
-    than ambiguous across one blob — the system this replaces had a `body`
-    parameter whose replace semantics were easy to misread as appending, which
-    cost real data.
+    than ambiguous across one blob. A single free-text `body` argument makes
+    replace-versus-append something the caller has to infer from prose, and
+    inferring it wrong destroys content silently; naming each field makes the
+    semantics visible at the call site instead.
     """
     current = store().get(task_id)
     if current is None:
@@ -370,6 +409,91 @@ def concept__uncovered(repo: str, modules: list[str]) -> dict[str, Any]:
     describes while silently falling behind what exists.
     """
     return {"uncovered": ConceptStore(repo).uncovered(modules)}
+
+
+# ---------------------------------------------------------------------------
+# Loop memory
+#
+# Scoped to what introspection produces and nothing else can hold: a constraint
+# discovered the hard way, a technique worth reusing, a recurring pitfall.
+# Architectural facts belong in concept__*, task-specific reasoning in
+# tasks__add_decision. This is neither, and must not grow into a general store.
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def task_memory__record(slug: str, text: str, task_id: str, kind: str = "constraint") -> dict[str, Any]:
+    """Record a lesson from a finished task. kind: constraint | technique | pitfall.
+
+    `task_id` is required — a lesson with no evidence is an opinion, and the
+    citation is what lets a later task confirm or contradict it.
+    Re-recording an existing slug updates the text and adds the new source.
+    """
+    if store().get(task_id) is None:
+        return {"error": f"No task {task_id!r} — a memory must cite a real task."}
+    try:
+        return {"ok": True, "memory": memory().record(slug, text, task_id, kind)}
+    except Rejected as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+def task_memory__recall(query: str = "", kind: str = "", limit: int = 20,
+                        include_superseded: bool = False) -> dict[str, Any]:
+    """Search loop memories. Omit query to list the most recent.
+
+    Superseded memories are excluded unless asked for: stale knowledge that
+    keeps surfacing is worse than none, because it reads as current. Every
+    result carries a derived `standing` — unverified, confirmed, disputed, or
+    contradicted — so a disputed lesson is never returned as settled fact.
+    """
+    return {"memories": memory().recall(query, kind, limit, include_superseded)}
+
+
+@mcp.tool()
+def task_memory__get(slug: str) -> dict[str, Any]:
+    """One memory by slug, including its standing and every task linked to it."""
+    found = memory().get(slug)
+    return found or {"error": f"No memory {slug!r}"}
+
+
+@mcp.tool()
+def task_memory__link(slug: str, task_id: str, relation: str = "confirmed_by") -> dict[str, Any]:
+    """Record that a task confirmed or contradicted a memory. Idempotent.
+
+    relation: confirmed_by | contradicted_by | learned_from. This is the same
+    feedback edge grooming has — a memory claims a lesson generalises, and
+    later tasks are what grade that claim.
+    """
+    if store().get(task_id) is None:
+        return {"error": f"No task {task_id!r}"}
+    try:
+        return {"ok": True, "created": memory().link(slug, task_id, relation),
+                "memory": memory().get(slug)}
+    except Rejected as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+def task_memory__supersede(slug: str, by: str) -> dict[str, Any]:
+    """Mark a memory obsolete, naming the memory that replaced it.
+
+    The row survives. Obsolete knowledge is flagged rather than removed, and a
+    lesson that stopped being true is itself evidence about how things changed.
+    """
+    try:
+        return {"ok": True, "memory": memory().supersede(slug, by)}
+    except Rejected as exc:
+        return {"error": str(exc)}
+
+
+@mcp.tool()
+def task_memory__forget(slug: str) -> dict[str, Any]:
+    """Delete a memory outright — for one that was WRONG, not merely outdated.
+
+    Outdated knowledge should be superseded, which keeps the trail. Use this
+    only for a lesson that should never have been recorded.
+    """
+    return {"ok": True, "forgotten": memory().forget(slug)}
 
 
 def main() -> None:

@@ -26,6 +26,31 @@ Repeated `wrong` grades mean grooming is asking the wrong questions. Repeated
 `missed` grades mean it is not asking enough of them. Both are signals to
 change grooming itself, not just to note the miss.
 
+## See the series, not just this task
+
+```python
+tasks__grooming_accuracy(limit=25)
+```
+
+"Repeated" is a claim about several tasks, and one task cannot show it. This is
+the only tool that reads across tasks: it aggregates the grades on recent
+finished work and returns the tallies, the risks that keep recurring, and the
+finished tasks whose risks were never graded at all.
+
+Run it every few tasks rather than every time — a pattern needs a series before
+it is a pattern. Act on what it returns:
+
+- **Low predictive value** — grooming is generating noise. Ask fewer, sharper
+  questions.
+- **A recurring risk** — the same thing keeps threatening work. Fix the cause
+  or add it to the structural checks, rather than predicting it again.
+- **Skipped introspections** — the loop is not running. Nothing else here
+  matters until that is true.
+
+Tallies are recomputed from the individual grades rather than read back from
+the `grooming_accuracy` counts in the reports, so a report that overstates its
+own accuracy is reported as a disagreement instead of being believed.
+
 ## Ask
 
 1. **Where did the uncertainty come from?** Could grooming have removed it?
@@ -52,6 +77,55 @@ tasks__add_introspection(task_id, report={
 Reports **append**, unlike grooming. Each is evidence about a distinct
 execution, and the series is more useful than any one entry — a pattern across
 three reports is worth more than the detail in any of them.
+
+## Record the lessons that belong to no task
+
+Three of the four things a good pass produces already have homes: a graded risk
+goes in the task's grooming, a decision in `tasks__add_decision`, an
+architectural fact in the concept store. The other two — **a constraint
+discovered the hard way** and **a technique worth reaching for again** — belong
+to no single task and no single module.
+
+```python
+task_memory__record(slug="degrade-fts-to-like", task_id="<id>", kind="constraint",
+                    text="FTS5 is a compile-time option, so search must degrade rather than fail.")
+```
+
+`kind` is `constraint`, `technique`, or `pitfall`. The task id is required: a
+lesson with no evidence is an opinion, and the citation is what lets a later
+task check it.
+
+Read them back when grooming, or nothing recorded here was worth writing:
+
+```python
+task_memory__recall(query="<what you are about to do>")
+```
+
+### A memory is a prediction, and later tasks grade it
+
+Recording one claims a lesson generalises. That claim is graded exactly as a
+groomed risk is:
+
+```python
+task_memory__link(slug="...", task_id="<id>", relation="confirmed_by")
+task_memory__link(slug="...", task_id="<id>", relation="contradicted_by")
+```
+
+Standing is computed from those links — `unverified`, `confirmed`, `disputed`,
+`contradicted` — never stored, so it cannot drift from its own evidence. A
+disputed memory comes back marked disputed rather than as settled fact; the
+store cannot know which side is right, and you can.
+
+### Obsolete, not deleted
+
+```python
+task_memory__supersede(slug="<old>", by="<new>")
+```
+
+The row survives and names its replacement, and drops out of recall. That is
+the same standard as flagging stale knowledge rather than removing it
+unilaterally. `task_memory__forget` exists for a lesson that was simply
+**wrong** — a different thing from one that stopped being true.
 
 ## Write decisions down properly
 

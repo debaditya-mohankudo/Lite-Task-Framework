@@ -20,8 +20,10 @@ EXPECTED = {
     "03-grooming.md", "04-implementation.md", "05-introspection.md",
 }
 
-#: Any tasks__* token appearing in prose or code blocks.
-TOOL_REF = re.compile(r"\btasks__[a-z_]+\b")
+#: Any task-side tool token appearing in prose or code blocks. task_memory__
+#: is matched first — otherwise the alternation would never reach it, and a
+#: whole namespace would go unchecked while the test still passed.
+TOOL_REF = re.compile(r"\b(?:task_memory__|tasks__)[a-z_]+\b")
 #: Markdown links to sibling documents.
 DOC_LINK = re.compile(r"\]\((?!https?:)([^)#]+\.md)[^)]*\)")
 
@@ -32,7 +34,7 @@ def docs() -> list[Path]:
 
 def registered_tools() -> set[str]:
     """Tool names taken from the module itself, not restated here."""
-    return {n for n in dir(m) if n.startswith("tasks__")}
+    return {n for n in dir(m) if n.startswith(("tasks__", "task_memory__"))}
 
 
 class TestPresence:
@@ -52,7 +54,11 @@ class TestToolReferences:
         assert not unknown, f"{path.name} references non-existent tools: {sorted(unknown)}"
 
     def test_docs_do_not_use_the_old_host_prefixed_names(self):
-        """mcp__claude-hooks__ prefixes would tie the docs to one host."""
+        """A server-prefixed tool name ties the docs to one host's wiring.
+
+        The methodology is the portable asset; naming the server a tool happens
+        to be registered under makes it unusable anywhere that server is not.
+        """
         for path in docs():
             assert "mcp__claude-hooks__" not in path.read_text(), path.name
 

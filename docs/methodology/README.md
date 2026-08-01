@@ -30,6 +30,11 @@ feedback edge is what stops grooming from being decorative — without it,
 predictions are write-only and nobody ever learns whether the pass was worth
 running.
 
+The edge closes twice. Per task, introspection grades that task's predictions.
+Across tasks, `tasks__grooming_accuracy` aggregates the grades so grooming
+itself can be corrected — "repeated `wrong` grades mean the wrong questions" is
+a claim about a series, and one task cannot show a series.
+
 ## One difference from prompt-injection systems
 
 Context is **pulled, not pushed**. Nothing is injected into the model's context
@@ -49,6 +54,8 @@ anywhere — the framework has no session concept, and active task is scoped to
 the workspace instead.
 
 Reading: `tasks__context` `tasks__get` `tasks__list` `tasks__search` `tasks__edges` `tasks__active`
+Across tasks: `tasks__grooming_accuracy`
+Loop memory: `task_memory__record` `task_memory__recall` `task_memory__get` `task_memory__link` `task_memory__supersede` `task_memory__forget`
 Writing: `tasks__create` `tasks__update` `tasks__check_item` `tasks__finish` `tasks__add_decision` `tasks__add_introspection`
 Graph: `tasks__link` `tasks__unlink` `tasks__add_commit`
 Active: `tasks__set_active` `tasks__clear_active`

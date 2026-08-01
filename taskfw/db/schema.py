@@ -120,13 +120,51 @@ ACTIVE_TASK = Table(
     ),
 )
 
-TABLES: tuple[Table, ...] = (TASKS, TASK_EVENTS, TASK_EDGES, TASK_COMMITS, ACTIVE_TASK)
+MEMORIES = Table(
+    name="memories",
+    columns=(
+        # The slug IS the identity. A memory you cannot name in a sentence is
+        # not yet a lesson, so there is no surrogate id to hide behind.
+        Column("slug", "TEXT PRIMARY KEY"),
+        # 'constraint' | 'technique' | 'pitfall' — see taskfw/memory.py:KINDS.
+        Column("kind", "TEXT NOT NULL DEFAULT 'constraint'"),
+        Column("text", "TEXT NOT NULL DEFAULT ''"),
+        # Slug of the memory that replaced this one. Empty means live.
+        # Superseding rather than deleting is the methodology's own rule:
+        # flag what became obsolete, do not remove it unilaterally.
+        Column("superseded_by", "TEXT NOT NULL DEFAULT ''"),
+        Column("created_at", "TEXT NOT NULL DEFAULT (datetime('now'))"),
+        Column("updated_at", "TEXT NOT NULL DEFAULT (datetime('now'))"),
+    ),
+)
+
+MEMORY_LINKS = Table(
+    name="memory_links",
+    columns=(
+        Column("slug", "TEXT NOT NULL"),
+        Column("task_id", "TEXT NOT NULL"),
+        # 'learned_from' | 'confirmed_by' | 'contradicted_by'.
+        Column("relation", "TEXT NOT NULL DEFAULT 'learned_from'"),
+        Column("created_at", "TEXT NOT NULL DEFAULT (datetime('now'))"),
+    ),
+    # Idempotent: the same task confirming a memory twice is one row, so a
+    # standing cannot be inflated by re-running introspection.
+    constraints=(
+        "PRIMARY KEY (slug, task_id, relation)",
+        "FOREIGN KEY (slug) REFERENCES memories(slug) ON DELETE CASCADE",
+    ),
+)
+
+TABLES: tuple[Table, ...] = (TASKS, TASK_EVENTS, TASK_EDGES, TASK_COMMITS, ACTIVE_TASK,
+                             MEMORIES, MEMORY_LINKS)
 
 INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
     "CREATE INDEX IF NOT EXISTS idx_tasks_parent ON tasks(parent)",
     "CREATE INDEX IF NOT EXISTS idx_events_task ON task_events(task_id)",
     "CREATE INDEX IF NOT EXISTS idx_commits_task ON task_commits(task_id)",
+    "CREATE INDEX IF NOT EXISTS idx_memory_links_slug ON memory_links(slug)",
+    "CREATE INDEX IF NOT EXISTS idx_memory_links_task ON memory_links(task_id)",
 )
 
 

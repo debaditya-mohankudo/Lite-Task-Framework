@@ -176,6 +176,75 @@ class TestDecisions:
         assert "error" in m.tasks__add_decision("nosuch", "x")
 
 
+class TestGroomingAccuracy:
+    """The one tool that reads across tasks rather than into one."""
+
+    def test_reports_zeroes_on_an_empty_store(self):
+        r = m.tasks__grooming_accuracy()
+        assert r["tasks_examined"] == 0 and r["signals"] == []
+
+    def test_aggregates_grades_from_finished_tasks(self, store):
+        tid = create(title="Groomed")["id"]
+        m.tasks__update(tid, grooming={"risks": [
+            {"text": "a", "graded": "materialized"}, {"text": "b", "graded": "wrong"}]})
+        m.tasks__finish(tid)
+        r = m.tasks__grooming_accuracy()
+        assert r["risks"]["materialized"] == 1 and r["risks"]["wrong"] == 1
+        assert r["predictive_value"] == 0.5
+
+    def test_flags_a_finished_task_that_graded_nothing(self, store):
+        tid = create(title="Ungraded")["id"]
+        m.tasks__update(tid, grooming={"risks": [{"text": "a", "graded": None}]})
+        m.tasks__finish(tid)
+        assert m.tasks__grooming_accuracy()["skipped_introspection"] == [tid]
+
+
+class TestLoopMemory:
+    """Scoped to what introspection produces; everything else has a home."""
+
+    def test_records_a_lesson_against_a_real_task(self):
+        tid = create(title="Finished")["id"]
+        r = m.task_memory__record(
+            slug="degrade-fts-to-like", task_id=tid,
+            text="FTS5 is a compile-time option, so search must degrade rather than fail.")
+        assert r["ok"] and r["memory"]["learned_from"] == [tid]
+        assert r["memory"]["standing"] == "unverified"
+
+    def test_refuses_a_memory_citing_no_real_task(self):
+        r = m.task_memory__record(slug="a-slug", task_id="nope",
+                                  text="A lesson long enough to count as one.")
+        assert "error" in r and "nope" in r["error"]
+
+    def test_shape_errors_come_back_as_errors_not_exceptions(self):
+        tid = create(title="Finished")["id"]
+        assert "error" in m.task_memory__record(slug="Not A Slug", task_id=tid,
+                                                text="A lesson long enough to count.")
+        assert "error" in m.task_memory__record(slug="ok-slug", task_id=tid, text="short")
+
+    def test_standing_is_graded_by_later_tasks(self):
+        tid = create(title="Source")["id"]
+        later = create(title="Later")["id"]
+        m.task_memory__record(slug="a-lesson", task_id=tid,
+                              text="A lesson long enough to count as one.")
+        r = m.task_memory__link(slug="a-lesson", task_id=later, relation="contradicted_by")
+        assert r["memory"]["standing"] == "contradicted"
+
+    def test_superseded_memory_leaves_recall(self):
+        tid = create(title="Source")["id"]
+        for slug in ("old-lesson", "new-lesson"):
+            m.task_memory__record(slug=slug, task_id=tid,
+                                  text="A lesson long enough to count as one.")
+        m.task_memory__supersede(slug="old-lesson", by="new-lesson")
+        assert [x["slug"] for x in m.task_memory__recall()["memories"]] == ["new-lesson"]
+
+    def test_forget_removes_it_entirely(self):
+        tid = create(title="Source")["id"]
+        m.task_memory__record(slug="wrong-lesson", task_id=tid,
+                              text="A lesson long enough to count as one.")
+        assert m.task_memory__forget(slug="wrong-lesson")["forgotten"] is True
+        assert "error" in m.task_memory__get(slug="wrong-lesson")
+
+
 class TestRegistration:
     @pytest.mark.anyio
     async def test_every_tool_is_registered_with_the_server(self):
@@ -185,6 +254,9 @@ class TestRegistration:
             "tasks__create", "tasks__update", "tasks__check_item", "tasks__finish",
             "tasks__add_decision", "tasks__link", "tasks__unlink", "tasks__edges",
             "tasks__add_commit", "tasks__set_active", "tasks__active", "tasks__clear_active",
+            "tasks__grooming_accuracy",
+            "task_memory__record", "task_memory__recall", "task_memory__get",
+            "task_memory__link", "task_memory__supersede", "task_memory__forget",
         } <= names
 
     @pytest.mark.anyio

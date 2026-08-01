@@ -70,6 +70,37 @@
       "module": "taskfw/db/connect.py",
       "name": "connection-pragmas-single-point"
     },
+    "grooming-accuracy-aggregate": {
+      "confidence": 0.92,
+      "contracts": [
+        "grooming_accuracy(store, limit) -> tallies, recurring risks, skipped introspections, self-report disagreements, and signals",
+        "Scoped to status='done' only",
+        "Everything except `signals` is a raw count or a list of task ids",
+        "Exposed as tasks__grooming_accuracy"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "Aggregates grooming risk grades across recent finished tasks \u2014 the only read that spans tasks rather than descending into one. Closes the feedback edge at the level of the loop itself: without it, 'repeated wrong grades mean grooming asks the wrong questions' is advice nothing can act on, because grades live inside each task and a pattern across tasks was writable but unreadable.",
+      "evidence": [
+        "taskfw/accuracy.py:grooming_accuracy",
+        "taskfw/accuracy.py:_signals",
+        "taskfw/mcp_server.py:tasks__grooming_accuracy",
+        "tests/test_accuracy.py:TestDerivedNotReported",
+        "tests/test_accuracy.py:TestSkippedIntrospection"
+      ],
+      "invariants": [
+        "Tallies are DERIVED from per-risk `graded` values and never read from an introspection report's self-reported grooming_accuracy count \u2014 the same reason progress is derived from the checklist",
+        "A disagreement between the self-reported tally and the derived one is reported, never silently resolved",
+        "risks.total counts every risk seen, independently of the grade buckets, so an unrecognised grade cannot make a risk vanish from the total",
+        "An unrecognised grade is bucketed and reported rather than dropped",
+        "Only a FINISHED task with ungraded risks is a skipped introspection; an open one is work in progress",
+        "predictive_value excludes ungraded risks from its denominator, so skipping the grading never flatters the score",
+        "Ratio signals require MIN_SAMPLE graded risks; the skipped-introspection signal requires no sample, because one is already the loop not running",
+        "A risk recurs only across DISTINCT tasks \u2014 a repeat within one task is a duplicate, not a pattern"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/accuracy.py",
+      "name": "grooming-accuracy-aggregate"
+    },
     "hooks-observational-fail-open": {
       "confidence": 0.94,
       "contracts": [
@@ -119,6 +150,39 @@
       "last_validated": "2026-08-01T00:00:00+00:00",
       "module": "taskfw/lifecycle.py",
       "name": "lifecycle-single-rule-implementation"
+    },
+    "loop-memory-derived-standing": {
+      "confidence": 0.9,
+      "contracts": [
+        "record(slug, text, task_id, kind) requires a real task; re-recording a slug updates the text and adds the new source",
+        "recall(query, kind, limit, include_superseded) excludes superseded memories by default",
+        "link(slug, task_id, relation) records confirmed_by / contradicted_by / learned_from",
+        "supersede(slug, by) keeps the row; forget(slug) deletes it",
+        "Rejected is raised for shape errors only; the store enforces no policy",
+        "Exposed as task_memory__record / recall / get / link / supersede / forget"
+      ],
+      "created_at": "2026-08-01T00:00:00+00:00",
+      "description": "Memory scoped to the loop: the lessons introspection produces that nothing else can hold \u2014 a constraint discovered the hard way, a technique worth reusing, a recurring pitfall. Graded risks, decisions, and architectural facts already have homes, so this deliberately covers only what is left over, and must not grow into a general knowledge store.",
+      "evidence": [
+        "taskfw/memory.py:MemoryStore.record",
+        "taskfw/memory.py:_standing",
+        "taskfw/db/schema.py:MEMORIES",
+        "tests/test_memory.py:TestStanding",
+        "tests/test_memory.py:TestSupersede"
+      ],
+      "invariants": [
+        "Standing is DERIVED from the confirm/contradict links on every read and is never stored \u2014 a stored confidence would agree with whatever was typed",
+        "A `disputed` memory is reported as disputed rather than resolved: the store cannot know which side is right, and returning it as settled would be an omission indistinguishable from an absence",
+        "Every memory cites the task it was learned from \u2014 an uncited lesson is an opinion and cannot be checked against the work that produced it",
+        "Superseding keeps the row and names the replacement; forgetting is reserved for a lesson that was WRONG rather than outdated",
+        "Superseded memories leave recall by default, because stale knowledge that keeps surfacing reads as current",
+        "Links are idempotent, so re-running introspection cannot inflate a memory's standing",
+        "Lives in the task database as one file rather than a second store; the memory-to-task citation is validated at the tool layer, NOT by a foreign key, so the single file is about having one source to check rather than about referential integrity",
+        "Nothing is injected \u2014 a memory reaches an agent only via task_memory__recall"
+      ],
+      "last_validated": "2026-08-01T00:00:00+00:00",
+      "module": "taskfw/memory.py",
+      "name": "loop-memory-derived-standing"
     },
     "mcp-portable-interface": {
       "confidence": 0.93,

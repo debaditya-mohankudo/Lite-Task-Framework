@@ -7,6 +7,12 @@ dependencies = [
     "mcp>=1.2.0",
 ]
 
+[project.scripts]
+# The MCP server, and the backfill CLI its own docstring already advertised as
+# `taskfw-backfill` before any entry point existed to provide it.
+taskfw-mcp = "taskfw.mcp_server:main"
+taskfw-backfill = "taskfw.backfill:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
