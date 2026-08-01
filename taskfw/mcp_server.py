@@ -19,6 +19,7 @@ from taskfw import dispatcher, lifecycle
 from taskfw.accuracy import grooming_accuracy
 from taskfw.concepts import ConceptStore
 from taskfw.context import build_context
+from taskfw.db.connect import connect
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
 from taskfw.models import ResolutionItem, Task
@@ -69,6 +70,24 @@ def memory() -> MemoryStore:
     return _memory
 
 
+_log_conn = None
+
+
+def log_conn():
+    """Always config.db_path() — deliberately not store().conn.
+
+    Mirrors taskfw.log.SQLiteHandler's own choice, for the same reason: the
+    handler that writes the `logs` table is a process-wide singleton with no
+    store to draw a path from, so the tool that reads it back stays on the
+    same fixed target rather than following whatever set_store() swapped in.
+    The one tool in this module that doesn't honor a test's store swap.
+    """
+    global _log_conn
+    if _log_conn is None:
+        _log_conn = connect()
+    return _log_conn
+
+
 def _scope() -> str:
     """Active-task scope. Per-workspace when there is one, else global."""
     return os.environ.get("TASKFW_SCOPE") or os.getcwd()
@@ -109,6 +128,34 @@ def tasks__grooming_accuracy(limit: int = 25) -> dict[str, Any]:
     introspection report's self-reported count.
     """
     return grooming_accuracy(store(), limit=limit)
+
+
+@mcp.tool()
+def tasks__logs(logger: str = "", level: str = "", limit: int = 50) -> dict[str, Any]:
+    """Operational log lines from the `logs` table, most recent first.
+
+    The second observability dimension alongside task_events: this is what
+    the code was doing internally (every save, DENY, nudge), not what was
+    decided or shipped. Reads config.db_path() directly rather than the
+    active store — see log_conn()'s own docstring for why.
+
+    logger/level filter by exact match when given; both empty returns
+    everything, most recent limit rows.
+    """
+    sql = "SELECT logger, level, message, ts FROM logs"
+    where, params = [], []
+    if logger:
+        where.append("logger=?")
+        params.append(logger)
+    if level:
+        where.append("level=?")
+        params.append(level)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+    rows = log_conn().execute(sql, params).fetchall()
+    return {"logs": [dict(r) for r in rows]}
 
 
 @mcp.tool()

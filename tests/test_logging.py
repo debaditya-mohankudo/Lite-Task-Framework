@@ -6,6 +6,7 @@ quietly rots, and it rots invisibly because nothing fails.
 """
 from __future__ import annotations
 
+import json
 import logging
 
 import pytest
@@ -124,3 +125,80 @@ class TestLogDestination:
         for handler in logging.getLogger("taskfw").handlers:
             stream = getattr(handler, "stream", None)
             assert stream is not sys.stdout
+
+
+class TestSQLiteSink:
+    """Exercised directly, bypassing the global logger — a test run's global
+    logger uses JsonlHandler (see TestJsonlSink), never SQLiteHandler, so
+    round-tripping through get_logger() itself would test nothing here.
+    """
+
+    def test_emit_never_raises_on_a_broken_connection(self):
+        """A broken log write must not break the call that triggered it."""
+        from taskfw.log import SQLiteHandler
+
+        handler = SQLiteHandler()
+        handler._conn = object()  # anything with no .execute() fails predictably
+        record = logging.LogRecord("taskfw.probe", logging.INFO, __file__, 1, "boom", None, None)
+        handler.emit(record)  # must not raise
+
+    def test_a_log_call_round_trips_through_tasks__logs(self):
+        """SQLiteHandler() and tasks__logs both default to config.db_path() —
+        the isolated test-session path tests/conftest.py points TASKFW_DB at.
+        """
+        import uuid
+
+        from taskfw import mcp_server as m
+        from taskfw.log import SQLiteHandler
+
+        marker = f"probe-{uuid.uuid4().hex}"
+        record = logging.LogRecord("taskfw.roundtrip_probe", logging.INFO, __file__, 1, marker, None, None)
+        SQLiteHandler().emit(record)
+
+        result = m.tasks__logs(limit=500)
+        assert any(marker in row["message"] for row in result["logs"])
+
+
+class TestJsonlSink:
+    def test_emit_writes_one_json_line_per_record(self, tmp_path):
+        from taskfw.log import JsonlHandler
+
+        path = tmp_path / "log.jsonl"
+        handler = JsonlHandler(str(path))
+        record = logging.LogRecord("taskfw.probe", logging.INFO, __file__, 1, "hello", None, None)
+        handler.emit(record)
+
+        lines = path.read_text().splitlines()
+        assert len(lines) == 1
+        row = json.loads(lines[0])
+        assert row["message"] == "hello" and row["logger"] == "taskfw.probe"
+
+    def test_construction_truncates_the_file(self, tmp_path):
+        from taskfw.log import JsonlHandler
+
+        path = tmp_path / "log.jsonl"
+        path.write_text("stale content from a previous run\n")
+        JsonlHandler(str(path))
+        assert path.read_text() == ""
+
+    def test_emit_never_raises_if_the_path_becomes_unwritable(self, tmp_path):
+        from taskfw.log import JsonlHandler
+
+        handler = JsonlHandler(str(tmp_path / "log.jsonl"))
+        handler._path = "/nonexistent-dir/x/log.jsonl"  # simulate failure after construction
+        record = logging.LogRecord("taskfw.probe", logging.INFO, __file__, 1, "x", None, None)
+        handler.emit(record)  # must not raise
+
+    def test_a_real_log_call_lands_in_the_test_session_jsonl_file(self):
+        """The global logger, unmodified — this IS what test runs actually use."""
+        import os
+        import uuid
+
+        from taskfw.log import get_logger
+
+        marker = f"probe-{uuid.uuid4().hex}"
+        get_logger("jsonl_probe").info(marker)
+
+        path = os.environ["TASKFW_LOG_JSONL"]
+        with open(path) as f:
+            assert any(marker in line for line in f)

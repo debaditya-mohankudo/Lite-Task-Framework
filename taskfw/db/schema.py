@@ -155,8 +155,19 @@ MEMORY_LINKS = Table(
     ),
 )
 
+LOGS = Table(
+    name="logs",
+    columns=(
+        Column("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
+        Column("logger", "TEXT NOT NULL"),
+        Column("level", "TEXT NOT NULL"),
+        Column("message", "TEXT NOT NULL"),
+        Column("ts", "TEXT NOT NULL DEFAULT (datetime('now'))"),
+    ),
+)
+
 TABLES: tuple[Table, ...] = (TASKS, TASK_EVENTS, TASK_EDGES, TASK_COMMITS, ACTIVE_TASK,
-                             MEMORIES, MEMORY_LINKS)
+                             MEMORIES, MEMORY_LINKS, LOGS)
 
 INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
@@ -165,6 +176,7 @@ INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_commits_task ON task_commits(task_id)",
     "CREATE INDEX IF NOT EXISTS idx_memory_links_slug ON memory_links(slug)",
     "CREATE INDEX IF NOT EXISTS idx_memory_links_task ON memory_links(task_id)",
+    "CREATE INDEX IF NOT EXISTS idx_logs_logger ON logs(logger)",
 )
 
 
