@@ -55,6 +55,16 @@ Log one when you chose between real alternatives, rejected the obvious approach,
 
 Stop and write it down before continuing. A surprise mid-task is the cheapest knowledge you will get all day, and it evaporates within the hour. It belongs in a decision, in `notes`, or in the introspection report.
 
+## Check off deliverables as they land
+
+```python
+tasks__check_item(task_id, index=..., done=True)
+```
+
+The moment an item is actually done — not batched right before `tasks__finish`. A task whose real work landed but whose checklist still reads all-unchecked is indistinguishable from the outside from a task with no progress: "done" and "empty" look the same until someone actually reads it.
+
+If an item can't be checked off — a decision is still open, or what it asked for changed mid-task — say so. Leave it unchecked and log why with `tasks__add_decision` or in `notes`. An unresolved item with no explanation reads as forgotten; one with a stated reason reads as a deliberate open question.
+
 ## The loop
 
 1. **Understand** — objective, subsystem, existing patterns, constraints. If uncertainty is high, search; if low, implement. Stop searching once you know enough.
@@ -78,9 +88,10 @@ Sometimes the test encodes an assumption the design deliberately contradicts. Do
 ## Finish
 
 ```python
-tasks__check_item(task_id, index=..., done=True)   # as items complete
 tasks__finish(task_id, reason="what actually shipped")
 ```
+
+The checklist should already be checked off by now (see above) — this call closes the task, it does not reconcile it.
 
 Commit with `task:<id>` in the message so the link is captured. Where the hook is not installed, `python -m taskfw.backfill` recovers it from git history.
 
