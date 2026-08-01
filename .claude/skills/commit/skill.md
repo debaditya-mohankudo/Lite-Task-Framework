@@ -41,20 +41,37 @@ visible as missing.
 
 ## Message shape
 
+Build it with `tasks__format_commit_message`, not by hand:
+
+```python
+tasks__format_commit_message(
+    task_id="<id>",
+    subject="Subject — the claim, in one line",
+    body=(
+        "Why this exists. What was true before that made it necessary, and what is true "
+        "now. State failures directly rather than by reference to whatever they replaced; "
+        "prose that explains a rule by naming what it replaced stops being legible to a "
+        "reader who never saw the thing replaced.\n\n"
+        "Design points that are load-bearing, especially anything that would look "
+        "arbitrary to someone changing it later."
+    ),
+)
+```
+
+This returns the exact shape below — subject, blank, `task:<id>`, blank, body —
+so the shape is produced once, correctly, instead of re-assembled from this
+prose by hand every time. The tool only formats: it validates the task exists,
+rejects an empty or multi-line subject, and strips a trailing period. It does
+not touch the filesystem or git.
+
 ```
 Subject — the claim, in one line
 
 task:<id>
 
-Why this exists. What was true before that made it necessary, and what is true
-now. State failures directly rather than by reference to whatever they replaced;
-prose that explains a rule by naming what it replaced stops being legible to a
-reader who never saw the thing replaced.
+Why this exists. ...
 
-Design points that are load-bearing, especially anything that would look
-arbitrary to someone changing it later.
-
-Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Design points that are load-bearing...
 ```
 
 Subject uses an em-dash, present tense, no trailing period. It states what
@@ -65,13 +82,21 @@ prose produces a message that goes stale the moment the code moves.
 
 ## Write the message to a file
 
+Append the co-author trailer to the tool's returned `message`, then write the
+result to a file in the scratchpad:
+
+```
+<tool's returned message>
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+```
+
 ```bash
 git commit -F <path>
 ```
 
 Heredocs and `-m` chains mangle multi-paragraph bodies, and a pasted block of
-shell can end up as the message itself. Write the message to a file in the
-scratchpad, then pass it with `-F`.
+shell can end up as the message itself — that is what the file and `-F` avoid.
 
 ## Link the commit to its task
 

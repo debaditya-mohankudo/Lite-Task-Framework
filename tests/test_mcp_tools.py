@@ -144,6 +144,34 @@ class TestGraph:
         assert m.tasks__add_commit(t["id"], "abc")["recorded"] is False
 
 
+class TestFormatCommitMessage:
+    def test_unknown_task_is_an_error(self):
+        assert "error" in m.tasks__format_commit_message("nosuch", "A subject")
+
+    def test_empty_subject_is_an_error(self):
+        t = create()
+        assert "error" in m.tasks__format_commit_message(t["id"], "   ")
+
+    def test_multiline_subject_is_an_error(self):
+        t = create()
+        assert "error" in m.tasks__format_commit_message(t["id"], "line one\nline two")
+
+    def test_trailing_period_is_stripped(self):
+        t = create()
+        r = m.tasks__format_commit_message(t["id"], "A subject.")
+        assert r["message"].startswith("A subject\n\n")
+
+    def test_shape_without_body(self):
+        t = create()
+        r = m.tasks__format_commit_message(t["id"], "A subject")
+        assert r["message"] == f"A subject\n\ntask:{t['id']}"
+
+    def test_shape_with_body(self):
+        t = create()
+        r = m.tasks__format_commit_message(t["id"], "A subject", body="Why this exists.")
+        assert r["message"] == f"A subject\n\ntask:{t['id']}\n\nWhy this exists."
+
+
 class TestActiveTask:
     def test_set_get_clear(self):
         t = create()

@@ -322,6 +322,31 @@ def tasks__edges(task_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def tasks__format_commit_message(task_id: str, subject: str, body: str = "") -> dict[str, Any]:
+    """Format a commit message in the canonical shape: subject, blank, task:<id>, blank, body.
+
+    Formatting only — no filesystem or git side effects. The caller still
+    writes the returned message to a file and runs `git commit -F <path>`
+    themselves; this exists so that shape is produced once, correctly,
+    instead of re-assembled by hand from the /commit skill's prose every time.
+    """
+    if store().get(task_id) is None:
+        return {"error": f"No task {task_id!r}"}
+    subject = subject.strip()
+    if not subject:
+        return {"error": "subject must not be empty"}
+    if "\n" in subject:
+        return {"error": "subject must be a single line"}
+    if subject.endswith("."):
+        subject = subject[:-1]
+    message = f"{subject}\n\ntask:{task_id}"
+    body = body.strip()
+    if body:
+        message += f"\n\n{body}"
+    return {"ok": True, "message": message}
+
+
+@mcp.tool()
 def tasks__add_commit(task_id: str, sha: str, repo: str = "") -> dict[str, Any]:
     """Record that a commit implemented a task. Idempotent."""
     if store().get(task_id) is None:
