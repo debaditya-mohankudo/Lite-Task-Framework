@@ -40,6 +40,26 @@ package Requirements {
          * before this had nowhere to go. See LoopMemoryEvidenceRequirement. */
 
     private import TaskFrameworkSystem::*;
+    private import Foundation::ModelProvenance;
+
+    @ModelProvenance {
+        derivedFromCommit = "776d29331a876e2b212b71ff4539bc2fbc1bd8c0";
+        derivedAt = "2026-08-02";
+        modelledPaths = (
+            "taskfw/db/schema.py",
+            "taskfw/db/connect.py",
+            "taskfw/log.py",
+            "taskfw/lifecycle.py",
+            "taskfw/models.py",
+            "taskfw/store.py",
+            "taskfw/memory.py",
+            "taskfw/context.py",
+            "taskfw/accuracy.py",
+            "taskfw/mcp_server.py",
+            "taskfw/backfill.py",
+            ".claude/skills/commit/skill.md"
+        );
+    }
 
     part system : System;
 

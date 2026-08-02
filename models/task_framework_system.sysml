@@ -41,6 +41,20 @@ package TaskFrameworkSystem {
          * is the argument it has to answer. */
 
     private import Foundation::Foundation;
+    private import Foundation::ModelProvenance;
+
+    @ModelProvenance {
+        derivedFromCommit = "776d29331a876e2b212b71ff4539bc2fbc1bd8c0";
+        derivedAt = "2026-08-02";
+        modelledPaths = (
+            "taskfw/store.py",
+            "taskfw/models.py",
+            "taskfw/lifecycle.py",
+            "taskfw/mcp_server.py",
+            "taskfw/context.py",
+            "taskfw/backfill.py"
+        );
+    }
 
     part def TaskStore {
         doc /* taskfw/store.py, taskfw/models.py. A task is ONE typed object

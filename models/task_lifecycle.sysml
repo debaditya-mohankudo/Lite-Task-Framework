@@ -20,6 +20,16 @@ package TaskLifecycle {
          * ALSO NOT MODELLED: closing a parent when all its children finish.
          * That is a cross-task side effect, not a same-task transition. */
 
+    private import Foundation::ModelProvenance;
+
+    @ModelProvenance {
+        derivedFromCommit = "9cf7eee2dce4fe33b93fd2b2b9c882a0308aae28";
+        derivedAt = "2026-08-02";
+        modelledPaths = (
+            "taskfw/lifecycle.py"
+        );
+    }
+
     state def TaskLifecycle {
         doc /* Transcribed from taskfw/lifecycle.py — see the package doc
              * for what is deliberately not modelled here. */
