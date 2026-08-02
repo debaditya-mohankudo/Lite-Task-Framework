@@ -4,6 +4,8 @@ description: Post-task retrospective that improves the engineering system. Grade
 user-invocable: true
 updated: 2026-08-01
 doc: docs/methodology/05-introspection.md
+repo: ~/workspace/task-framework/.claude/skills/task-introspection/skill.md
+deployed: ~/.claude/skills/task-introspection/skill.md
 ---
 
 The purpose is not to remember the past. It is to make the **next** execution better.

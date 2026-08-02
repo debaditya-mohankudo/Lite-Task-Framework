@@ -4,6 +4,8 @@ description: Start or resume a task using taskfw. Creates a task, activates it f
 user-invocable: true
 updated: 2026-08-01
 doc: docs/methodology/01-framework.md
+repo: ~/workspace/task-framework/.claude/skills/task-framework/skill.md
+deployed: ~/.claude/skills/task-framework/skill.md
 ---
 
 The entry point for work that will take more than one step.

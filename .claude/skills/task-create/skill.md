@@ -4,6 +4,8 @@ description: Reference for creating tasks and epics in taskfw — the two types,
 user-invocable: true
 updated: 2026-08-01
 doc: docs/methodology/02-create.md
+repo: ~/workspace/task-framework/.claude/skills/task-create/skill.md
+deployed: ~/.claude/skills/task-create/skill.md
 ---
 
 Reference for `tasks__create`. The reasoning lives in [02-create.md](../../../docs/methodology/02-create.md).

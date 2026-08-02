@@ -4,6 +4,8 @@ description: Engineering execution philosophy for active tasks. Stay in scope, l
 user-invocable: true
 updated: 2026-08-01
 doc: docs/methodology/04-implementation.md
+repo: ~/workspace/task-framework/.claude/skills/task-implementation/skill.md
+deployed: ~/.claude/skills/task-implementation/skill.md
 ---
 
 Grooming removed the uncertainty. This is about not reintroducing it.

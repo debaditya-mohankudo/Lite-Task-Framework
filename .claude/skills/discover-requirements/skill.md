@@ -4,6 +4,8 @@ description: Check whether an existing requirement in this repo's models/require
 user-invocable: true
 updated: 2026-08-01
 doc: docs/methodology/03-grooming.md
+repo: ~/workspace/task-framework/.claude/skills/discover-requirements/skill.md
+deployed: ~/.claude/skills/discover-requirements/skill.md
 ---
 
 Manual and callable, not wired into any other skill's automatic flow. That is
