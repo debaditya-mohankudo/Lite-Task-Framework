@@ -97,6 +97,44 @@ def _denied(d: lifecycle.Decision) -> dict:
     return {"error": d.reason, "rule": d.rule}
 
 
+def _drift_reflection_call(result_builder):
+    """Wrap a mutating tool call with the periodic active-task nudge.
+
+    result_builder is called with no args and must return the dict this tool
+    call returns; the nudge (if any) is attached to it in place before return.
+    Goes through tool_called, whose post only fires on a truthy "ok" — the
+    shape every mutating tool in this module already returns on success.
+    """
+    scope = _scope()
+    active_task_id = store().get_active(scope) or ""
+    active_task = store().get(active_task_id) if active_task_id else None
+    active_task_title = active_task.title if active_task else ""
+    with dispatcher.tool_called(
+        post=lambda result: dispatcher.apply_drift_reflection_nudge(
+            result, scope, active_task_id, active_task_title
+        )
+    ) as call:
+        call.result = result_builder()
+        return call.result
+
+
+def _drift_reflection_read(result: dict) -> dict:
+    """Attach the periodic active-task nudge to a read tool's result, in place.
+
+    Read tools (tasks__get, tasks__context) return the task/bundle directly on
+    success — no "ok" key to gate on, unlike the mutating tools tool_called
+    was built for — so this checks for the absence of "error" instead and
+    calls the nudge directly rather than going through tool_called.
+    """
+    if "error" not in result:
+        scope = _scope()
+        active_task_id = store().get_active(scope) or ""
+        active_task = store().get(active_task_id) if active_task_id else None
+        active_task_title = active_task.title if active_task else ""
+        dispatcher.apply_drift_reflection_nudge(result, scope, active_task_id, active_task_title)
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Read
 # ---------------------------------------------------------------------------
@@ -112,7 +150,7 @@ def tasks__context(task_id: str = "", verbosity: str = "full") -> dict[str, Any]
     task_id = task_id or store().get_active(_scope()) or ""
     if not task_id:
         return {"error": "No task_id given and no active task set."}
-    return build_context(store(), task_id, verbosity)
+    return _drift_reflection_read(build_context(store(), task_id, verbosity))
 
 
 @mcp.tool()
@@ -180,7 +218,7 @@ def tasks__log_skill_invocation(skill: str, task_id: str = "") -> dict[str, Any]
 def tasks__get(task_id: str) -> dict[str, Any]:
     """Return one task object."""
     task = store().get(task_id)
-    return task.to_dict() if task else {"error": f"No task {task_id!r}"}
+    return _drift_reflection_read(task.to_dict() if task else {"error": f"No task {task_id!r}"})
 
 
 @mcp.tool()
@@ -287,7 +325,7 @@ def tasks__update(
     if not decision:
         return _denied(decision)
     store().save(updated)
-    return {"ok": True, "id": updated.id, "status": updated.status}
+    return _drift_reflection_call(lambda: {"ok": True, "id": updated.id, "status": updated.status})
 
 
 @mcp.tool()
@@ -301,7 +339,7 @@ def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, 
     task.resolution[index].done = done
     store().save(task)
     d, total = task.progress
-    return {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
+    return _drift_reflection_call(lambda: {"ok": True, "id": task_id, "progress": {"done": d, "total": total}})
 
 
 @mcp.tool()
@@ -365,7 +403,7 @@ def tasks__add_decision(task_id: str, decision: str) -> dict[str, Any]:
     if store().get(task_id) is None:
         return {"error": f"No task {task_id!r}"}
     store().add_event(task_id, decision, kind="decision")
-    return {"ok": True, "id": task_id}
+    return _drift_reflection_call(lambda: {"ok": True, "id": task_id})
 
 
 # ---------------------------------------------------------------------------
@@ -423,7 +461,8 @@ def tasks__add_commit(task_id: str, sha: str, repo: str = "") -> dict[str, Any]:
     """Record that a commit implemented a task. Idempotent."""
     if store().get(task_id) is None:
         return {"error": f"No task {task_id!r}"}
-    return {"ok": True, "recorded": store().add_commit(task_id, sha, repo)}
+    recorded = store().add_commit(task_id, sha, repo)
+    return _drift_reflection_call(lambda: {"ok": True, "recorded": recorded})
 
 
 # ---------------------------------------------------------------------------

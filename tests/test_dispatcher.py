@@ -9,7 +9,14 @@ from __future__ import annotations
 
 import pytest
 
-from taskfw.dispatcher import finish_nudge, introspection_nudge, tool_called
+from taskfw.dispatcher import (
+    _DRIFT_REFLECTION_INTERVAL,
+    _drift_reflection_call_counts,
+    drift_reflection_nudge,
+    finish_nudge,
+    introspection_nudge,
+    tool_called,
+)
 from taskfw.memory import MemoryStore
 from taskfw.models import Task
 from taskfw.store import TaskStore
@@ -79,6 +86,51 @@ class TestFinishNudge:
         t = Task(title="A task", introspection=[{"date": "2026-08-01"}])
         tasks.save(t)
         assert finish_nudge(t) is None
+
+
+class TestDriftReflectionNudge:
+    def test_none_without_an_active_task(self):
+        assert drift_reflection_nudge("scope1", "", "") is None
+
+    def test_none_before_interval_reached(self):
+        _drift_reflection_call_counts.clear()
+        result = None
+        for _ in range(_DRIFT_REFLECTION_INTERVAL - 1):
+            result = drift_reflection_nudge("scope1", "t1", "Some task")
+        assert result is None
+
+    def test_fires_once_interval_reached(self):
+        _drift_reflection_call_counts.clear()
+        result = None
+        for _ in range(_DRIFT_REFLECTION_INTERVAL):
+            result = drift_reflection_nudge("scope1", "t1", "Some task")
+        assert result is not None
+        assert "task:t1" in result
+
+    def test_recurs_every_interval(self):
+        _drift_reflection_call_counts.clear()
+        results = [
+            drift_reflection_nudge("scope1", "t1", "Some task")
+            for _ in range(_DRIFT_REFLECTION_INTERVAL * 2)
+        ]
+        fired = [i for i, r in enumerate(results, start=1) if r is not None]
+        assert fired == [_DRIFT_REFLECTION_INTERVAL, _DRIFT_REFLECTION_INTERVAL * 2]
+
+    def test_counts_are_scoped_per_scope_and_task(self):
+        _drift_reflection_call_counts.clear()
+        for _ in range(_DRIFT_REFLECTION_INTERVAL - 1):
+            drift_reflection_nudge("scope1", "t1", "Some task")
+        # a different task should not inherit scope1/t1's near-complete count
+        result = drift_reflection_nudge("scope1", "t2", "Other task")
+        assert result is None
+
+    def test_title_is_optional(self):
+        _drift_reflection_call_counts.clear()
+        result = None
+        for _ in range(_DRIFT_REFLECTION_INTERVAL):
+            result = drift_reflection_nudge("scope1", "t1", "")
+        assert result is not None
+        assert "task:t1" in result
 
 
 class TestToolCalled:

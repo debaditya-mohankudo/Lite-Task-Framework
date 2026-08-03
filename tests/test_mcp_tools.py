@@ -209,6 +209,57 @@ class TestActiveTask:
         assert "error" in m.tasks__context()
 
 
+class TestDriftReflectionWiring:
+    """The nudge (taskfw.dispatcher.drift_reflection_nudge) is unit-tested on its
+    own in test_dispatcher.py; this only checks it's actually reachable from
+    the tool surface it's wired into.
+    """
+
+    def setup_method(self):
+        from taskfw.dispatcher import _drift_reflection_call_counts
+        _drift_reflection_call_counts.clear()
+
+    def test_no_nudge_without_an_active_task(self):
+        t = create()
+        r = m.tasks__add_decision(t["id"], "a decision")
+        assert "drift_reflection_nudge" not in r
+
+    def test_get_fires_once_interval_reached(self):
+        from taskfw.dispatcher import _DRIFT_REFLECTION_INTERVAL
+        t = create()
+        m.tasks__set_active(t["id"])
+        result = None
+        for _ in range(_DRIFT_REFLECTION_INTERVAL):
+            result = m.tasks__get(t["id"])
+        assert "drift_reflection_nudge" in result
+        assert t["id"] in result["drift_reflection_nudge"]
+
+    def test_context_fires_once_interval_reached(self):
+        from taskfw.dispatcher import _DRIFT_REFLECTION_INTERVAL
+        t = create()
+        m.tasks__set_active(t["id"])
+        result = None
+        for _ in range(_DRIFT_REFLECTION_INTERVAL):
+            result = m.tasks__context(t["id"])
+        assert "drift_reflection_nudge" in result
+
+    def test_add_decision_fires_once_interval_reached(self):
+        from taskfw.dispatcher import _DRIFT_REFLECTION_INTERVAL
+        t = create()
+        m.tasks__set_active(t["id"])
+        result = None
+        for _ in range(_DRIFT_REFLECTION_INTERVAL):
+            result = m.tasks__add_decision(t["id"], "a decision")
+        assert "drift_reflection_nudge" in result
+
+    def test_get_on_error_result_is_not_nudged(self):
+        t = create()
+        m.tasks__set_active(t["id"])
+        result = m.tasks__get("nosuch")
+        assert "drift_reflection_nudge" not in result
+        assert "error" in result
+
+
 class TestDecisions:
     def test_decision_surfaces_in_context(self):
         t = create()

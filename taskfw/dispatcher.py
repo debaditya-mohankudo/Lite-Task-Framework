@@ -87,6 +87,50 @@ def apply_introspection_nudge(
         result["memory_nudge"] = nudge
 
 
+_DRIFT_REFLECTION_INTERVAL = 8  # calls between nudges, per (scope, task) — matches claude-hooks' own interval
+_drift_reflection_call_counts: dict[tuple[str, str], int] = {}  # (scope, active_task_id) -> count
+
+
+def drift_reflection_nudge(scope: str, active_task_id: str, active_task_title: str = "") -> str | None:
+    """Port of claude-hooks' _maybe_drift_reflection_nudge (hooks/dispatcher.py), moved
+    into task-framework itself.
+
+    That version read active_task_id/title from a claude-hooks session
+    checkpoint and fired on Write/Edit/MultiEdit; this one reads the active
+    task from taskfw's own store (store().get_active(scope)) and fires on
+    taskfw's own mutating tool calls instead — task-framework owns the active
+    task now (commit 6633bf1 deleted claude-hooks' langchain_learning task
+    nodes on that basis), so this holds regardless of host, and regardless of
+    whether claude-hooks' external hook process is even running. A long
+    stretch of tool calls can drift from what's active without the caller
+    noticing, since the active task is otherwise only ever announced once, at
+    activation. No active task means nothing to remind about.
+    """
+    if not active_task_id:
+        return None
+    key = (scope, active_task_id)
+    count = _drift_reflection_call_counts.get(key, 0) + 1
+    _drift_reflection_call_counts[key] = count
+    if count % _DRIFT_REFLECTION_INTERVAL != 0:
+        return None
+    label = f"task:{active_task_id}" + (f" ({active_task_title})" if active_task_title else "")
+    return (
+        f"Quiet check-in: {count} calls made so far under {label}. Take a moment — "
+        "does this stretch of work still match the task's stated intent, or has it "
+        "drifted into something adjacent? No need to answer out loud or stop; just "
+        "worth noticing before continuing."
+    )
+
+
+def apply_drift_reflection_nudge(
+    result: dict[str, Any], scope: str, active_task_id: str, active_task_title: str = ""
+) -> None:
+    """Mutate `result` with a `drift_reflection_nudge` key, or leave it untouched."""
+    nudge = drift_reflection_nudge(scope, active_task_id, active_task_title)
+    if nudge:
+        result["drift_reflection_nudge"] = nudge
+
+
 def finish_nudge(task) -> str | None:
     """Advisory nudge for tasks__finish, or None when there's nothing to say.
 
