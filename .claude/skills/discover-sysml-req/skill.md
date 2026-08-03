@@ -1,11 +1,11 @@
 ---
-name: discover-requirements
-description: Check whether an existing requirement in this repo's models/requirements.sysml already bears on a task or a piece of text under consideration. Content matching, not file matching — approximate by design. Use before creating a task that might duplicate or conflict with an existing guarantee, or while grooming a task whose motivation sounds like it touches a core invariant. Use when the user says /discover-requirements or asks "does a requirement already cover this?"
+name: discover-sysml-req
+description: Check whether an existing requirement in this repo's SysML requirements model (models/requirements.sysml or model/requirements.sysml) already bears on a task or a piece of text under consideration. Content matching, not file matching — approximate by design. Use before creating a task that might duplicate or conflict with an existing guarantee, or while grooming a task whose motivation sounds like it touches a core invariant. Use when the user says /discover-sysml-req or asks "does a requirement already cover this?"
 user-invocable: true
-updated: 2026-08-01
+updated: 2026-08-03
 doc: docs/methodology/03-grooming.md
-repo: ~/workspace/task-framework/.claude/skills/discover-requirements/skill.md
-deployed: ~/.claude/skills/discover-requirements/skill.md
+repo: ~/workspace/task-framework/.claude/skills/discover-sysml-req/skill.md
+deployed: ~/.claude/skills/discover-sysml-req/skill.md, ~/workspace/SeniorDevAgent/.claude/skills/discover-sysml-req/skill.md
 ---
 
 Manual and callable, not wired into any other skill's automatic flow. That is
@@ -46,11 +46,13 @@ Title and motivation are enough — this does not need the full bundle.
 ## Step 2 — Read the model
 
 ```bash
-test -f models/requirements.sysml && echo exists
+test -f models/requirements.sysml && echo models/requirements.sysml
+test -f model/requirements.sysml && echo model/requirements.sysml
 ```
 
-If it does not exist, say so in one line and stop. Most repos have no SysML
-model; that is not a gap to flag.
+Repos disagree on whether the directory is singular or plural — check both and
+use whichever resolves. If neither exists, say so in one line and stop. Most
+repos have no SysML model; that is not a gap to flag.
 
 Read the file directly. There is no query tool for `requirement def` content
 — for 15 or so requirements in one file, reading is cheaper than building one,
@@ -72,7 +74,7 @@ anywhere else in this framework.
 ## Step 4 — Output
 
 ```text
-## Discovery: <task_id or a short label for the text> vs models/requirements.sysml
+## Discovery: <task_id or a short label for the text> vs <models|model>/requirements.sysml
 
 - <RequirementName> — <one line: why it looks related>
 - <RequirementName> — <one line: why it looks related>
@@ -81,7 +83,7 @@ anywhere else in this framework.
 Or, if nothing surfaced:
 
 ```text
-## Discovery: <label> vs models/requirements.sysml
+## Discovery: <label> vs <models|model>/requirements.sysml
 
 Nothing in the existing model looks related.
 ```
