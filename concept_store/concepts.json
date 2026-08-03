@@ -252,22 +252,28 @@
       "contracts": [
         "build_context(store, task_id, verbosity) -> bundle, or {'error': ...} for an unknown task",
         "Sections in fixed order: task, decisions, grooming, graph, commits, related",
-        "verbosity='summary' returns identity, status, progress, and open items only"
+        "verbosity='summary' returns identity, status, progress, and open items only",
+        "graph.edges is capped at MAX_EDGES (5) per direction (outgoing/incoming independently), sliced in _graph(); when either direction is capped, the drop counts are reported in a bundle-level `edges_truncated` dict, e.g. {'outgoing': 3, 'incoming': 2}"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "build_context assembles the whole working bundle for a task in one call — the sole replacement for per-turn prompt injection. Fixed section order, a documented trim order dropping whole sections least-useful-first, and a truncated list so an omitted section is distinguishable from an empty one.",
+      "description": "build_context assembles the whole working bundle for a task in one call — the sole replacement for per-turn prompt injection. Fixed section order, a documented trim order dropping whole sections least-useful-first, and a truncated list so an omitted section is distinguishable from an empty one. Independently, several sections also carry a fixed per-section cap (MAX_DECISIONS, MAX_COMMITS, MAX_RELATED, MAX_EDGES) applied by slicing before CHAR_BUDGET enforcement ever runs — a separate, silent mechanism from the whole-section drop that TRIM_ORDER implements, except for edges: edges' cap is the one case that IS surfaced, via `edges_truncated`.",
       "evidence": [
         "taskfw/context.py:build_context",
+        "taskfw/context.py:_graph",
         "taskfw/context.py:TRIM_ORDER",
-        "tests/test_context.py:TestBudget"
+        "taskfw/context.py:MAX_EDGES",
+        "tests/test_context.py:TestBudget",
+        "tests/test_context.py:TestEdgesCap"
       ],
       "invariants": [
         "The task section is NEVER trimmed — a bundle without its task is useless rather than merely large",
-        "Trimming drops whole sections, never parts of one: a half-listed set reads as complete and is more misleading than an absent section that says so",
-        "Anything dropped is named in `truncated`",
+        "CHAR_BUDGET-driven trimming (_enforce_budget) drops whole sections, never parts of one: a half-listed set reads as complete and is more misleading than an absent section that says so. Anything it drops is named in `truncated`.",
+        "Separately, MAX_DECISIONS/MAX_COMMITS/MAX_RELATED apply a fixed pre-slice cap regardless of CHAR_BUDGET, and do so SILENTLY — none of them appear in `truncated` when the fixed cap (not the budget) is what cut the list. This is a known asymmetry, not yet resolved for the other three.",
+        "MAX_EDGES is the one fixed cap that reports its own truncation, via `edges_truncated` — a field distinct from `truncated` on purpose: `truncated` means CHAR_BUDGET dropped a whole section, `edges_truncated` means the section is present but its edges list was capped",
+        "If CHAR_BUDGET forces `graph` to drop entirely, `edges_truncated` is cleared too, so a truncation count can never outlive the section it describes",
         "related is the only approximate section and is always trimmed first; every other section is an exact lookup"
       ],
-      "last_validated": "2026-08-01T00:00:00+00:00",
+      "last_validated": "2026-08-03T18:17:04.470128+00:00",
       "module": "taskfw/context.py",
       "name": "pull-context-bundle"
     },
@@ -376,6 +382,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-03T17:59:56.697506+00:00"
+    "updated_at": "2026-08-03T18:17:04.470223+00:00"
   }
 }

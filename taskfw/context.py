@@ -22,6 +22,13 @@ trimmed; a bundle without its task is useless rather than merely large.
 Anything dropped is reported in `truncated`, so a caller can tell the
 difference between "no commits" and "commits omitted for space".
 
+Edges within `graph` are additionally capped at MAX_EDGES per direction,
+independent of CHAR_BUDGET — a task can accumulate far more edges than are
+useful to read at once. When that cap drops edges, the counts are reported in
+`edges_truncated` ({"outgoing": N, "incoming": N}), a field distinct from
+`truncated`: `truncated` means CHAR_BUDGET dropped a whole section, while
+`edges_truncated` means the section is present but its edges list was capped.
+
 VERBOSITY. `summary` is what a one-line pointer leads an agent to call first —
 identity, status, progress, and the open checklist. `full` is for starting real
 work.
@@ -42,6 +49,7 @@ CHAR_BUDGET = 12000
 MAX_DECISIONS = 15
 MAX_COMMITS = 20
 MAX_RELATED = 5
+MAX_EDGES = 5  # per direction
 
 #: Least useful first. Reversing this is how you decide what survives.
 TRIM_ORDER = ("related", "commits", "graph", "grooming", "decisions")
@@ -71,6 +79,7 @@ def build_context(store: TaskStore, task_id: str, verbosity: str = "full") -> di
         log.debug("context task=%s verbosity=summary", task_id)
         return {"task": _task_summary(task), "verbosity": "summary"}
 
+    graph, edges_dropped = _graph(store, task)
     bundle: dict = {
         "verbosity": "full",
         "task": {
@@ -89,10 +98,12 @@ def build_context(store: TaskStore, task_id: str, verbosity: str = "full") -> di
             if e["kind"] == "decision"
         ][:MAX_DECISIONS],
         "grooming": task.grooming or {},
-        "graph": _graph(store, task),
+        "graph": graph,
         "commits": store.commits(task_id)[:MAX_COMMITS],
         "related": _related(store, task),
     }
+    if edges_dropped:
+        bundle["edges_truncated"] = edges_dropped
 
     truncated = _enforce_budget(bundle)
     if truncated:
@@ -104,11 +115,19 @@ def build_context(store: TaskStore, task_id: str, verbosity: str = "full") -> di
 
 def _graph(store: TaskStore, task: Task) -> dict:
     parent = store.get(task.parent) if task.parent else None
-    return {
+    edges = store.edges(task.id)
+    out, inc = edges["outgoing"], edges["incoming"]
+    graph = {
         "parent": _task_summary(parent) if parent else None,
         "children": [_task_summary(c) for c in store.children(task.id)],
-        "edges": store.edges(task.id),
+        "edges": {"outgoing": out[:MAX_EDGES], "incoming": inc[:MAX_EDGES]},
     }
+    dropped = {
+        k: v
+        for k, v in {"outgoing": len(out) - MAX_EDGES, "incoming": len(inc) - MAX_EDGES}.items()
+        if v > 0
+    }
+    return graph, dropped
 
 
 def _related(store: TaskStore, task: Task) -> list[dict]:
@@ -144,4 +163,6 @@ def _enforce_budget(bundle: dict) -> list[str]:
         if bundle.get(section):
             bundle[section] = [] if isinstance(bundle[section], list) else {}
             dropped.append(section)
+            if section == "graph":
+                bundle.pop("edges_truncated", None)
     return dropped

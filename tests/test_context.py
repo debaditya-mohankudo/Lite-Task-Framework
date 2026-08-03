@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from taskfw.context import CHAR_BUDGET, TRIM_ORDER, build_context
+from taskfw.context import CHAR_BUDGET, MAX_EDGES, TRIM_ORDER, build_context
 from taskfw.models import ResolutionItem, Task
 from taskfw.store import TaskStore
 
@@ -127,3 +127,34 @@ class TestBudget:
         c = build_context(populated["store"], populated["task"].id)
         assert c["commits"], "fixture has a commit"
         assert "truncated" not in c
+
+
+class TestEdgesCap:
+    def test_edges_capped_per_direction(self, store):
+        task = store.save(Task(title="hub"))
+        for i in range(MAX_EDGES + 3):
+            other = store.save(Task(title=f"dep {i}"))
+            store.link(task.id, other.id, "depends_on")
+        for i in range(MAX_EDGES + 2):
+            other = store.save(Task(title=f"blocker {i}"))
+            store.link(other.id, task.id, "blocks")
+        c = build_context(store, task.id)
+        assert len(c["graph"]["edges"]["outgoing"]) == MAX_EDGES
+        assert len(c["graph"]["edges"]["incoming"]) == MAX_EDGES
+        assert c["edges_truncated"] == {"outgoing": 3, "incoming": 2}
+
+    def test_no_edges_truncated_field_when_under_cap(self, populated):
+        c = build_context(populated["store"], populated["task"].id)
+        assert "edges_truncated" not in c
+
+    def test_edges_truncated_cleared_if_graph_dropped_for_budget(self, store):
+        epic = store.save(Task(title="epic", type="epic"))
+        big = store.save(Task(title="huge", parent=epic.id, motivation="x" * (CHAR_BUDGET // 2)))
+        for i in range(40):
+            store.add_event(big.id, f"decision {i} " + "y" * 400, kind="decision")
+        for i in range(MAX_EDGES + 3):
+            other = store.save(Task(title=f"dep {i}"))
+            store.link(big.id, other.id, "depends_on")
+        c = build_context(store, big.id)
+        if "graph" in c.get("truncated", []):
+            assert "edges_truncated" not in c
