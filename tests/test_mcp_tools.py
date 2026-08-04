@@ -200,6 +200,18 @@ class TestActiveTask:
     def test_set_active_rejects_unknown_task(self):
         assert "error" in m.tasks__set_active("nosuch")
 
+    def test_set_active_nudges_on_a_genuine_switch(self):
+        a, b = create(title="a"), create(title="b")
+        m.tasks__set_active(a["id"])
+        result = m.tasks__set_active(b["id"])
+        assert "active_switch_nudge" in result
+        assert a["id"] in result["active_switch_nudge"]
+
+    def test_set_active_does_not_nudge_on_first_activation_or_reset(self):
+        t = create()
+        assert "active_switch_nudge" not in m.tasks__set_active(t["id"])
+        assert "active_switch_nudge" not in m.tasks__set_active(t["id"])
+
     def test_context_falls_back_to_the_active_task(self):
         t = create(title="the active one")
         m.tasks__set_active(t["id"])

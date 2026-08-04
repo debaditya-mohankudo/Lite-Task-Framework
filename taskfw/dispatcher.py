@@ -151,6 +151,30 @@ def apply_finish_nudge(result: dict[str, Any], task) -> None:
         result["introspection_nudge"] = nudge
 
 
+def switched_active_nudge(previous_task_id: str | None, task_id: str) -> str | None:
+    """Advisory nudge for tasks__set_active, or None when there's nothing to say.
+
+    Fires only when a different task was active a moment ago — re-setting the
+    same active task is a no-op and stays silent, the same way
+    drift_reflection_nudge does not fire on an idle stretch with no active
+    task. The upsert in store.set_active has no memory of what it replaced,
+    so this is the one place that difference becomes visible instead of being
+    silently clobbered.
+    """
+    if not previous_task_id or previous_task_id == task_id:
+        return None
+    return f"Active task switched from task:{previous_task_id} to task:{task_id}."
+
+
+def apply_switched_active_nudge(
+    result: dict[str, Any], previous_task_id: str | None, task_id: str
+) -> None:
+    """Mutate `result` with an `active_switch_nudge` key, or leave it untouched."""
+    nudge = switched_active_nudge(previous_task_id, task_id)
+    if nudge:
+        result["active_switch_nudge"] = nudge
+
+
 class tool_called:
     """Pre/post hook around one MCP tool call.
 

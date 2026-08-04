@@ -15,6 +15,7 @@ from taskfw.dispatcher import (
     drift_reflection_nudge,
     finish_nudge,
     introspection_nudge,
+    switched_active_nudge,
     tool_called,
 )
 from taskfw.memory import MemoryStore
@@ -175,3 +176,16 @@ class TestToolCalled:
         with tool_called() as call:
             call.result = {"ok": True}
         # no exception, nothing to assert beyond "this doesn't blow up"
+
+
+class TestSwitchedActiveNudge:
+    def test_none_when_there_was_no_previous_active_task(self):
+        assert switched_active_nudge(None, "abc123") is None
+
+    def test_none_when_re_setting_the_same_active_task(self):
+        assert switched_active_nudge("abc123", "abc123") is None
+
+    def test_fires_on_a_genuine_switch(self):
+        nudge = switched_active_nudge("aaa111", "bbb222")
+        assert nudge is not None
+        assert "aaa111" in nudge and "bbb222" in nudge

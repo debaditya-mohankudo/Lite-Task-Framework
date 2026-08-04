@@ -474,8 +474,14 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
     """Set the active task for this workspace. Persisted, so it survives a restart."""
     if store().get(task_id) is None:
         return {"error": f"No task {task_id!r}"}
-    store().set_active(task_id, _scope())
-    return {"ok": True, "active": task_id, "scope": _scope()}
+    scope = _scope()
+    previous = store().get_active(scope)
+    with dispatcher.tool_called(
+        post=lambda result: dispatcher.apply_switched_active_nudge(result, previous, task_id)
+    ) as call:
+        store().set_active(task_id, scope)
+        call.result = {"ok": True, "active": task_id, "scope": scope}
+        return call.result
 
 
 @mcp.tool()
