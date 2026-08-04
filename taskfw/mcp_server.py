@@ -236,6 +236,21 @@ def tasks__get(task_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def tasks__phase(task_id: str) -> dict[str, Any]:
+    """Where a task stands in the grooming -> implementation -> introspection loop.
+
+    Fully derived from the task's existing grooming/resolution/introspection
+    fields (see dispatcher.task_phase) — never a stored status, so this can
+    never disagree with the fields it reads. Saves eyeballing three fields on
+    tasks__get's payload by hand.
+    """
+    task = store().get(task_id)
+    if not task:
+        return {"error": f"No task {task_id!r}"}
+    return _drift_reflection_read({"id": task.id, **dispatcher.task_phase(task)})
+
+
+@mcp.tool()
 def tasks__list(status: str = "open,blocked", type: str = "", parent: str = "", limit: int = 50) -> list[dict]:
     """List tasks. status is comma-separated; empty means every status."""
     statuses = tuple(s.strip() for s in status.split(",") if s.strip()) or None

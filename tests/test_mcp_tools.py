@@ -58,6 +58,35 @@ class TestCreate:
         ]
 
 
+class TestPhase:
+    def test_all_false_on_a_fresh_task(self):
+        r = create(resolution=["one"])
+        phase = m.tasks__phase(r["id"])
+        assert phase["id"] == r["id"]
+        assert phase["groomed"] is False and phase["implemented"] is False and phase["introspected"] is False
+
+    def test_implemented_true_once_checklist_is_complete(self):
+        r = create(resolution=["one"])
+        m.tasks__check_item(r["id"], index=0, done=True)
+        assert m.tasks__phase(r["id"])["implemented"] is True
+
+    def test_introspected_true_once_a_report_exists(self):
+        r = create()
+        m.tasks__add_introspection(r["id"], report={"date": "2026-08-04"})
+        assert m.tasks__phase(r["id"])["introspected"] is True
+
+    def test_unknown_task_is_an_error(self):
+        assert "error" in m.tasks__phase("nosuch")
+
+    def test_never_persists_anything_new(self):
+        """Phase is computed on every call, never cached or stored — two calls
+        against an unchanged task must agree without any write in between."""
+        r = create(resolution=["one"])
+        first = m.tasks__phase(r["id"])
+        second = m.tasks__phase(r["id"])
+        assert first == second
+
+
 class TestUpdate:
     def test_only_given_fields_change(self):
         t = create(title="original", motivation="keep me")

@@ -8,7 +8,9 @@
         "Reads report['new_knowledge'] (canonical, per task-introspection skill.md Step 6 and the only shape taskfw.accuracy also reads) and report['surprises'][].lesson (legacy shape already present in historical reports) as equally valid lesson sources",
         "finish_nudge(task) returns None or a string; fires only when task.introspection is empty — the host-agnostic equivalent of claude-hooks' external PostToolUse reminder to run /task-introspection",
         "drift_reflection_nudge(scope, active_task_id, active_task_title) returns None or a string; fires every _DRIFT_REFLECTION_INTERVAL (4, tightened from claude-hooks' original 8 — task:a6fb9f45) calls under the same (scope, active_task_id) pair, using a module-level call counter keyed on that pair — no active task means no nudge, and the counter never resets except by process restart",
-        "finish_reminder_nudge(task) returns None or a string; fires when task.progress is 100% done (total > 0, done == total) AND task.status == 'open' — stateless, re-evaluated fresh on every call rather than tracking a fired-once flag (task:f3a10710)",
+        "is_implemented(task) -> bool is the pure predicate (task.progress total>0 and done==total), status-independent — extracted from finish_reminder_nudge's inline check (task:bf95ced8) so finish_reminder_nudge and task_phase share one place computing '100% done'",
+        "finish_reminder_nudge(task) returns None or a string; fires when is_implemented(task) is True AND task.status == 'open' — stateless, re-evaluated fresh on every call rather than tracking a fired-once flag (task:f3a10710). Its status=='open' gate is its own, NOT part of is_implemented — a done task is still is_implemented==True, just not nudged, since nudging to call tasks__finish is pointless once already done.",
+        "task_phase(task) -> {groomed, implemented, introspected} (all bool) is the loop-phase readout: groomed = bool(task.grooming), implemented = is_implemented(task), introspected = bool(task.introspection). Fully derived every call, never stored — exposed via mcp_server.tasks__phase (task:bf95ced8)",
         "tool_called(pre, post): post runs exactly once, only on a clean exit (no exception) with call.result.get('ok') truthy — never on an {'error': ...} refusal, never when the block raises",
         "apply_nudge(result, key, nudge) is the one shared result-mutation helper for every nudge function — call the nudge function yourself, then apply_nudge(result, key, nudge) sets result[key] only if nudge is truthy. Replaced the four near-identical apply_introspection_nudge/apply_finish_nudge/apply_drift_reflection_nudge/apply_finish_reminder_nudge wrappers (task:f3a10710) — the nudge functions themselves keep their distinct signatures (conn vs scope/task_id/title vs task), only the 'if truthy, set the key' step was shared.",
         "_drift_reflection_call(result_builder, extra=None) in mcp_server.py takes an optional (key, nudge_thunk) pair applied in the same tool_called post as drift_reflection_nudge — added so tasks__check_item/tasks__update didn't need their own local closure just to attach finish_reminder_nudge's result (task:f3a10710, post-collapse /simplify fix commit 7d3ca8c); without this, the apply_nudge collapse's duplication removal was quietly undone one call site at a time"
@@ -19,16 +21,19 @@
         "taskfw/dispatcher.py:introspection_nudge",
         "taskfw/dispatcher.py:finish_nudge",
         "taskfw/dispatcher.py:drift_reflection_nudge",
+        "taskfw/dispatcher.py:is_implemented",
         "taskfw/dispatcher.py:finish_reminder_nudge",
+        "taskfw/dispatcher.py:task_phase",
         "taskfw/dispatcher.py:apply_nudge",
         "taskfw/dispatcher.py:tool_called",
         "taskfw/mcp_server.py:tasks__add_introspection",
         "taskfw/mcp_server.py:tasks__finish",
         "taskfw/mcp_server.py:tasks__check_item",
         "taskfw/mcp_server.py:tasks__update",
+        "taskfw/mcp_server.py:tasks__phase",
         "taskfw/mcp_server.py:_drift_reflection_call, _drift_reflection_read",
         "tests/test_dispatcher.py",
-        "tests/test_mcp_tools.py:TestChecklist, TestUpdate"
+        "tests/test_mcp_tools.py:TestChecklist, TestUpdate, TestPhase"
       ],
       "invariants": [
         "Never blocks or changes a write — advisory only, because 'does this lesson generalize' (or 'has this drifted') is a judgment call that a hard gate cannot check",
@@ -39,9 +44,10 @@
         "Response keys follow a <name>_nudge convention (memory_nudge, drift_reflection_nudge, introspection_nudge, finish_reminder_nudge) for whatever remains genuinely advisory — a signal that turns out to need enforcement moves to lifecycle.py instead of keeping a matching key here (see switched_active_nudge's removal, task:209f33c8)",
         "drift_reflection_nudge is an AWARENESS nudge, not a detection mechanism (task:73d73144): it has no view into what happened during the calls it counts, so it cannot distinguish genuine drift from a perfectly on-task stretch. It only forces a periodic re-read of the task label, re-establishing awareness on a fixed cadence rather than leaving it to fade silently after the one-time announcement at activation; judging the outcome of that re-read is left entirely to whoever reads it.",
         "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires AFTER tasks__finish when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called — task:a6fb9f45 sat open at 4/4 for this exact reason, caught only by an unrelated review pass",
-        "finish_reminder_nudge is wired into both tasks__check_item (ticking the last item) and tasks__update (which can also replace the resolution list wholesale and land it at 100% in one call) — wiring only one call site would have missed the other completion path"
+        "finish_reminder_nudge is wired into both tasks__check_item (ticking the last item) and tasks__update (which can also replace the resolution list wholesale and land it at 100% in one call) — wiring only one call site would have missed the other completion path",
+        "task_phase's 'groomed' has no separate groomed_at flag — a task is groomed exactly when task.grooming is non-empty, the same rule task-grooming/skill.md states for itself, so this reads that existing signal rather than introducing a second one"
       ],
-      "last_validated": "2026-08-04T03:40:31.807423+00:00",
+      "last_validated": "2026-08-04T12:23:07.000160+00:00",
       "module": "taskfw/dispatcher.py",
       "name": "advisory-nudge-dispatcher"
     },
@@ -226,21 +232,24 @@
         "tasks__add_introspection appends where tasks__update(grooming=...) replaces",
         "tasks__format_commit_message(task_id, subject, body) validates the task exists and returns the canonical message shape ('<subject>\\n\\ntask:<id>' plus an optional blank-line-separated body) — formatting only, no filesystem or git side effects",
         "tasks__logs(logger, level, limit) reads config.db_path() directly via log_conn(), never store().conn — the one tool that doesn't honor set_store(), because taskfw.log's handlers are process-wide singletons with no store to draw a path from",
-        "tasks__log_skill_invocation(skill, task_id='') is a thin wrapper around get_logger() — no new sink, task_id not validated (an observability signal, not a referentially-integral record). A standalone script route was considered and rejected as a HostPortabilityRequirement violation: a shell-out only works for a host with Bash access to taskfw's own Python environment, narrower than 'any MCP host'."
+        "tasks__log_skill_invocation(skill, task_id='') is a thin wrapper around get_logger() — no new sink, task_id not validated (an observability signal, not a referentially-integral record). A standalone script route was considered and rejected as a HostPortabilityRequirement violation: a shell-out only works for a host with Bash access to taskfw's own Python environment, narrower than 'any MCP host'.",
+        "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task — a read-only tool (no lifecycle validation, same class as tasks__logs/tasks__get) that wraps dispatcher.task_phase, wrapped in _drift_reflection_read like every other read tool (task:bf95ced8)"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process — they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store.",
       "evidence": [
         "taskfw/mcp_server.py:tasks__create",
         "taskfw/mcp_server.py:tasks__finish",
-        "tests/test_mcp_tools.py"
+        "taskfw/mcp_server.py:tasks__phase",
+        "tests/test_mcp_tools.py",
+        "tests/test_mcp_tools.py:TestPhase"
       ],
       "invariants": [
         "No tool enforces a rule itself — all validation goes through lifecycle.check_*, so a tool cannot enforce a different set than a hook",
         "The store is opened lazily, so importing the module never touches disk",
         "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global"
       ],
-      "last_validated": "2026-08-01T16:06:54.644845+00:00",
+      "last_validated": "2026-08-04T12:23:19.543766+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface"
     },
@@ -403,6 +412,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-04T11:49:46.303604+00:00"
+    "updated_at": "2026-08-04T12:23:19.543837+00:00"
   }
 }

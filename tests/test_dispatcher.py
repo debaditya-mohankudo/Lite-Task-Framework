@@ -16,6 +16,8 @@ from taskfw.dispatcher import (
     finish_nudge,
     finish_reminder_nudge,
     introspection_nudge,
+    is_implemented,
+    task_phase,
     tool_called,
 )
 from taskfw.memory import MemoryStore
@@ -125,6 +127,65 @@ class TestFinishReminderNudge:
         tasks.save(t)
         assert finish_reminder_nudge(t) is not None
         assert finish_reminder_nudge(t) is not None
+
+
+class TestIsImplemented:
+    def test_false_with_no_resolution_items(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task")
+        tasks.save(t)
+        assert is_implemented(t) is False
+
+    def test_false_on_partial_completion(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", resolution=[ResolutionItem("a", done=True), ResolutionItem("b")])
+        tasks.save(t)
+        assert is_implemented(t) is False
+
+    def test_true_when_all_items_done_regardless_of_status(self, stores):
+        """Unlike finish_reminder_nudge, is_implemented does not gate on status —
+        a done task with a complete checklist is still implemented."""
+        tasks, _ = stores
+        t = Task(title="A task", resolution=[ResolutionItem("a", done=True)], status="done")
+        tasks.save(t)
+        assert is_implemented(t) is True
+
+
+class TestTaskPhase:
+    def test_all_false_on_a_fresh_task(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task")
+        tasks.save(t)
+        assert task_phase(t) == {"groomed": False, "implemented": False, "introspected": False}
+
+    def test_groomed_true_when_grooming_is_non_empty(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", grooming={"risks": [{"text": "x", "graded": None}]})
+        tasks.save(t)
+        assert task_phase(t)["groomed"] is True
+
+    def test_implemented_true_when_checklist_complete(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", resolution=[ResolutionItem("a", done=True)])
+        tasks.save(t)
+        assert task_phase(t)["implemented"] is True
+
+    def test_introspected_true_when_a_report_exists(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", introspection=[{"date": "2026-08-04"}])
+        tasks.save(t)
+        assert task_phase(t)["introspected"] is True
+
+    def test_all_three_independent_and_true_together(self, stores):
+        tasks, _ = stores
+        t = Task(
+            title="A task",
+            grooming={"risks": []},
+            resolution=[ResolutionItem("a", done=True)],
+            introspection=[{"date": "2026-08-04"}],
+        )
+        tasks.save(t)
+        assert task_phase(t) == {"groomed": True, "implemented": True, "introspected": True}
 
 
 class TestDriftReflectionNudge:

@@ -136,6 +136,21 @@ def finish_nudge(task) -> str | None:
     return f"task:{task.id} closed with no introspection report yet. Consider running /task-introspection."
 
 
+def is_implemented(task) -> bool:
+    """Whether task's resolution checklist is complete — status-independent.
+
+    The pure predicate, extracted so finish_reminder_nudge and task_phase
+    share one place computing "100% done" instead of two copies that could
+    drift. Deliberately excludes finish_reminder_nudge's own status=='open'
+    gate: that gate is about whether to nudge someone to call tasks__finish
+    (pointless once the task is already done), not about whether the work
+    itself is complete — a done task with a full checklist is still
+    implemented.
+    """
+    done, total = task.progress
+    return total > 0 and done == total
+
+
 def finish_reminder_nudge(task) -> str | None:
     """Advisory nudge for tasks__check_item/tasks__update, or None when there's nothing to say.
 
@@ -151,10 +166,30 @@ def finish_reminder_nudge(task) -> str | None:
     since nothing surfaced the gap) — this closes that gap for whoever is
     looking at the result.
     """
-    done, total = task.progress
-    if total == 0 or done < total or task.status != "open":
+    if not is_implemented(task) or task.status != "open":
         return None
+    _, total = task.progress
     return f"task:{task.id} has all {total} resolution item(s) checked but is still open. Call tasks__finish when the work is done."
+
+
+def task_phase(task) -> dict[str, bool]:
+    """Where a task stands in the grooming -> implementation -> introspection loop.
+
+    Fully derived from fields the task already carries — never a stored
+    status. Folding this into a new column or into active_task (a scope ->
+    task_id pointer, not a per-task field) would duplicate a rule this
+    module and lifecycle.py already own; see task:bf95ced8's grooming for
+    why that was rejected. A task is "groomed" when its grooming findings
+    are non-empty (there is no separate groomed_at flag — same reasoning as
+    task-grooming/skill.md's "a task is groomed when its grooming is
+    non-empty"), "implemented" per is_implemented above, and "introspected"
+    when at least one introspection report has been appended.
+    """
+    return {
+        "groomed": bool(task.grooming),
+        "implemented": is_implemented(task),
+        "introspected": bool(task.introspection),
+    }
 
 
 def apply_nudge(result: dict[str, Any], key: str, nudge: str | None) -> None:
