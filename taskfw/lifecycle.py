@@ -150,6 +150,25 @@ def check_parent(task_type: str, parent: Task | None) -> Decision:
     return _allow("parent", type=task_type, parent_id=parent.id if parent else None)
 
 
+def check_active_switch(previous_task_id: str | None, task_id: str, confirm: bool) -> Decision:
+    """Switching the active task away from a different one requires confirm=True.
+
+    No previous active task, or re-setting the one already active, is always
+    allowed — there is nothing to lose in either case, so confirm is not
+    consulted. A genuine switch is denied without confirm so the previous
+    active task is never overwritten without the caller having chosen to.
+    """
+    if not previous_task_id or previous_task_id == task_id:
+        return _allow("active_switch", previous=previous_task_id, target=task_id)
+    if not confirm:
+        return _deny(
+            "active_switch",
+            f"task:{previous_task_id} is currently active. Pass confirm=True to switch to task:{task_id}.",
+            previous=previous_task_id, target=task_id,
+        )
+    return _allow("active_switch", previous=previous_task_id, target=task_id, note="confirmed")
+
+
 def check_save(task: Task, *, previous: Task | None = None, parent: Task | None = None) -> Decision:
     """Every rule that applies to writing a task, in one call.
 

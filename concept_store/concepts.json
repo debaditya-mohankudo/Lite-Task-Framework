@@ -8,21 +8,18 @@
         "Reads report['new_knowledge'] (canonical, per task-introspection skill.md Step 6 and the only shape taskfw.accuracy also reads) and report['surprises'][].lesson (legacy shape already present in historical reports) as equally valid lesson sources",
         "finish_nudge(task) returns None or a string; fires only when task.introspection is empty — the host-agnostic equivalent of claude-hooks' external PostToolUse reminder to run /task-introspection",
         "drift_reflection_nudge(scope, active_task_id, active_task_title) returns None or a string; fires every _DRIFT_REFLECTION_INTERVAL (8) calls under the same (scope, active_task_id) pair, using a module-level call counter keyed on that pair — no active task means no nudge, and the counter never resets except by process restart",
-        "switched_active_nudge(previous_task_id, task_id) returns None or a string; fires only when a different task was active a moment ago (None or an identical id both stay silent), the moment-of-switch counterpart to drift_reflection_nudge's periodic check-in",
         "tool_called(pre, post): post runs exactly once, only on a clean exit (no exception) with call.result.get('ok') truthy — never on an {'error': ...} refusal, never when the block raises",
-        "apply_introspection_nudge/apply_finish_nudge/apply_drift_reflection_nudge/apply_switched_active_nudge mutate a result dict in place rather than returning a value, so tool_called's post callable has one uniform shape"
+        "apply_introspection_nudge/apply_finish_nudge/apply_drift_reflection_nudge mutate a result dict in place rather than returning a value, so tool_called's post callable has one uniform shape"
       ],
       "created_at": "2026-08-01T10:02:54.174596+00:00",
-      "description": "Single home for advisory, non-blocking response annotations (nudges) on MCP tool results. Distinct from lifecycle.py (blocking rule enforcement, checked before a write) and store.py (persistence) — a nudge never refuses a write and never changes what's stored, it only surfaces something true that would otherwise be silent. Exists to prevent mcp_server.py tools from each growing their own private _foo_check() helper. tool_called is the pre/post-hook shape nudges run through: the same shape as claude-hooks' own gates, weighed deliberately (task:7b25ee0d) before building — worth it here because it is self-contained inside taskfw's own server (no external hook dependency) and scoped only to taskfw's own tools, never another server's calls.",
+      "description": "Single home for advisory, non-blocking response annotations (nudges) on MCP tool results. Distinct from lifecycle.py (blocking rule enforcement, checked before a write) and store.py (persistence) — a nudge never refuses a write and never changes what's stored, it only surfaces something true that would otherwise be silent. Exists to prevent mcp_server.py tools from each growing their own private _foo_check() helper. tool_called is the pre/post-hook shape nudges run through: the same shape as claude-hooks' own gates, weighed deliberately (task:7b25ee0d) before building — worth it here because it is self-contained inside taskfw's own server (no external hook dependency) and scoped only to taskfw's own tools, never another server's calls. A switched-active-task signal briefly lived here as switched_active_nudge (task:5c7b15f7) before being superseded by a real blocking rule (lifecycle.check_active_switch, task:209f33c8) — evidence that not everything advisory stays advisory once it turns out to be load-bearing enough that skipping it is itself the failure mode.",
       "evidence": [
         "taskfw/dispatcher.py:introspection_nudge",
         "taskfw/dispatcher.py:finish_nudge",
         "taskfw/dispatcher.py:drift_reflection_nudge",
-        "taskfw/dispatcher.py:switched_active_nudge",
         "taskfw/dispatcher.py:tool_called",
         "taskfw/mcp_server.py:tasks__add_introspection",
         "taskfw/mcp_server.py:tasks__finish",
-        "taskfw/mcp_server.py:tasks__set_active",
         "taskfw/mcp_server.py:_drift_reflection_call",
         "taskfw/mcp_server.py:tasks__update, tasks__check_item, tasks__add_decision, tasks__add_commit",
         "tests/test_dispatcher.py"
@@ -33,9 +30,9 @@
         "No name-keyed dispatch table (no GATES-style registry) — each tool passes tool_called its own pre/post callables explicitly; mcp_server.py's _drift_reflection_call() helper is the one shared wrapper (used by tasks__update, tasks__check_item, tasks__add_decision, tasks__add_commit), not a registry",
         "drift_reflection_nudge is a port of claude-hooks' hooks/dispatcher.py._maybe_drift_reflection_nudge (task:f1d46386, removed from claude-hooks after the port) — same 8-call interval and same reflection-question wording, but reads the active task from store().get_active(scope) instead of a claude-hooks session checkpoint, so it holds regardless of host or whether claude-hooks' external hook process is running. task-framework is now the one owner of this nudge; do not let a claude-hooks-side copy grow back.",
         "drift_reflection_nudge is currently wired only into taskfw's 4 mutating tools (tasks__update/check_item/add_decision/add_commit), not the read paths (tasks__get, tasks__context) — open item on task:f1d46386",
-        "Response keys follow a <name>_nudge convention (memory_nudge, drift_reflection_nudge, introspection_nudge, active_switch_nudge) — a bare data field (e.g. previous_active: <id>) was considered and rejected for switched_active_nudge on task:5c7b15f7 for consistency"
+        "Response keys follow a <name>_nudge convention (memory_nudge, drift_reflection_nudge, introspection_nudge) for whatever remains genuinely advisory — a signal that turns out to need enforcement moves to lifecycle.py instead of keeping a matching key here (see switched_active_nudge's removal, task:209f33c8)"
       ],
-      "last_validated": "2026-08-04T02:18:31.036297+00:00",
+      "last_validated": "2026-08-04T02:34:51.849231+00:00",
       "module": "taskfw/dispatcher.py",
       "name": "advisory-nudge-dispatcher"
     },
@@ -150,23 +147,31 @@
       "confidence": 0.96,
       "contracts": [
         "Every check returns Decision(allowed, rule, reason); Decision is falsy when denied",
-        "check_save(task, previous=None, parent=None) is the single entry point for validating a mutation"
+        "check_save(task, previous=None, parent=None) is the single entry point for validating a mutation",
+        "check_active_switch(previous_task_id, task_id, confirm) is the entry point tasks__set_active calls before writing; not folded into check_save because it validates the active-task pointer, not a Task mutation — same reasoning that already keeps active_task in its own store.py section rather than on the Task model"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "The single implementation of every task rule, imported by both the MCP tools and the hooks. Pure functions over (inputs, store) with no session, prompt, or host state. Deliberately small: body-template validation became schema validation, the hierarchy matrix collapsed to one sentence with two issue types, and commit traceability left entirely once the pre-commit gate was dropped.",
       "evidence": [
         "taskfw/lifecycle.py:check_transition",
         "taskfw/lifecycle.py:check_save",
-        "tests/test_lifecycle.py"
+        "taskfw/lifecycle.py:check_active_switch",
+        "taskfw/mcp_server.py:tasks__set_active",
+        "taskfw/mcp_server.py:tasks__finish",
+        "tests/test_lifecycle.py",
+        "tests/test_mcp_tools.py:TestActiveTask"
       ],
       "invariants": [
         "Rules are pure — the tests need no fixtures at all, which is the observable signal that portability holds",
         "Same-status is checked BEFORE the terminal rule, so re-saving a done or abandoned task is never an error; this is what makes tasks__finish idempotent",
         "done and abandoned are terminal; any non-terminal state may be abandoned",
         "The entire hierarchy rule is: an epic has no parent, and a task cannot be its own parent",
-        "Denials log at INFO with rule, reason, and ids; allows log at DEBUG"
+        "Denials log at INFO with rule, reason, and ids; allows log at DEBUG",
+        "check_active_switch allows unconditionally (ignoring confirm) when there is no previous active task or the target is already active — confirm is only consulted on a genuine switch, so it can never make an already-safe call fail",
+        "Switching the active task without confirm is refused (rule=active_switch) rather than merely nudged — task:209f33c8 replaced dispatcher.py's advisory switched_active_nudge with this blocking rule once it became clear a caller could silently ignore the nudge and lose track of the previous active task",
+        "tasks__finish clears active_task for its own scope when the task it finished was the active one, which is what keeps the ordinary finish-then-activate-next flow from tripping check_active_switch on its very next call"
       ],
-      "last_validated": "2026-08-01T00:00:00+00:00",
+      "last_validated": "2026-08-04T02:35:02.291259+00:00",
       "module": "taskfw/lifecycle.py",
       "name": "lifecycle-single-rule-implementation"
     },
@@ -386,6 +391,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-04T02:18:31.036378+00:00"
+    "updated_at": "2026-08-04T02:35:02.291341+00:00"
   }
 }

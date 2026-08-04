@@ -200,17 +200,37 @@ class TestActiveTask:
     def test_set_active_rejects_unknown_task(self):
         assert "error" in m.tasks__set_active("nosuch")
 
-    def test_set_active_nudges_on_a_genuine_switch(self):
+    def test_set_active_refuses_a_genuine_switch_without_confirm(self):
         a, b = create(title="a"), create(title="b")
         m.tasks__set_active(a["id"])
         result = m.tasks__set_active(b["id"])
-        assert "active_switch_nudge" in result
-        assert a["id"] in result["active_switch_nudge"]
+        assert result["error"] and result["rule"] == "active_switch"
+        assert m.tasks__active()["active"] == a["id"]
 
-    def test_set_active_does_not_nudge_on_first_activation_or_reset(self):
+    def test_set_active_allows_a_genuine_switch_with_confirm(self):
+        a, b = create(title="a"), create(title="b")
+        m.tasks__set_active(a["id"])
+        result = m.tasks__set_active(b["id"], confirm=True)
+        assert result["ok"]
+        assert m.tasks__active()["active"] == b["id"]
+
+    def test_set_active_does_not_require_confirm_on_first_activation_or_reset(self):
         t = create()
-        assert "active_switch_nudge" not in m.tasks__set_active(t["id"])
-        assert "active_switch_nudge" not in m.tasks__set_active(t["id"])
+        assert m.tasks__set_active(t["id"])["ok"]
+        assert m.tasks__set_active(t["id"])["ok"]
+
+    def test_finish_clears_the_active_task_it_finished(self):
+        t = create()
+        m.tasks__set_active(t["id"])
+        m.tasks__finish(t["id"])
+        assert m.tasks__active()["active"] is None
+
+    def test_finish_leaves_a_different_active_task_untouched(self):
+        t = create()
+        other = create(title="other")
+        m.tasks__set_active(t["id"])
+        m.tasks__finish(other["id"])
+        assert m.tasks__active()["active"] == t["id"]
 
     def test_context_falls_back_to_the_active_task(self):
         t = create(title="the active one")

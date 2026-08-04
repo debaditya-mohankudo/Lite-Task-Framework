@@ -366,6 +366,9 @@ def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
     store().save(task)
     if reason:
         store().add_event(task_id, reason, kind="status")
+    scope = _scope()
+    if store().get_active(scope) == task_id:
+        store().clear_active(scope)
     with dispatcher.tool_called(post=lambda result: dispatcher.apply_finish_nudge(result, task)) as call:
         call.result = {"ok": True, "id": task_id, "status": "done"}
         return call.result
@@ -470,18 +473,22 @@ def tasks__add_commit(task_id: str, sha: str, repo: str = "") -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def tasks__set_active(task_id: str) -> dict[str, Any]:
-    """Set the active task for this workspace. Persisted, so it survives a restart."""
+def tasks__set_active(task_id: str, confirm: bool = False) -> dict[str, Any]:
+    """Set the active task for this workspace. Persisted, so it survives a restart.
+
+    Switching away from a different active task is refused unless confirm=True
+    — see lifecycle.check_active_switch. Activating for the first time, or
+    re-setting the task that's already active, never requires confirm.
+    """
     if store().get(task_id) is None:
         return {"error": f"No task {task_id!r}"}
     scope = _scope()
     previous = store().get_active(scope)
-    with dispatcher.tool_called(
-        post=lambda result: dispatcher.apply_switched_active_nudge(result, previous, task_id)
-    ) as call:
-        store().set_active(task_id, scope)
-        call.result = {"ok": True, "active": task_id, "scope": scope}
-        return call.result
+    decision = lifecycle.check_active_switch(previous, task_id, confirm)
+    if not decision:
+        return _denied(decision)
+    store().set_active(task_id, scope)
+    return {"ok": True, "active": task_id, "scope": scope}
 
 
 @mcp.tool()
