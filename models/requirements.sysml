@@ -43,8 +43,8 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "776d29331a876e2b212b71ff4539bc2fbc1bd8c0";
-        derivedAt = "2026-08-02";
+        derivedFromCommit = "dd2e41d325f4cd11e1b68240b82b71804f494543";
+        derivedAt = "2026-08-04";
         modelledPaths = (
             "taskfw/db/schema.py",
             "taskfw/db/connect.py",
@@ -57,6 +57,7 @@ package Requirements {
             "taskfw/accuracy.py",
             "taskfw/mcp_server.py",
             "taskfw/backfill.py",
+            "taskfw/dispatcher.py",
             ".claude/skills/commit/skill.md"
         );
     }

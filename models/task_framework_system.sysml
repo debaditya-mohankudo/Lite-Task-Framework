@@ -44,15 +44,16 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "776d29331a876e2b212b71ff4539bc2fbc1bd8c0";
-        derivedAt = "2026-08-02";
+        derivedFromCommit = "dd2e41d325f4cd11e1b68240b82b71804f494543";
+        derivedAt = "2026-08-04";
         modelledPaths = (
             "taskfw/store.py",
             "taskfw/models.py",
             "taskfw/lifecycle.py",
             "taskfw/mcp_server.py",
             "taskfw/context.py",
-            "taskfw/backfill.py"
+            "taskfw/backfill.py",
+            "taskfw/dispatcher.py"
         );
     }
 
@@ -78,9 +79,10 @@ package TaskFrameworkSystem {
     }
 
     part def TaskMCPTools {
-        doc /* taskfw/mcp_server.py, taskfw/context.py. The ONLY interface: MCP
-             * is the portability layer, so any MCP host reaches the whole
-             * framework here with no host-specific adapter on top of it.
+        doc /* taskfw/mcp_server.py, taskfw/context.py, taskfw/dispatcher.py.
+             * The ONLY interface: MCP is the portability layer, so any MCP
+             * host reaches the whole framework here with no host-specific
+             * adapter on top of it.
              *
              * In-process — tools import the library directly. tasks__context is
              * the headline tool and the sole replacement for per-turn prompt
@@ -89,7 +91,19 @@ package TaskFrameworkSystem {
              * automatically — nothing enforces that call happens, which is why
              * taskfw/backfill.py exists as the recovery path: it rebuilds
              * commit links from git history regardless of whether the call was
-             * ever made. */
+             * ever made.
+             *
+             * taskfw/dispatcher.py adds advisory, non-blocking annotations to a
+             * few tools' results (a reminder to introspect, a drift check-in,
+             * a nudge to promote a lesson to loop memory) — deliberately NOT a
+             * fifth part. A nudge never refuses a write and never changes what
+             * is stored, so it carries none of the properties that earned
+             * LifecycleRules or TaskStore their own part: it enforces nothing
+             * and guarantees nothing observable from outside a tool's result.
+             * It lives here as a documented behaviour of the interface layer,
+             * the same way tasks__context's trim/truncation behaviour is
+             * documented in this part's doc rather than given a part of its
+             * own. */
         part foundation : Foundation;
         part rules : LifecycleRules;
         part store : TaskStore;
