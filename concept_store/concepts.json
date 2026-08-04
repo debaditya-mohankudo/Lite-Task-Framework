@@ -323,7 +323,8 @@
       "contracts": [
         "get_logger(name) -> logger under the 'taskfw' root, configured on first call",
         "Level comes from TASKFW_LOG_LEVEL, default INFO",
-        "SQLiteHandler and JsonlHandler both swallow every write exception — a broken log write must never break the tool call that triggered it"
+        "SQLiteHandler and JsonlHandler both swallow every write exception — a broken log write must never break the tool call that triggered it",
+        "SQLiteHandler caches one sqlite3 connection per thread (threading.local()), not one per process — a single process-wide connection eventually gets used from a thread that didn't create it (an MCP server dispatches sync tool calls across a worker thread pool), and sqlite3 raises ProgrammingError on that, which the bare except silently swallows for the rest of the process's life (task:7fff42f4)"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "Stderr is always one of the sinks, configured once. An MCP server speaks JSON-RPC over stdout, so a stray write there corrupts the protocol — that is a correctness constraint for the whole project, not a formatting preference, and it bans stdout specifically, not persistence generally. A second sink also exists: SQLiteHandler persists into the `logs` table (the operational-trace half of observability, alongside task_events' durable record of decisions and outcomes) in normal operation, or JsonlHandler when TASKFW_LOG_JSONL is set (test runs only, via tests/conftest.py) — a test run must never add a row to `logs`, isolated database or not, so it writes one JSON-per-line file instead, truncated fresh per run.",
@@ -333,15 +334,17 @@
         "taskfw/log.py:JsonlHandler",
         "tests/test_logging.py:TestLogDestination",
         "tests/test_logging.py:TestSQLiteSink",
+        "tests/test_logging.py:TestSQLiteSink::test_emit_from_a_second_thread_still_lands",
         "tests/test_logging.py:TestJsonlSink"
       ],
       "invariants": [
         "No handler under the taskfw logger may write to stdout — pinned by tests/test_logging.py",
         "The root taskfw logger does not propagate, so host logging config cannot redirect it to stdout",
         "Denials log at INFO and allows at DEBUG, so a full trace is one env var away and costs nothing normally",
-        "SQLiteHandler always targets config.db_path(), never whatever TaskStore is currently active — log.py's handlers are process-wide singletons with no store to draw a per-call path from"
+        "SQLiteHandler always targets config.db_path(), never whatever TaskStore is currently active — log.py's handlers are process-wide singletons with no store to draw a per-call path from",
+        "A SQLiteHandler instance never uses the same sqlite3 connection object across two threads — each thread that calls emit() gets its own connection via threading.local(), so cross-thread reuse (the cause of a total, silent, permanent log-sink death) is unrepresentable rather than merely caught"
       ],
-      "last_validated": "2026-08-01T15:55:29.875115+00:00",
+      "last_validated": "2026-08-04T11:49:46.303497+00:00",
       "module": "taskfw/log.py",
       "name": "stderr-only-logging"
     },
@@ -400,6 +403,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-04T03:40:31.807510+00:00"
+    "updated_at": "2026-08-04T11:49:46.303604+00:00"
   }
 }

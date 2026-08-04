@@ -51,8 +51,8 @@ package Foundation {
     }
 
     @ModelProvenance {
-        derivedFromCommit = "306a206d2492875d9e6355f70d351913d6d1ddc3";
-        derivedAt = "2026-08-02";
+        derivedFromCommit = "c51ee1616b2ee4d9e95341fbd0fa60406caf9ba4";
+        derivedAt = "2026-08-04";
         modelledPaths = (
             "taskfw/config.py",
             "taskfw/db/schema.py",
