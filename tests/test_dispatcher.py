@@ -7,11 +7,14 @@ exactly on a clean, successful exit — never on a refusal, never on a raise.
 """
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from taskfw.dispatcher import (
     _DRIFT_REFLECTION_INTERVAL,
     _drift_reflection_call_counts,
+    combine,
     drift_reflection_nudge,
     finish_nudge,
     finish_reminder_nudge,
@@ -236,20 +239,20 @@ class TestDriftReflectionNudge:
 class TestToolCalled:
     def test_post_runs_on_a_successful_result(self):
         calls = []
-        with tool_called(post=calls.append) as call:
+        with tool_called("tasks__probe", post=calls.append) as call:
             call.result = {"ok": True, "id": "x"}
         assert calls == [{"ok": True, "id": "x"}]
 
     def test_post_does_not_run_on_a_refusal(self):
         calls = []
-        with tool_called(post=calls.append) as call:
+        with tool_called("tasks__probe", post=calls.append) as call:
             call.result = {"error": "No task 'x'"}
         assert calls == []
 
     def test_post_does_not_run_when_the_block_raises(self):
         calls = []
         with pytest.raises(ValueError):
-            with tool_called(post=calls.append) as call:
+            with tool_called("tasks__probe", post=calls.append) as call:
                 call.result = {"ok": True}
                 raise ValueError("boom")
         assert calls == []
@@ -259,7 +262,7 @@ class TestToolCalled:
             result["marker"] = True
 
         def call_it():
-            with tool_called(post=add_marker) as call:
+            with tool_called("tasks__probe", post=add_marker) as call:
                 call.result = {"ok": True}
                 return call.result
 
@@ -267,11 +270,89 @@ class TestToolCalled:
 
     def test_pre_runs_on_entry(self):
         calls = []
-        with tool_called(pre=lambda: calls.append("pre")):
+        with tool_called("tasks__probe", pre=lambda: calls.append("pre")):
             pass
         assert calls == ["pre"]
 
     def test_no_hooks_is_a_no_op(self):
-        with tool_called() as call:
+        with tool_called("tasks__probe") as call:
             call.result = {"ok": True}
         # no exception, nothing to assert beyond "this doesn't blow up"
+
+    def test_logs_ok_on_success(self, caplog):
+        with caplog.at_level(logging.INFO, logger="taskfw"):
+            with tool_called("tasks__probe") as call:
+                call.result = {"ok": True}
+        assert "tool=tasks__probe OK" in caplog.text
+
+    def test_logs_refuse_with_rule_on_an_error_result(self, caplog):
+        with caplog.at_level(logging.INFO, logger="taskfw"):
+            with tool_called("tasks__probe") as call:
+                call.result = {"error": "No task 'x'", "rule": "exists"}
+        assert "tool=tasks__probe REFUSE rule=exists" in caplog.text
+
+    def test_logs_error_and_reraises_on_an_exception(self, caplog):
+        with caplog.at_level(logging.INFO, logger="taskfw"):
+            with pytest.raises(ValueError):
+                with tool_called("tasks__probe") as call:
+                    call.result = {"ok": True}
+                    raise ValueError("boom")
+        assert "tool=tasks__probe ERROR ValueError: boom" in caplog.text
+
+    def test_logs_ok_on_a_non_dict_result(self, caplog):
+        """tasks__list returns a bare list — the ok/error convention doesn't
+        apply, and that must not be mistaken for a refusal."""
+        with caplog.at_level(logging.INFO, logger="taskfw"):
+            with tool_called("tasks__probe") as call:
+                call.result = [{"id": "a"}, {"id": "b"}]
+        assert "tool=tasks__probe OK" in caplog.text
+
+    def test_logging_is_unconditional_even_with_no_hook_and_no_ok_key(self, caplog):
+        """A read tool's raw dict has no 'ok' key at all — logging must not
+        be gated on the same truthy-ok condition post() is gated on."""
+        with caplog.at_level(logging.INFO, logger="taskfw"):
+            with tool_called("tasks__probe") as call:
+                call.result = {"id": "x", "title": "A task"}
+        assert "tool=tasks__probe OK" in caplog.text
+
+    def test_post_fires_on_a_success_result_with_no_ok_key(self):
+        """A read tool (tasks__get, tasks__context) returns the raw object on
+        success — no 'ok' key at all. post must still fire: gating is on the
+        absence of 'error', not on a truthy 'ok', so hooks compose uniformly
+        onto reads and writes alike (task:58782207)."""
+        calls = []
+        with tool_called("tasks__probe", post=calls.append) as call:
+            call.result = {"id": "x", "title": "A task"}
+        assert calls == [{"id": "x", "title": "A task"}]
+
+    def test_post_does_not_run_on_a_non_dict_result(self):
+        """tasks__list returns a bare list — never a refusal, but there's
+        nowhere for apply_nudge to write a key, so post is skipped."""
+        calls = []
+        with tool_called("tasks__probe", post=calls.append) as call:
+            call.result = [{"id": "a"}, {"id": "b"}]
+        assert calls == []
+
+
+class TestCombine:
+    def test_runs_every_hook_in_order(self):
+        calls = []
+        hook = combine(lambda r: calls.append("a"), lambda r: calls.append("b"))
+        hook({"ok": True})
+        assert calls == ["a", "b"]
+
+    def test_each_hook_sees_the_same_mutated_result(self):
+        def add_x(result):
+            result["x"] = True
+
+        def add_y(result):
+            result["y"] = result.get("x", False)
+
+        result = {"ok": True}
+        combine(add_x, add_y)(result)
+        assert result == {"ok": True, "x": True, "y": True}
+
+    def test_a_single_hook_composes_the_same_as_calling_it_directly(self):
+        calls = []
+        combine(calls.append)({"ok": True})
+        assert calls == [{"ok": True}]

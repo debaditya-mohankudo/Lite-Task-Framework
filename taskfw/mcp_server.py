@@ -10,6 +10,7 @@ neither owns the rules.
 """
 from __future__ import annotations
 
+import functools
 import os
 from typing import Any, Callable
 
@@ -97,63 +98,106 @@ def _denied(d: lifecycle.Decision) -> dict:
     return {"error": d.reason, "rule": d.rule}
 
 
-def _drift_reflection_call(result_builder, extra: tuple[str, Callable[[], str | None]] | None = None):
-    """Wrap a mutating tool call with the periodic active-task nudge.
+def _tool(hook: Callable[[dict[str, Any]], None] | None = None):
+    """The one route every MCP tool goes through: registration, unconditional
+    logging, and an optional post-success hook, all in one place (task:58782207).
 
-    result_builder is called with no args and must return the dict this tool
-    call returns; the nudge (if any) is attached to it in place before return.
-    Goes through tool_called, whose post only fires on a truthy "ok" — the
-    shape every mutating tool in this module already returns on success.
+    Replaces both `@mcp.tool()` + a separate logging decorator stacked on top,
+    and the two former helpers, `_drift_reflection_call`/`_drift_reflection_read`,
+    that existed only to wire a hook onto some tools but not others (task:58782207
+    grooming — a pushback from "why is this a decorator at all" through "one
+    route, no registry" landed here). A tool decorated with `_tool()` alone
+    gets logging with no hook; `_tool(hook=...)` adds one. There is no other
+    way to register a tool with this module — skip `_tool` and the function
+    is not registered at all, not registered-but-unlogged, so a new tool
+    cannot silently end up outside this mechanism.
 
-    extra is an optional (key, nudge_thunk) pair for a second, tool-specific
-    nudge to apply in the same post — e.g. finish_reminder_nudge on
-    tasks__check_item/tasks__update — so those call sites don't need their
-    own local closure just to bolt a second apply_nudge call onto the result.
+    `hook` is a plain `Callable[[dict], None]`, the same shape tool_called's
+    `post` always took — see dispatcher.combine for composing more than one
+    onto a single tool without `_tool` or tool_called needing to know the
+    difference between one hook and several.
+    """
+    def decorator(fn: Callable) -> Callable:
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            with dispatcher.tool_called(fn.__name__, post=hook) as call:
+                call.result = fn(*args, **kwargs)
+                return call.result
+        mcp.tool()(wrapper)
+        return wrapper
+    return decorator
+
+
+def _drift_reflection_hook(result: dict[str, Any]) -> None:
+    """The periodic active-task nudge (dispatcher.drift_reflection_nudge).
+
+    Recomputed fresh from global session state (_scope(), the active-task
+    pointer) rather than anything the specific call did, so it composes onto
+    any tool uniformly via dispatcher.combine. Wired onto reads and mutating
+    tools alike; tasks__create, tasks__finish, and tasks__add_introspection
+    don't carry it, matching the behavior this refactor preserved rather than
+    widened (task:58782207).
     """
     scope = _scope()
     active_task_id = store().get_active(scope) or ""
     active_task = store().get(active_task_id) if active_task_id else None
     active_task_title = active_task.title if active_task else ""
-
-    def _post(result):
-        dispatcher.apply_nudge(
-            result, "drift_reflection_nudge",
-            dispatcher.drift_reflection_nudge(scope, active_task_id, active_task_title),
-        )
-        if extra:
-            key, nudge_thunk = extra
-            dispatcher.apply_nudge(result, key, nudge_thunk())
-
-    with dispatcher.tool_called(post=_post) as call:
-        call.result = result_builder()
-        return call.result
+    dispatcher.apply_nudge(
+        result, "drift_reflection_nudge",
+        dispatcher.drift_reflection_nudge(scope, active_task_id, active_task_title),
+    )
 
 
-def _drift_reflection_read(result: dict) -> dict:
-    """Attach the periodic active-task nudge to a read tool's result, in place.
+def _refetch(result: dict[str, Any]) -> Task | None:
+    """The task a hook needs, re-fetched by the id already in `result`.
 
-    Read tools (tasks__get, tasks__context) return the task/bundle directly on
-    success — no "ok" key to gate on, unlike the mutating tools tool_called
-    was built for — so this checks for the absence of "error" instead and
-    calls the nudge directly rather than going through tool_called.
+    Every hook below needs this same lookup — factored out once rather than
+    repeated per hook. Re-fetching instead of closing over the tool's own
+    mutated local is what lets a hook be a plain Callable[[dict], None],
+    callable from outside the tool it applies to: the mutation is already
+    persisted (store().save() already ran) by the time any hook fires, so a
+    fresh read is exactly as correct (task:58782207).
     """
-    if "error" not in result:
-        scope = _scope()
-        active_task_id = store().get_active(scope) or ""
-        active_task = store().get(active_task_id) if active_task_id else None
-        active_task_title = active_task.title if active_task else ""
+    return store().get(result["id"])
+
+
+def _finish_reminder_hook(result: dict[str, Any]) -> None:
+    """finish_reminder_nudge, for tasks__update/tasks__check_item."""
+    task = _refetch(result)
+    if task:
+        dispatcher.apply_nudge(result, "finish_reminder_nudge", dispatcher.finish_reminder_nudge(task))
+
+
+def _finish_hook(result: dict[str, Any]) -> None:
+    """finish_nudge, for tasks__finish. task.introspection is untouched by
+    tasks__finish's own mutation (only status changes), so the re-fetched
+    task is identical to the one the tool itself had in hand."""
+    task = _refetch(result)
+    if task:
+        dispatcher.apply_nudge(result, "introspection_nudge", dispatcher.finish_nudge(task))
+
+
+def _introspection_hook(result: dict[str, Any]) -> None:
+    """introspection_nudge, for tasks__add_introspection.
+
+    introspection_nudge needs the report itself, which is one of the tool's
+    arguments rather than anything in `result` — re-fetched as
+    task.introspection[-1], the entry the tool's own body just appended and
+    saved, rather than threading the argument through result just for this.
+    """
+    task = _refetch(result)
+    if task and task.introspection:
         dispatcher.apply_nudge(
-            result, "drift_reflection_nudge",
-            dispatcher.drift_reflection_nudge(scope, active_task_id, active_task_title),
+            result, "memory_nudge",
+            dispatcher.introspection_nudge(task.introspection[-1], result["id"], store().conn),
         )
-    return result
 
 
 # ---------------------------------------------------------------------------
 # Read
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@_tool(hook=_drift_reflection_hook)
 def tasks__context(task_id: str = "", verbosity: str = "full") -> dict[str, Any]:
     """The whole working bundle for a task: object, decisions, grooming, graph, commits, related.
 
@@ -164,10 +208,10 @@ def tasks__context(task_id: str = "", verbosity: str = "full") -> dict[str, Any]
     task_id = task_id or store().get_active(_scope()) or ""
     if not task_id:
         return {"error": "No task_id given and no active task set."}
-    return _drift_reflection_read(build_context(store(), task_id, verbosity))
+    return build_context(store(), task_id, verbosity)
 
 
-@mcp.tool()
+@_tool()
 def tasks__grooming_accuracy(limit: int = 25) -> dict[str, Any]:
     """How well grooming has been predicting, across recent finished tasks.
 
@@ -182,7 +226,7 @@ def tasks__grooming_accuracy(limit: int = 25) -> dict[str, Any]:
     return grooming_accuracy(store(), limit=limit)
 
 
-@mcp.tool()
+@_tool()
 def tasks__logs(logger: str = "", level: str = "", limit: int = 50) -> dict[str, Any]:
     """Operational log lines from the `logs` table, most recent first.
 
@@ -210,7 +254,7 @@ def tasks__logs(logger: str = "", level: str = "", limit: int = 50) -> dict[str,
     return {"logs": [dict(r) for r in rows]}
 
 
-@mcp.tool()
+@_tool()
 def tasks__log_skill_invocation(skill: str, task_id: str = "") -> dict[str, Any]:
     """Record that a skill was invoked, for skill-usage observability.
 
@@ -228,14 +272,14 @@ def tasks__log_skill_invocation(skill: str, task_id: str = "") -> dict[str, Any]
     return {"ok": True, "skill": skill, "task_id": task_id}
 
 
-@mcp.tool()
+@_tool(hook=_drift_reflection_hook)
 def tasks__get(task_id: str) -> dict[str, Any]:
     """Return one task object."""
     task = store().get(task_id)
-    return _drift_reflection_read(task.to_dict() if task else {"error": f"No task {task_id!r}"})
+    return task.to_dict() if task else {"error": f"No task {task_id!r}"}
 
 
-@mcp.tool()
+@_tool(hook=_drift_reflection_hook)
 def tasks__phase(task_id: str) -> dict[str, Any]:
     """Where a task stands in the grooming -> implementation -> introspection loop.
 
@@ -247,10 +291,10 @@ def tasks__phase(task_id: str) -> dict[str, Any]:
     task = store().get(task_id)
     if not task:
         return {"error": f"No task {task_id!r}"}
-    return _drift_reflection_read({"id": task.id, **dispatcher.task_phase(task)})
+    return {"id": task.id, **dispatcher.task_phase(task)}
 
 
-@mcp.tool()
+@_tool()
 def tasks__list(status: str = "open,blocked", type: str = "", parent: str = "", limit: int = 50) -> list[dict]:
     """List tasks. status is comma-separated; empty means every status."""
     statuses = tuple(s.strip() for s in status.split(",") if s.strip()) or None
@@ -262,7 +306,7 @@ def tasks__list(status: str = "open,blocked", type: str = "", parent: str = "", 
     ]
 
 
-@mcp.tool()
+@_tool()
 def tasks__search(query: str, limit: int = 25) -> list[dict]:
     """Full-text search over titles, motivation, notes, tags, files, and checklist items."""
     return [
@@ -275,7 +319,7 @@ def tasks__search(query: str, limit: int = 25) -> list[dict]:
 # Write
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@_tool()
 def tasks__create(
     title: str,
     type: str = "task",
@@ -307,7 +351,7 @@ def tasks__create(
     return {"ok": True, "id": task.id, "type": task.type, "status": task.status}
 
 
-@mcp.tool()
+@_tool(hook=dispatcher.combine(_drift_reflection_hook, _finish_reminder_hook))
 def tasks__update(
     task_id: str,
     title: str = "",
@@ -354,13 +398,10 @@ def tasks__update(
     if not decision:
         return _denied(decision)
     store().save(updated)
-    return _drift_reflection_call(
-        lambda: {"ok": True, "id": updated.id, "status": updated.status},
-        extra=("finish_reminder_nudge", lambda: dispatcher.finish_reminder_nudge(updated)),
-    )
+    return {"ok": True, "id": updated.id, "status": updated.status}
 
 
-@mcp.tool()
+@_tool(hook=dispatcher.combine(_drift_reflection_hook, _finish_reminder_hook))
 def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
     """Tick or untick one resolution checklist item by its zero-based index."""
     task = store().get(task_id)
@@ -371,13 +412,10 @@ def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, 
     task.resolution[index].done = done
     store().save(task)
     d, total = task.progress
-    return _drift_reflection_call(
-        lambda: {"ok": True, "id": task_id, "progress": {"done": d, "total": total}},
-        extra=("finish_reminder_nudge", lambda: dispatcher.finish_reminder_nudge(task)),
-    )
+    return {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
 
 
-@mcp.tool()
+@_tool(hook=_finish_hook)
 def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
     """Mark a task done.
 
@@ -404,14 +442,10 @@ def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
     scope = _scope()
     if store().get_active(scope) == task_id:
         store().clear_active(scope)
-    with dispatcher.tool_called(
-        post=lambda result: dispatcher.apply_nudge(result, "introspection_nudge", dispatcher.finish_nudge(task))
-    ) as call:
-        call.result = {"ok": True, "id": task_id, "status": "done"}
-        return call.result
+    return {"ok": True, "id": task_id, "status": "done"}
 
 
-@mcp.tool()
+@_tool(hook=_introspection_hook)
 def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
     """Append an introspection report to a task's history.
 
@@ -430,29 +464,23 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
         return {"error": f"No task {task_id!r}"}
     task.introspection.append(report)
     store().save(task)
-    with dispatcher.tool_called(
-        post=lambda result: dispatcher.apply_nudge(
-            result, "memory_nudge", dispatcher.introspection_nudge(report, task_id, store().conn)
-        )
-    ) as call:
-        call.result = {"ok": True, "id": task_id, "reports": len(task.introspection)}
-        return call.result
+    return {"ok": True, "id": task_id, "reports": len(task.introspection)}
 
 
-@mcp.tool()
+@_tool(hook=_drift_reflection_hook)
 def tasks__add_decision(task_id: str, decision: str) -> dict[str, Any]:
     """Record a design decision. Surfaces in tasks__context, where it explains the task's shape."""
     if store().get(task_id) is None:
         return {"error": f"No task {task_id!r}"}
     store().add_event(task_id, decision, kind="decision")
-    return _drift_reflection_call(lambda: {"ok": True, "id": task_id})
+    return {"ok": True, "id": task_id}
 
 
 # ---------------------------------------------------------------------------
 # Graph
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@_tool()
 def tasks__link(from_id: str, to_id: str, rel: str = "relates_to") -> dict[str, Any]:
     """Create an edge between two tasks. Idempotent."""
     for tid in (from_id, to_id):
@@ -461,19 +489,19 @@ def tasks__link(from_id: str, to_id: str, rel: str = "relates_to") -> dict[str, 
     return {"ok": True, "created": store().link(from_id, to_id, rel)}
 
 
-@mcp.tool()
+@_tool()
 def tasks__unlink(from_id: str, to_id: str, rel: str = "") -> dict[str, Any]:
     """Remove an edge, or every edge between two tasks when rel is omitted."""
     return {"ok": True, "removed": store().unlink(from_id, to_id, rel or None)}
 
 
-@mcp.tool()
+@_tool()
 def tasks__edges(task_id: str) -> dict[str, Any]:
     """Edges touching a task, both directions."""
     return store().edges(task_id)
 
 
-@mcp.tool()
+@_tool()
 def tasks__format_commit_message(task_id: str, subject: str, body: str = "") -> dict[str, Any]:
     """Format a commit message in the canonical shape: subject, blank, task:<id>, blank, body.
 
@@ -498,20 +526,20 @@ def tasks__format_commit_message(task_id: str, subject: str, body: str = "") -> 
     return {"ok": True, "message": message}
 
 
-@mcp.tool()
+@_tool(hook=_drift_reflection_hook)
 def tasks__add_commit(task_id: str, sha: str, repo: str = "") -> dict[str, Any]:
     """Record that a commit implemented a task. Idempotent."""
     if store().get(task_id) is None:
         return {"error": f"No task {task_id!r}"}
     recorded = store().add_commit(task_id, sha, repo)
-    return _drift_reflection_call(lambda: {"ok": True, "recorded": recorded})
+    return {"ok": True, "recorded": recorded}
 
 
 # ---------------------------------------------------------------------------
 # Active task
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@_tool()
 def tasks__set_active(task_id: str, confirm: bool = False) -> dict[str, Any]:
     """Set the active task for this workspace. Persisted, so it survives a restart.
 
@@ -530,14 +558,14 @@ def tasks__set_active(task_id: str, confirm: bool = False) -> dict[str, Any]:
     return {"ok": True, "active": task_id, "scope": scope}
 
 
-@mcp.tool()
+@_tool()
 def tasks__active() -> dict[str, Any]:
     """The active task for this workspace, if any."""
     task_id = store().get_active(_scope())
     return {"active": task_id, "scope": _scope()}
 
 
-@mcp.tool()
+@_tool()
 def tasks__clear_active() -> dict[str, Any]:
     """Clear the active task for this workspace."""
     store().clear_active(_scope())
@@ -553,13 +581,13 @@ def tasks__clear_active() -> dict[str, Any]:
 # why a store is never tied to whichever server happens to be running.
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@_tool()
 def concept__list(repo: str, module: str = "") -> dict[str, Any]:
     """Architectural concepts for a repo, optionally filtered to one module."""
     return {"concepts": ConceptStore(repo).list(module)}
 
 
-@mcp.tool()
+@_tool()
 def concept__get(repo: str, name: str) -> dict[str, Any]:
     """One concept by slug.
 
@@ -578,19 +606,19 @@ def concept__get(repo: str, name: str) -> dict[str, Any]:
     return {"found": True, "concept": concept}
 
 
-@mcp.tool()
+@_tool()
 def concept__modules(repo: str) -> dict[str, Any]:
     """Every module that has at least one concept."""
     return {"modules": ConceptStore(repo).modules()}
 
 
-@mcp.tool()
+@_tool()
 def concept__search(repo: str, query: str) -> dict[str, Any]:
     """Substring search over name, module, description, contracts, and invariants."""
     return {"concepts": ConceptStore(repo).search(query)}
 
 
-@mcp.tool()
+@_tool()
 def concept__upsert(repo: str, concept: dict) -> dict[str, Any]:
     """Insert or merge a concept.
 
@@ -604,13 +632,13 @@ def concept__upsert(repo: str, concept: dict) -> dict[str, Any]:
     return {"ok": True, "name": merged["name"], "module": merged["module"]}
 
 
-@mcp.tool()
+@_tool()
 def concept__delete(repo: str, name: str) -> dict[str, Any]:
     """Remove a concept. Returns deleted=False when it was not there."""
     return {"ok": True, "deleted": ConceptStore(repo).delete(name)}
 
 
-@mcp.tool()
+@_tool()
 def concept__uncovered(repo: str, modules: list[str]) -> dict[str, Any]:
     """Which of the given modules have no concept — the coverage check.
 
@@ -630,7 +658,7 @@ def concept__uncovered(repo: str, modules: list[str]) -> dict[str, Any]:
 # tasks__add_decision. This is neither, and must not grow into a general store.
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+@_tool()
 def task_memory__record(slug: str, text: str, task_id: str, kind: str = "constraint") -> dict[str, Any]:
     """Record a lesson from a finished task. kind: constraint | technique | pitfall.
 
@@ -646,7 +674,7 @@ def task_memory__record(slug: str, text: str, task_id: str, kind: str = "constra
         return {"error": str(exc)}
 
 
-@mcp.tool()
+@_tool()
 def task_memory__recall(query: str = "", kind: str = "", limit: int = 20,
                         include_superseded: bool = False) -> dict[str, Any]:
     """Search loop memories. Omit query to list the most recent.
@@ -659,14 +687,14 @@ def task_memory__recall(query: str = "", kind: str = "", limit: int = 20,
     return {"memories": memory().recall(query, kind, limit, include_superseded)}
 
 
-@mcp.tool()
+@_tool()
 def task_memory__get(slug: str) -> dict[str, Any]:
     """One memory by slug, including its standing and every task linked to it."""
     found = memory().get(slug)
     return found or {"error": f"No memory {slug!r}"}
 
 
-@mcp.tool()
+@_tool()
 def task_memory__link(slug: str, task_id: str, relation: str = "confirmed_by") -> dict[str, Any]:
     """Record that a task confirmed or contradicted a memory. Idempotent.
 
@@ -683,7 +711,7 @@ def task_memory__link(slug: str, task_id: str, relation: str = "confirmed_by") -
         return {"error": str(exc)}
 
 
-@mcp.tool()
+@_tool()
 def task_memory__supersede(slug: str, by: str) -> dict[str, Any]:
     """Mark a memory obsolete, naming the memory that replaced it.
 
@@ -696,7 +724,7 @@ def task_memory__supersede(slug: str, by: str) -> dict[str, Any]:
         return {"error": str(exc)}
 
 
-@mcp.tool()
+@_tool()
 def task_memory__forget(slug: str) -> dict[str, Any]:
     """Delete a memory outright — for one that was WRONG, not merely outdated.
 

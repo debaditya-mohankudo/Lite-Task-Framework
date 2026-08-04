@@ -500,6 +500,34 @@ class TestRegistration:
             assert tool.description, f"{tool.name} has no description"
 
 
+class TestToolCallLogging:
+    """Coverage for task:58782207: every registered tool must go through
+    tool_called, so 'no tool was missed' is a checked fact, not a claim.
+
+    Called with no arguments — most raise TypeError for a missing required
+    argument, but that happens INSIDE tool_called's wrapped call (whether via
+    the `logged` decorator or a hook-bearing tool's own inner tool_called),
+    so it still produces exactly one `tool=<name>` log line. Whether that
+    call succeeds, refuses, or errors is irrelevant to this test.
+    """
+
+    @pytest.mark.anyio
+    async def test_every_registered_tool_logs_exactly_once_when_called(self, caplog):
+        import logging
+
+        for tool in await m.mcp.list_tools():
+            fn = getattr(m, tool.name)
+            caplog.clear()
+            with caplog.at_level(logging.INFO, logger="taskfw"):
+                try:
+                    fn()
+                except Exception:
+                    pass
+                lines = [line for line in caplog.text.splitlines() if f"tool={tool.name} " in line]
+            assert lines, f"{tool.name} produced no tool_called log line"
+            assert len(lines) == 1, f"{tool.name} logged {len(lines)} times, expected exactly 1"
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
