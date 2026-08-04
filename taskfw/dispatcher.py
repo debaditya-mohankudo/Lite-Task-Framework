@@ -87,7 +87,7 @@ def apply_introspection_nudge(
         result["memory_nudge"] = nudge
 
 
-_DRIFT_REFLECTION_INTERVAL = 8  # calls between nudges, per (scope, task) — matches claude-hooks' own interval
+_DRIFT_REFLECTION_INTERVAL = 4  # calls between nudges, per (scope, task) — tightened from claude-hooks' original 8 (task:a6fb9f45)
 _drift_reflection_call_counts: dict[tuple[str, str], int] = {}  # (scope, active_task_id) -> count
 
 
