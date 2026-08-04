@@ -64,18 +64,28 @@ keeps the framework portable, because a rule you can reach around is not a rule.
 ## Context is pulled, never pushed
 
 Nothing appears in an agent's context by itself. There is no assembled block,
-no per-turn injection, no invisible hand deciding what is relevant.
+no per-turn injection, no invisible hand deciding what is relevant — every
+fact present had to be fetched, on purpose, by something that asked for it.
 
 This is a deliberate trade with a real cost: an agent that does not ask gets
-nothing. It is accepted because pushed context has worse failure modes — it
-grows without anyone noticing, it is expensive on every single turn whether or
-not it was needed, and it is impossible to reason about. A pull is explicit,
-paid for once, and auditable. The agent knows what it read.
+nothing. It is accepted because pushed context fails in worse, quieter ways —
+it grows without anyone noticing, it is paid for on every turn whether or not
+it was needed, and there is no moment in the transcript where you can point
+and say *that* is why the agent knew this. A pull is explicit, paid for once,
+and auditable — the agent knows what it read and why.
 
 The corollary matters more than the principle: **an omission must never be
 indistinguishable from an absence.** If something was left out for space, the
 answer says so. Silent truncation is the one thing a pull interface cannot
-afford, because the caller has no other way to find out.
+afford, because the caller has no other way to find out whether nothing was
+there or something was cut.
+
+Advisory nudges riding on a tool response (dispatcher.py) are not an
+exception to this. A nudge fires only inside the response to a call the
+agent already made — no nudge without a pull — and it re-surfaces what the
+task already announced (its own id, title, state) rather than fetching new
+facts. Nothing is selected from outside what the caller already asked about;
+only the timing of the reminder is not the caller's choice.
 
 ## Structure only where it earns its keep
 
