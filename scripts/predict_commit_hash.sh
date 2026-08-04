@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # Predict the SHA git would assign to a commit before actually making it.
 #
-# Why this exists: this repo's SysML model packages carry a derivedFromCommit
-# stamp naming the last commit that touched the code they model. A commit
-# can't reference its own future SHA, so re-stamping has always trailed the
-# code commit it describes by a separate follow-up commit. Predicting the
-# hash first lets the stamp update land in the SAME commit instead — compute
-# the SHA, write it into the .sysml file, stage everything, commit once.
+# Useful for referencing an upcoming commit's hash from OUTSIDE its own tree
+# — telling a human or an external system the SHA in advance. It does NOT
+# solve this repo's SysML derivedFromCommit self-reference problem: writing
+# a predicted hash into a tracked file changes the tree, which changes the
+# hash, so a commit's own stamp can never correctly reference that same
+# commit (confirmed empirically — predicting, embedding, and re-predicting
+# gives a different hash every time; there is no fixed point to converge on).
+# Model re-stamps stay a genuine two-commit pattern: make the code commit,
+# its real SHA is then already known with no prediction needed, and a
+# separate commit writes that real SHA into the stamp.
 #
 # Uses a throwaway index copy so the real staging area (and the working
 # tree) are never touched — safe to run at any point, whether or not you

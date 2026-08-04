@@ -124,6 +124,46 @@ is not lost: `python -m taskfw.backfill` re-derives every link from git
 history regardless of whether this step ever ran. Prefer calling it anyway;
 backfill is the recovery path, not a substitute for doing this.
 
+## Re-stamping a SysML model, if this commit touched a modelled path
+
+`uv run pytest -q` (already run above) fails `tests/test_model_provenance.py`
+if any `models/*.sysml` package's `modelledPaths` overlaps the files this
+commit just touched — the stamp is now stale by definition, one commit late.
+
+The fix is always a **separate follow-up commit**, never folded into the one
+that just landed:
+
+```bash
+sha=$(git rev-parse HEAD)   # the code commit that just landed
+```
+
+This works with no prediction and no computation beyond that one command,
+because of a structural fact worth stating plainly: the stamp-only commit
+you're about to make never itself touches a modelled path (it only touches
+the `.sysml` file, which is not in its own `modelledPaths` list), so
+`git log`'s "last commit touching modelledPaths" keeps resolving to `sha`
+even after the stamp commit lands on top of it. A commit's stamp cannot
+reference its own hash — the tree the hash is computed over would have to
+contain that same hash, which is circular and has no fixed point — but a
+stamp commit was never trying to reference itself in the first place; it
+only ever needs to reference the commit before it, which is already known.
+
+Before bumping the stamp, re-read the model package's text against what
+changed (per `tests/test_model_provenance.py`'s own instructions) — accurate
+or not is a judgment call this step does not skip. Then:
+
+```python
+tasks__format_commit_message(
+    task_id="<id>",
+    subject="Re-stamp <package> after <short description of the code commit>",
+    body="Why the stamp went stale, and confirmation that the package's text was re-read and still holds (or what was fixed if it didn't).",
+)
+```
+
+Write, commit (`git commit -F <path>`), and link it with `tasks__add_commit`
+exactly as above — it is its own commit against the same task, not an
+amendment to the one before it.
+
 ## Splitting
 
 Prefer one commit per idea. But `tests/test_concepts.py` binds each module to a
