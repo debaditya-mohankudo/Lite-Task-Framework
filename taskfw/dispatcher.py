@@ -105,6 +105,16 @@ def drift_reflection_nudge(scope: str, active_task_id: str, active_task_title: s
     stretch of tool calls can drift from what's active without the caller
     noticing, since the active task is otherwise only ever announced once, at
     activation. No active task means nothing to remind about.
+
+    AN AWARENESS NUDGE, NOT A DETECTION MECHANISM. This function has no view
+    into what happened during the calls it's counting — it cannot tell drift
+    from a stretch of perfectly on-task work, because it isn't given anything
+    to compare against. What it does is force a periodic re-read of the task
+    label, on a fixed interval, so awareness has to be re-established rather
+    than fading silently after the one-time announcement at activation.
+    Whether that re-established awareness catches anything is left entirely
+    to whoever reads it; the mechanism's job ends at making the check-in
+    happen, not at judging its outcome.
     """
     if not active_task_id:
         return None
