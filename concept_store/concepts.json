@@ -10,7 +10,8 @@
         "drift_reflection_nudge(scope, active_task_id, active_task_title) returns None or a string; fires every _DRIFT_REFLECTION_INTERVAL (4, tightened from claude-hooks' original 8 — task:a6fb9f45) calls under the same (scope, active_task_id) pair, using a module-level call counter keyed on that pair — no active task means no nudge, and the counter never resets except by process restart",
         "finish_reminder_nudge(task) returns None or a string; fires when task.progress is 100% done (total > 0, done == total) AND task.status == 'open' — stateless, re-evaluated fresh on every call rather than tracking a fired-once flag (task:f3a10710)",
         "tool_called(pre, post): post runs exactly once, only on a clean exit (no exception) with call.result.get('ok') truthy — never on an {'error': ...} refusal, never when the block raises",
-        "apply_nudge(result, key, nudge) is the one shared result-mutation helper for every nudge function — call the nudge function yourself, then apply_nudge(result, key, nudge) sets result[key] only if nudge is truthy. Replaced the four near-identical apply_introspection_nudge/apply_finish_nudge/apply_drift_reflection_nudge/apply_finish_reminder_nudge wrappers (task:f3a10710) — the nudge functions themselves keep their distinct signatures (conn vs scope/task_id/title vs task), only the 'if truthy, set the key' step was shared."
+        "apply_nudge(result, key, nudge) is the one shared result-mutation helper for every nudge function — call the nudge function yourself, then apply_nudge(result, key, nudge) sets result[key] only if nudge is truthy. Replaced the four near-identical apply_introspection_nudge/apply_finish_nudge/apply_drift_reflection_nudge/apply_finish_reminder_nudge wrappers (task:f3a10710) — the nudge functions themselves keep their distinct signatures (conn vs scope/task_id/title vs task), only the 'if truthy, set the key' step was shared.",
+        "_drift_reflection_call(result_builder, extra=None) in mcp_server.py takes an optional (key, nudge_thunk) pair applied in the same tool_called post as drift_reflection_nudge — added so tasks__check_item/tasks__update didn't need their own local closure just to attach finish_reminder_nudge's result (task:f3a10710, post-collapse /simplify fix commit 7d3ca8c); without this, the apply_nudge collapse's duplication removal was quietly undone one call site at a time"
       ],
       "created_at": "2026-08-01T10:02:54.174596+00:00",
       "description": "Single home for advisory, non-blocking response annotations (nudges) on MCP tool results. Distinct from lifecycle.py (blocking rule enforcement, checked before a write) and store.py (persistence) — a nudge never refuses a write and never changes what's stored, it only surfaces something true that would otherwise be silent. Exists to prevent mcp_server.py tools from each growing their own private _foo_check() helper. tool_called is the pre/post-hook shape nudges run through: the same shape as claude-hooks' own gates, weighed deliberately (task:7b25ee0d) before building — worth it here because it is self-contained inside taskfw's own server (no external hook dependency) and scoped only to taskfw's own tools, never another server's calls. A switched-active-task signal briefly lived here as switched_active_nudge (task:5c7b15f7) before being superseded by a real blocking rule (lifecycle.check_active_switch, task:209f33c8) — evidence that not everything advisory stays advisory once it turns out to be load-bearing enough that skipping it is itself the failure mode.",
@@ -40,7 +41,7 @@
         "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires AFTER tasks__finish when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called — task:a6fb9f45 sat open at 4/4 for this exact reason, caught only by an unrelated review pass",
         "finish_reminder_nudge is wired into both tasks__check_item (ticking the last item) and tasks__update (which can also replace the resolution list wholesale and land it at 100% in one call) — wiring only one call site would have missed the other completion path"
       ],
-      "last_validated": "2026-08-04T03:04:11.117816+00:00",
+      "last_validated": "2026-08-04T03:40:31.807423+00:00",
       "module": "taskfw/dispatcher.py",
       "name": "advisory-nudge-dispatcher"
     },
@@ -399,6 +400,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-04T03:04:11.117950+00:00"
+    "updated_at": "2026-08-04T03:40:31.807510+00:00"
   }
 }
