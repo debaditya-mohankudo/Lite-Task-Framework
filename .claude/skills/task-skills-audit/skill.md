@@ -79,11 +79,19 @@ tasks__log_skill_invocation(skill="task-skills-audit/3-tool-surface-completeness
 
 The question that finds real gaps: **does a tool exist that a skill should mention and does not?**
 
-```python
-tasks__list()   # any tool name in mcp_server.py absent from every skill
+`tasks__list()` cannot answer this — it lists tasks, not registered tool names, and in a shared `tasks.db` it returns rows from every repo using that database, not just this one. Enumerate the tool surface from source instead:
+
+```bash
+grep -oE '^def (tasks__[a-z_]+|concept__[a-z_]+)' taskfw/mcp_server.py | sed 's/^def //' | sort
 ```
 
-Compare the registered tools against what the skills reference. A tool nobody is told to call is a tool nobody calls — this is how `tasks__grooming_accuracy` would have gone unused after being built. Absence from the skills is a finding, not an oversight to fix silently.
+Then, for each name, check whether any skill mentions it:
+
+```bash
+grep -rl '\btasks__the_name\b' .claude/skills/*/skill.md   # repeat per tool
+```
+
+Compare the registered tools against what the skills reference. A tool nobody is told to call is a tool nobody calls — this is how `tasks__grooming_accuracy` would have gone unused after being built, and how `tasks__logs` went unreferenced until task:c814d55a caught it. Absence from the skills is a finding, not an oversight to fix silently.
 
 Also check the reverse of the mechanical test: a concept in `concept_store/concepts.json` describing a workflow the skills never invoke.
 

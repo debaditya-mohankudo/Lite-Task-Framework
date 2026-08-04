@@ -39,6 +39,15 @@ git log --grep "task:<id>" --oneline -p --max-count=5
 
 If that is empty because commits were never tagged, fall back to `git log --since=<task created_at> -- <files from the task>`. Never let this step come up silently empty.
 
+The bundle also carries no operational trace — what the tools actually did while the task was active, as opposed to what was decided. `tasks__logs` fills that gap:
+
+```python
+tasks__logs(logger="taskfw.skill.<name>/<step-slug>", limit=50)   # one section's calls
+tasks__logs(limit=200)                                            # everything, filter client-side by prefix
+```
+
+`logger` is exact-match only — there is no prefix query — so auditing a whole skill's run means either the exact name per section or an unfiltered pull filtered afterward.
+
 Use Read and Grep for the code. The framework ships no code search of its own, deliberately.
 
 ## Step 3 — Grade the grooming
