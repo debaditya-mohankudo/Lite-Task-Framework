@@ -32,6 +32,10 @@ Four statuses: `open`, `blocked`, `done`, `abandoned`. The last two are terminal
 
 ### 1. Decompose, if it genuinely splits
 
+```python
+tasks__log_skill_invocation(skill="task-framework/step-1-decompose")
+```
+
 If the work has two or three distinct sequential phases, propose the split to the user and get confirmation before creating anything. Check the concept store first where the repo has one — `concept__list(repo=...)` — and let existing module boundaries guide the split. A split that cuts against a documented boundary is a signal to reconsider.
 
 If it is one coherent piece of work, create one task. Do not force a split.
@@ -39,6 +43,7 @@ If it is one coherent piece of work, create one task. Do not force a split.
 ### 2. Create
 
 ```python
+tasks__log_skill_invocation(skill="task-framework/step-2-create")
 tasks__create(title="...", type="epic", motivation="...")          # if grouping
 tasks__create(title="...", parent="<epic id>", motivation="...",
               resolution=["step one", "step two"], files=["a.py"], tags=["area"])
@@ -48,6 +53,10 @@ There is no body template and no required sections — the object's shape is the
 
 ### 3. Groom before writing code
 
+```python
+tasks__log_skill_invocation(skill="task-framework/step-3-groom", task_id=task_id)
+```
+
 Run [/task-grooming](../task-grooming/skill.md) with `task:<id>` or `epic:<id>`. Skip only for trivial single-task work.
 
 Gaps caught in grooming cost nothing. Gaps caught mid-implementation cost a revert and a replan.
@@ -56,7 +65,7 @@ Gaps caught in grooming cost nothing. Gaps caught mid-implementation cost a reve
 
 ```python
 tasks__set_active(task_id)
-tasks__log_skill_invocation(skill="task-framework", task_id=task_id)
+tasks__log_skill_invocation(skill="task-framework/step-4-activate", task_id=task_id)
 tasks__context(task_id)      # ← you must call this
 ```
 
@@ -70,6 +79,10 @@ Task <id> active — <title>
 
 ### 5. Work
 
+```python
+tasks__log_skill_invocation(skill="task-framework/step-5-work", task_id=task_id)
+```
+
 Follow [/task-implementation](../task-implementation/skill.md). Tick items as they complete:
 
 ```python
@@ -81,11 +94,16 @@ Find code with Read, Grep, and Glob. The framework deliberately ships no code se
 
 ### 6. Commit
 
+```python
+tasks__log_skill_invocation(skill="task-framework/step-6-commit", task_id=task_id)
+```
+
 Put `task:<id>` in the commit message. Where the PostToolUse hook is installed the link is recorded automatically; where it is not, `python -m taskfw.backfill` recovers it from git history afterwards.
 
 ### 7. Finish, then introspect
 
 ```python
+tasks__log_skill_invocation(skill="task-framework/step-7-finish-then-introspect", task_id=task_id)
 tasks__finish(task_id, reason="what actually shipped")
 ```
 
@@ -94,6 +112,7 @@ Then run [/task-introspection](../task-introspection/skill.md). It is the step t
 ## Resuming
 
 ```python
+tasks__log_skill_invocation(skill="task-framework/resuming")
 tasks__active()      # what was I on?
 tasks__context()     # the whole bundle for it
 ```
@@ -101,6 +120,7 @@ tasks__context()     # the whole bundle for it
 ## Invoked with no task description
 
 ```python
+tasks__log_skill_invocation(skill="task-framework/invoked-with-no-task-description")
 tasks__list()
 ```
 

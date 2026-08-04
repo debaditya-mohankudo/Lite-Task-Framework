@@ -20,15 +20,13 @@ This is the same class of risk the repo's other parity checks address, and it ha
 
 **Read-only by default.** Flag drift; let the user decide.
 
-## Log the invocation
+## What is checked mechanically
 
 ```python
-tasks__log_skill_invocation(skill="task-skills-audit", task_id="")
+tasks__log_skill_invocation(skill="task-skills-audit/mechanical-check")
 ```
 
-This skill audits the skills, not a single task, so `task_id` is empty.
-
-## What is checked mechanically
+This skill audits the skills, not a single task, so `task_id` is left empty on every call below.
 
 `tests/test_skills.py` already enforces the parts that can be enforced:
 
@@ -48,6 +46,10 @@ Everything below is what a test cannot check.
 
 ## 1. Skill ↔ methodology drift
 
+```python
+tasks__log_skill_invocation(skill="task-skills-audit/1-skill-methodology-drift")
+```
+
 Each skill's frontmatter names its `doc`. The division is deliberate: **the doc owns the reasoning, the skill owns the invocation.** Read both and check:
 
 - Does the skill contradict its doc anywhere? The doc wins — it is the portable asset; the skill is one host's delivery mechanism.
@@ -55,6 +57,10 @@ Each skill's frontmatter names its `doc`. The division is deliberate: **the doc 
 - Has the doc gained a step the skill never mentions?
 
 ## 2. Cross-reference accuracy
+
+```python
+tasks__log_skill_invocation(skill="task-skills-audit/2-cross-reference-accuracy")
+```
 
 Build a list of every claim one skill makes about another's mechanism, then verify each against that skill's current text. The kind of claim to check:
 
@@ -67,6 +73,10 @@ Do not guess which side is stale. Describe the mismatch and let the user decide.
 
 ## 3. Tool surface completeness
 
+```python
+tasks__log_skill_invocation(skill="task-skills-audit/3-tool-surface-completeness")
+```
+
 The question that finds real gaps: **does a tool exist that a skill should mention and does not?**
 
 ```python
@@ -78,6 +88,10 @@ Compare the registered tools against what the skills reference. A tool nobody is
 Also check the reverse of the mechanical test: a concept in `concept_store/concepts.json` describing a workflow the skills never invoke.
 
 ## 4. Vestigial machinery
+
+```python
+tasks__log_skill_invocation(skill="task-skills-audit/4-vestigial-machinery")
+```
 
 These skills were ported from a system with more moving parts. Watch for anything that assumes machinery this framework deliberately does not have:
 
@@ -92,6 +106,10 @@ These skills were ported from a system with more moving parts. Watch for anythin
 Each of those is a thing the framework removed on purpose. A skill that still assumes one is describing a system that does not exist.
 
 ## Report
+
+```python
+tasks__log_skill_invocation(skill="task-skills-audit/report")
+```
 
 ```
 ## task-skills-audit: N skills checked

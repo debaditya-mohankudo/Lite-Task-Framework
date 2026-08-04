@@ -26,7 +26,7 @@ After a grooming pass, an engineer should know what to build, where, why that wa
 ## Step 0 — Log the invocation
 
 ```python
-tasks__log_skill_invocation(skill="task-grooming", task_id=task_id)
+tasks__log_skill_invocation(skill="task-grooming/step-0-log-invocation", task_id=task_id)
 ```
 
 One call, before Step 1. If grooming a batch, log once per task_id in the loop.
@@ -34,6 +34,7 @@ One call, before Step 1. If grooming a batch, log once per task_id in the loop.
 ## Step 1 — Pull the context
 
 ```python
+tasks__log_skill_invocation(skill="task-grooming/step-1-pull-context", task_id=task_id)
 tasks__context(task_id)
 ```
 
@@ -45,6 +46,10 @@ The bundle returns the task, decisions, prior grooming, parent/children/edges, c
 
 ## Step 2 — Treat prior grooming as a draft
 
+```python
+tasks__log_skill_invocation(skill="task-grooming/step-2-treat-prior-grooming", task_id=task_id)
+```
+
 The bundle's `grooming` section holds the last pass. **Revise it; do not start from a blank page.** Carry forward what still holds, revise what changed, drop what is resolved, add what is new.
 
 A risk already graded `avoided` or `materialized` is evidence about what actually held up — the most expensive information in the task. Discarding it to write a fresh block throws that away and risks re-flagging something already settled.
@@ -52,6 +57,7 @@ A risk already graded `avoided` or `materialized` is evidence about what actuall
 ## Step 3 — Concept lookup
 
 ```python
+tasks__log_skill_invocation(skill="task-grooming/step-3-concept-lookup", task_id=task_id)
 concept__list(repo="<abs repo path>")
 concept__search(repo="<abs repo path>", query="<module or idea>")
 concept__get(repo="<abs repo path>", name="<slug>")
@@ -75,6 +81,10 @@ Record findings in `prior_art` and note the slugs.
 
 ## Step 4 — Verify the premise
 
+```python
+tasks__log_skill_invocation(skill="task-grooming/step-4-verify-premise", task_id=task_id)
+```
+
 The highest-value step, and the easiest to skip.
 
 For anything claiming "X is the authoritative file", "Y calls Z", "this is the production path", or "this duplication is accidental" — **spend one concrete verification step before accepting it.** Read the file. Grep for callers. Check `git log`. Inspect the running system.
@@ -82,6 +92,10 @@ For anything claiming "X is the authoritative file", "Y calls Z", "this is the p
 This applies just as much to a premise you wrote yourself an hour ago as to one you inherited. Self-authored premises are exactly as unexamined and feel more trustworthy, which makes them worse.
 
 ## Step 5 — Engineering review
+
+```python
+tasks__log_skill_invocation(skill="task-grooming/step-5-engineering-review", task_id=task_id)
+```
 
 1. **Is the outcome obvious?** Would two engineers produce essentially the same implementation? If not, name the ambiguity.
 2. **Can work start today?** If not, what decision or dependency is missing?
@@ -92,6 +106,10 @@ This applies just as much to a premise you wrote yourself an hour ago as to one 
 7. **What will stall this?** Predict the largest remaining risk.
 
 ## Step 6 — Structural checks
+
+```python
+tasks__log_skill_invocation(skill="task-grooming/step-6-structural-checks", task_id=task_id)
+```
 
 | Check | Passes when |
 |---|---|
@@ -107,6 +125,7 @@ Duplicate ownership is distinct from contradiction: two tasks can agree on what 
 ## Step 7 — Write findings
 
 ```python
+tasks__log_skill_invocation(skill="task-grooming/step-7-write-findings", task_id=task_id)
 tasks__update(task_id, grooming={
     "clarifications":         ["..."],
     "hidden_assumptions":     ["..."],
@@ -133,6 +152,10 @@ Introspection grades every risk, so a risk that cannot be graded is noise.
 The first can be graded `materialized`, `avoided`, or `wrong`. The second cannot be graded at all, and so teaches nothing. `tasks__grooming_accuracy` counts the ungradeable ones against you.
 
 ## Step 8 — Report
+
+```python
+tasks__log_skill_invocation(skill="task-grooming/step-8-report", task_id=task_id)
+```
 
 ```
 ✓ task:abc — ready  (title)

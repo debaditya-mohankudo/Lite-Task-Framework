@@ -22,7 +22,7 @@ In effect for any active task. Also reach for it when the user says "just implem
 
 ```python
 tasks__set_active(task_id)
-tasks__log_skill_invocation(skill="task-implementation", task_id=task_id)
+tasks__log_skill_invocation(skill="task-implementation/start", task_id=task_id)
 tasks__context(task_id)     # read the grooming findings before writing code
 ```
 
@@ -70,6 +70,10 @@ If an item can't be checked off — a decision is still open, or what it asked f
 
 ## The loop
 
+```python
+tasks__log_skill_invocation(skill="task-implementation/the-loop", task_id=task_id)
+```
+
 1. **Understand** — objective, subsystem, existing patterns, constraints. If uncertainty is high, search; if low, implement. Stop searching once you know enough.
 2. **Think** — smallest next change, expected outcome, how you will validate it.
 3. **Implement** — prefer existing abstractions and conventions. Avoid unrelated cleanup and speculative improvement.
@@ -91,6 +95,7 @@ Sometimes the test encodes an assumption the design deliberately contradicts. Do
 ## Finish
 
 ```python
+tasks__log_skill_invocation(skill="task-implementation/finish", task_id=task_id)
 tasks__finish(task_id, reason="what actually shipped")
 ```
 

@@ -19,13 +19,17 @@ This is the step that closes the loop, and the easiest one to skip — the work 
 Use the supplied id, or the most recently finished task.
 
 ```python
-tasks__log_skill_invocation(skill="task-introspection", task_id=task_id)
+tasks__log_skill_invocation(skill="task-introspection/step-1-identify-task", task_id=task_id)
 tasks__context(task_id)
 ```
 
 Everything needed is in the bundle: the task, decisions already logged, the grooming being graded, the graph, and the commits. There is no separate history call and no re-indexing step.
 
 ## Step 2 — Gather what the bundle does not hold
+
+```python
+tasks__log_skill_invocation(skill="task-introspection/step-2-gather-more", task_id=task_id)
+```
 
 The bundle's `commits` section lists what landed. To see the diffs, use git directly:
 
@@ -38,6 +42,10 @@ If that is empty because commits were never tagged, fall back to `git log --sinc
 Use Read and Grep for the code. The framework ships no code search of its own, deliberately.
 
 ## Step 3 — Grade the grooming
+
+```python
+tasks__log_skill_invocation(skill="task-introspection/step-3-grade-grooming", task_id=task_id)
+```
 
 **If the task has no `grooming`, skip this step silently.** There is no `groomed_at` flag to check — the presence of the findings is the signal.
 
@@ -69,6 +77,7 @@ Be honest about *materialized* versus *unresolved*. A risk that said "decide X n
 ## Step 4 — Grade the grader
 
 ```python
+tasks__log_skill_invocation(skill="task-introspection/step-4-grade-the-grader", task_id=task_id)
 tasks__grooming_accuracy(limit=25)
 ```
 
@@ -85,6 +94,10 @@ Both of the first two are signals to change grooming itself, not just to note th
 
 ## Step 5 — Ask
 
+```python
+tasks__log_skill_invocation(skill="task-introspection/step-5-ask", task_id=task_id)
+```
+
 1. **Where did the uncertainty come from?** Could grooming have removed it?
 2. **What decisions were never recorded?** Compare the plan to what was built. Log every gap with `tasks__add_decision` — **this is the highest-value part of the pass.**
 3. **What surprised us?** Should it become durable knowledge?
@@ -94,6 +107,7 @@ Both of the first two are signals to change grooming itself, not just to note th
 ## Step 6 — Record
 
 ```python
+tasks__log_skill_invocation(skill="task-introspection/step-6-record", task_id=task_id)
 tasks__add_introspection(task_id, report={
     "date": "YYYY-MM-DD",
     "grooming_accuracy": {"predicted": N, "materialized": M, "avoided": K, "wrong": J},
@@ -110,6 +124,10 @@ Reports **append**, unlike grooming. Each is evidence about a distinct execution
 The `grooming_accuracy` tallies here are a human-readable summary. They are **not** what `tasks__grooming_accuracy` counts — that recomputes from the per-risk grades and reports any disagreement with what you wrote here. Get them right, but the grades are the record.
 
 ## Step 7 — Loop memory
+
+```python
+tasks__log_skill_invocation(skill="task-introspection/step-7-loop-memory", task_id=task_id)
+```
 
 Three of the four things a good pass produces already have homes: graded risks in the task's grooming, decisions in `tasks__add_decision`, architectural facts in the concept store. The other two belong nowhere else.
 
@@ -142,6 +160,10 @@ The row survives and names its replacement — the same standard as flagging sta
 
 ## Step 8 — Concept store
 
+```python
+tasks__log_skill_invocation(skill="task-introspection/step-8-concept-store", task_id=task_id)
+```
+
 The store is a live body meant to grow, not just get corrected. A task leaves behind either a **change** (an existing concept was wrong or incomplete) or **growth** (a module had no concept and this task is the first to understand it well enough to write one).
 
 ```python
@@ -167,6 +189,10 @@ concept__upsert(repo="<abs repo path>", concept={
 Skip where the change was test-only or doc-only with no new behaviour to capture. Skip silently if the repo has no store.
 
 ## Step 9 — Output
+
+```python
+tasks__log_skill_invocation(skill="task-introspection/step-9-output", task_id=task_id)
+```
 
 ```text
 ## Introspection: <id> — <title>
