@@ -224,6 +224,7 @@
         "tasks__add_introspection appends where tasks__update(grooming=...) replaces",
         "tasks__format_commit_message(task_id, subject, body) validates the task exists and returns the canonical message shape",
         "tasks__logs(logger, level, limit) reads config.db_path() directly via log_conn(), never store().conn",
+        "tasks__logs(logger, level, limit) filters by EXACT match only (SQL 'logger=?'/'level=?'), no LIKE/prefix/wildcard support — auditing a family of related logger names (e.g. every 'taskfw.skill.<name>/<step>' row for one skill) requires either querying each exact name individually or pulling unfiltered rows and filtering client-side by string prefix (verified task:a0bb2c26).",
         "tasks__log_skill_invocation(skill, task_id='') is a thin wrapper around get_logger()",
         "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task",
         "_tool(hook=None) is the single decorator every tool carries instead of @mcp.tool(): it wraps fn in dispatcher.tool_called(fn.__name__, post=hook) and registers the WRAPPED function with mcp.tool() itself, so the module-level name bound is the logged version too. Plain tools use @_tool(); tools needing one or more nudges pass @_tool(hook=some_hook) or @_tool(hook=dispatcher.combine(hook_a, hook_b)).",
@@ -248,7 +249,7 @@
         "No tool is missing the _tool wrapper and none is double-wrapped — pinned by tests/test_mcp_tools.py::TestToolCallLogging, which enumerates the live m.mcp.list_tools() registry rather than a hand-maintained list, so a new tool that forgets the decorator fails this test rather than silently going unlogged",
         "drift_reflection_nudge is wired onto reads and mutating tools alike (7 tools total) but NOT onto tasks__create, tasks__finish, or tasks__add_introspection — a deliberate existing selectivity this refactor preserved rather than widened to 'every mutating tool automatically'"
       ],
-      "last_validated": "2026-08-04T13:03:55.802621+00:00",
+      "last_validated": "2026-08-04T15:26:14.233101+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface"
     },
@@ -411,6 +412,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-04T13:03:55.802685+00:00"
+    "updated_at": "2026-08-04T15:26:14.233169+00:00"
   }
 }
