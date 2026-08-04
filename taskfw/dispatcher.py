@@ -78,15 +78,6 @@ def introspection_nudge(report: dict, task_id: str, conn: sqlite3.Connection) ->
     )
 
 
-def apply_introspection_nudge(
-    result: dict[str, Any], report: dict, task_id: str, conn: sqlite3.Connection
-) -> None:
-    """Mutate `result` with a `memory_nudge` key, or leave it untouched."""
-    nudge = introspection_nudge(report, task_id, conn)
-    if nudge:
-        result["memory_nudge"] = nudge
-
-
 _DRIFT_REFLECTION_INTERVAL = 4  # calls between nudges, per (scope, task) — tightened from claude-hooks' original 8 (task:a6fb9f45)
 _drift_reflection_call_counts: dict[tuple[str, str], int] = {}  # (scope, active_task_id) -> count
 
@@ -132,15 +123,6 @@ def drift_reflection_nudge(scope: str, active_task_id: str, active_task_title: s
     )
 
 
-def apply_drift_reflection_nudge(
-    result: dict[str, Any], scope: str, active_task_id: str, active_task_title: str = ""
-) -> None:
-    """Mutate `result` with a `drift_reflection_nudge` key, or leave it untouched."""
-    nudge = drift_reflection_nudge(scope, active_task_id, active_task_title)
-    if nudge:
-        result["drift_reflection_nudge"] = nudge
-
-
 def finish_nudge(task) -> str | None:
     """Advisory nudge for tasks__finish, or None when there's nothing to say.
 
@@ -154,11 +136,38 @@ def finish_nudge(task) -> str | None:
     return f"task:{task.id} closed with no introspection report yet. Consider running /task-introspection."
 
 
-def apply_finish_nudge(result: dict[str, Any], task) -> None:
-    """Mutate `result` with an `introspection_nudge` key, or leave it untouched."""
-    nudge = finish_nudge(task)
+def finish_reminder_nudge(task) -> str | None:
+    """Advisory nudge for tasks__check_item/tasks__update, or None when there's nothing to say.
+
+    Stateless by design, unlike drift_reflection_nudge's call counter: this
+    checks the task's current resolution/status on every qualifying save
+    rather than firing once and remembering it fired, because check_item and
+    update are called far less often per task than the mutating tools
+    drift_reflection_nudge throttles, so re-firing on a later save that still
+    finds the task 100%-done-but-open costs little and needs no extra state.
+
+    A checklist reaching 4/4 is not the same as the task being finished
+    (task:a6fb9f45 sat open at 4/4 until an unrelated review pass caught it,
+    since nothing surfaced the gap) — this closes that gap for whoever is
+    looking at the result.
+    """
+    done, total = task.progress
+    if total == 0 or done < total or task.status != "open":
+        return None
+    return f"task:{task.id} has all {total} resolution item(s) checked but is still open. Call tasks__finish when the work is done."
+
+
+def apply_nudge(result: dict[str, Any], key: str, nudge: str | None) -> None:
+    """Set `result[key] = nudge`, or leave `result` untouched when there's nothing to say.
+
+    One shared wrapper for every nudge function's result — call the nudge
+    function yourself first (its own signature is the real variation between
+    introspection_nudge/drift_reflection_nudge/finish_nudge/
+    finish_reminder_nudge; there is nothing left to template once the "if
+    truthy, set the key" step is factored out).
+    """
     if nudge:
-        result["introspection_nudge"] = nudge
+        result[key] = nudge
 
 
 class tool_called:
@@ -177,14 +186,13 @@ class tool_called:
     evaluates the reference before `__exit__` runs as part of unwinding the
     `with` block, and `post` mutates that same dict in place.
 
-    Call sites build `post` with a lambda, not `functools.partial`: the
-    `apply_*_nudge` functions take `result` first, but `partial` appends new
-    positional args after the ones it pre-binds, so `partial(fn, report,
-    task_id, conn)` called as `p(result)` would call `fn(report, task_id,
-    conn, result)` — the wrong order. A lambda reads left-to-right in the
-    same order as the function signature it calls; `partial` would need
-    every pre-bound argument passed by keyword to avoid that, for no benefit
-    at a single call site.
+    Call sites build `post` with a lambda, not `functools.partial`: `apply_nudge`
+    takes `result` first, but `partial` appends new positional args after the
+    ones it pre-binds, so `partial(apply_nudge, key, nudge)` called as
+    `p(result)` would call `apply_nudge(key, nudge, result)` — the wrong
+    order. A lambda reads left-to-right in the same order as the function
+    signature it calls; `partial` would need every pre-bound argument passed
+    by keyword to avoid that, for no benefit at a single call site.
     """
 
     def __init__(

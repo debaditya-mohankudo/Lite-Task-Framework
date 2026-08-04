@@ -14,11 +14,12 @@ from taskfw.dispatcher import (
     _drift_reflection_call_counts,
     drift_reflection_nudge,
     finish_nudge,
+    finish_reminder_nudge,
     introspection_nudge,
     tool_called,
 )
 from taskfw.memory import MemoryStore
-from taskfw.models import Task
+from taskfw.models import ResolutionItem, Task
 from taskfw.store import TaskStore
 
 
@@ -86,6 +87,44 @@ class TestFinishNudge:
         t = Task(title="A task", introspection=[{"date": "2026-08-01"}])
         tasks.save(t)
         assert finish_nudge(t) is None
+
+
+class TestFinishReminderNudge:
+    def test_none_with_no_resolution_items(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task")
+        tasks.save(t)
+        assert finish_reminder_nudge(t) is None
+
+    def test_none_on_partial_completion(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", resolution=[ResolutionItem("a", done=True), ResolutionItem("b")])
+        tasks.save(t)
+        assert finish_reminder_nudge(t) is None
+
+    def test_fires_when_all_items_done_and_still_open(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", resolution=[ResolutionItem("a", done=True), ResolutionItem("b", done=True)])
+        tasks.save(t)
+        nudge = finish_reminder_nudge(t)
+        assert nudge is not None and t.id in nudge
+
+    def test_none_once_the_task_is_done(self, stores):
+        tasks, _ = stores
+        t = Task(
+            title="A task",
+            resolution=[ResolutionItem("a", done=True)],
+            status="done",
+        )
+        tasks.save(t)
+        assert finish_reminder_nudge(t) is None
+
+    def test_refires_on_repeated_checks_while_still_complete_and_open(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", resolution=[ResolutionItem("a", done=True)])
+        tasks.save(t)
+        assert finish_reminder_nudge(t) is not None
+        assert finish_reminder_nudge(t) is not None
 
 
 class TestDriftReflectionNudge:

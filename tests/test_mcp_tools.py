@@ -78,6 +78,14 @@ class TestUpdate:
     def test_unknown_task(self):
         assert "error" in m.tasks__update("nope", title="x")
 
+    def test_finish_reminder_fires_when_resolution_replaced_all_done(self):
+        t = create()
+        r = m.tasks__update(t["id"], resolution=["a"])
+        assert "finish_reminder_nudge" not in r  # replacement items default to not-done
+        m.tasks__check_item(t["id"], 0)
+        r = m.tasks__update(t["id"], title="still working on it")
+        assert "finish_reminder_nudge" in r
+
 
 class TestChecklist:
     def test_ticking_updates_progress(self):
@@ -88,6 +96,24 @@ class TestChecklist:
     def test_out_of_range_index_is_rejected(self):
         t = create(resolution=["a"])
         assert "error" in m.tasks__check_item(t["id"], 5)
+
+    def test_finish_reminder_fires_on_completing_the_last_item(self):
+        t = create(resolution=["a", "b"])
+        m.tasks__check_item(t["id"], 0)
+        r = m.tasks__check_item(t["id"], 1)
+        assert "finish_reminder_nudge" in r and t["id"] in r["finish_reminder_nudge"]
+
+    def test_no_finish_reminder_on_partial_completion(self):
+        t = create(resolution=["a", "b"])
+        r = m.tasks__check_item(t["id"], 0)
+        assert "finish_reminder_nudge" not in r
+
+    def test_no_finish_reminder_once_the_task_is_done(self):
+        t = create(resolution=["a"])
+        m.tasks__check_item(t["id"], 0)
+        m.tasks__finish(t["id"])
+        r = m.tasks__check_item(t["id"], 0)
+        assert "finish_reminder_nudge" not in r
 
 
 class TestFinish:

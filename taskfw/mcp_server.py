@@ -110,8 +110,9 @@ def _drift_reflection_call(result_builder):
     active_task = store().get(active_task_id) if active_task_id else None
     active_task_title = active_task.title if active_task else ""
     with dispatcher.tool_called(
-        post=lambda result: dispatcher.apply_drift_reflection_nudge(
-            result, scope, active_task_id, active_task_title
+        post=lambda result: dispatcher.apply_nudge(
+            result, "drift_reflection_nudge",
+            dispatcher.drift_reflection_nudge(scope, active_task_id, active_task_title),
         )
     ) as call:
         call.result = result_builder()
@@ -131,7 +132,10 @@ def _drift_reflection_read(result: dict) -> dict:
         active_task_id = store().get_active(scope) or ""
         active_task = store().get(active_task_id) if active_task_id else None
         active_task_title = active_task.title if active_task else ""
-        dispatcher.apply_drift_reflection_nudge(result, scope, active_task_id, active_task_title)
+        dispatcher.apply_nudge(
+            result, "drift_reflection_nudge",
+            dispatcher.drift_reflection_nudge(scope, active_task_id, active_task_title),
+        )
     return result
 
 
@@ -325,7 +329,13 @@ def tasks__update(
     if not decision:
         return _denied(decision)
     store().save(updated)
-    return _drift_reflection_call(lambda: {"ok": True, "id": updated.id, "status": updated.status})
+
+    def _result():
+        result = {"ok": True, "id": updated.id, "status": updated.status}
+        dispatcher.apply_nudge(result, "finish_reminder_nudge", dispatcher.finish_reminder_nudge(updated))
+        return result
+
+    return _drift_reflection_call(_result)
 
 
 @mcp.tool()
@@ -339,7 +349,13 @@ def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, 
     task.resolution[index].done = done
     store().save(task)
     d, total = task.progress
-    return _drift_reflection_call(lambda: {"ok": True, "id": task_id, "progress": {"done": d, "total": total}})
+
+    def _result():
+        result = {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
+        dispatcher.apply_nudge(result, "finish_reminder_nudge", dispatcher.finish_reminder_nudge(task))
+        return result
+
+    return _drift_reflection_call(_result)
 
 
 @mcp.tool()
@@ -369,7 +385,9 @@ def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
     scope = _scope()
     if store().get_active(scope) == task_id:
         store().clear_active(scope)
-    with dispatcher.tool_called(post=lambda result: dispatcher.apply_finish_nudge(result, task)) as call:
+    with dispatcher.tool_called(
+        post=lambda result: dispatcher.apply_nudge(result, "introspection_nudge", dispatcher.finish_nudge(task))
+    ) as call:
         call.result = {"ok": True, "id": task_id, "status": "done"}
         return call.result
 
@@ -394,7 +412,9 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
     task.introspection.append(report)
     store().save(task)
     with dispatcher.tool_called(
-        post=lambda result: dispatcher.apply_introspection_nudge(result, report, task_id, store().conn)
+        post=lambda result: dispatcher.apply_nudge(
+            result, "memory_nudge", dispatcher.introspection_nudge(report, task_id, store().conn)
+        )
     ) as call:
         call.result = {"ok": True, "id": task_id, "reports": len(task.introspection)}
         return call.result
