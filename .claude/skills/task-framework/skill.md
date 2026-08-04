@@ -56,6 +56,7 @@ Gaps caught in grooming cost nothing. Gaps caught mid-implementation cost a reve
 
 ```python
 tasks__set_active(task_id)
+tasks__log_skill_invocation(skill="task-framework", task_id=task_id)
 tasks__context(task_id)      # ← you must call this
 ```
 

@@ -22,6 +22,7 @@ In effect for any active task. Also reach for it when the user says "just implem
 
 ```python
 tasks__set_active(task_id)
+tasks__log_skill_invocation(skill="task-implementation", task_id=task_id)
 tasks__context(task_id)     # read the grooming findings before writing code
 ```
 

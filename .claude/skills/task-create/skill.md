@@ -45,6 +45,12 @@ tasks__create(
 
 Every argument except `title` is optional. Nothing is auto-filled with `(pending)` or `TBD`, because nothing is required.
 
+Log the invocation once the id comes back:
+
+```python
+tasks__log_skill_invocation(skill="task-create", task_id=result["id"])
+```
+
 ## What each field is for
 
 **title** — how the task appears in every list, and what full-text search scores against. Specific beats short: "fix logging" tells a future reader nothing; "logging never named the task id" tells them the whole story. Name the file or module, the specific thing changing, and the reason.

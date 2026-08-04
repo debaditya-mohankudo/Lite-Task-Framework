@@ -20,6 +20,14 @@ This is the same class of risk the repo's other parity checks address, and it ha
 
 **Read-only by default.** Flag drift; let the user decide.
 
+## Log the invocation
+
+```python
+tasks__log_skill_invocation(skill="task-skills-audit", task_id="")
+```
+
+This skill audits the skills, not a single task, so `task_id` is empty.
+
 ## What is checked mechanically
 
 `tests/test_skills.py` already enforces the parts that can be enforced:

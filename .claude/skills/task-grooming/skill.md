@@ -23,6 +23,14 @@ After a grooming pass, an engineer should know what to build, where, why that wa
 | `/task-grooming epic:<id>` | Groom the open children — `tasks__list(parent="<epic id>")` |
 | `/task-grooming task:<a> task:<b>` | Groom the explicit list |
 
+## Step 0 — Log the invocation
+
+```python
+tasks__log_skill_invocation(skill="task-grooming", task_id=task_id)
+```
+
+One call, before Step 1. If grooming a batch, log once per task_id in the loop.
+
 ## Step 1 — Pull the context
 
 ```python

@@ -19,6 +19,7 @@ This is the step that closes the loop, and the easiest one to skip — the work 
 Use the supplied id, or the most recently finished task.
 
 ```python
+tasks__log_skill_invocation(skill="task-introspection", task_id=task_id)
 tasks__context(task_id)
 ```
 
