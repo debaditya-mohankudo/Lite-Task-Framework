@@ -138,9 +138,43 @@ class TestSQLiteSink:
         from taskfw.log import SQLiteHandler
 
         handler = SQLiteHandler()
-        handler._conn = object()  # anything with no .execute() fails predictably
+        handler._local.conn = object()  # anything with no .execute() fails predictably
         record = logging.LogRecord("taskfw.probe", logging.INFO, __file__, 1, "boom", None, None)
         handler.emit(record)  # must not raise
+
+    def test_emit_from_a_second_thread_still_lands(self):
+        """Regression for task:7fff42f4: a single process-wide connection,
+
+        reused across the worker threads an MCP server dispatches sync tool
+        calls onto, eventually gets used from a thread that didn't create
+        it — sqlite3 raises ProgrammingError on that, which the bare except
+        in emit() swallowed silently for the rest of the process's life.
+        One connection per thread (threading.local) makes that reuse
+        unrepresentable instead of catching it after the fact.
+        """
+        import threading
+        import uuid
+
+        from taskfw import mcp_server as m
+        from taskfw.log import SQLiteHandler
+
+        handler = SQLiteHandler()
+        marker = f"probe-{uuid.uuid4().hex}"
+        record = logging.LogRecord("taskfw.thread_probe", logging.INFO, __file__, 1, marker, None, None)
+        handler.emit(record)  # opens the handler's connection on this thread
+
+        second_marker = f"probe-{uuid.uuid4().hex}"
+        second_record = logging.LogRecord(
+            "taskfw.thread_probe", logging.INFO, __file__, 1, second_marker, None, None
+        )
+        t = threading.Thread(target=handler.emit, args=(second_record,))
+        t.start()
+        t.join()
+
+        result = m.tasks__logs(limit=500)
+        messages = [row["message"] for row in result["logs"]]
+        assert any(marker in msg for msg in messages)
+        assert any(second_marker in msg for msg in messages)
 
     def test_a_log_call_round_trips_through_tasks__logs(self):
         """SQLiteHandler() and tasks__logs both default to config.db_path() —

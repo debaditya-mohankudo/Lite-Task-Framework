@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 
 from taskfw import config
@@ -42,16 +43,26 @@ class SQLiteHandler(logging.Handler):
     Never raises: a broken log write must not break the tool call that
     triggered it, per this project's own rule that a convenience's worst
     failure mode is being missing, never being blocking.
+
+    One connection per thread, not one per process: sqlite3 connections are
+    bound to the thread that opened them, and an MCP server dispatches sync
+    tool calls across a worker thread pool, so a single process-wide
+    connection eventually gets used from a thread that didn't create it —
+    sqlite3 raises ProgrammingError on that, which the bare except below used
+    to swallow silently for the rest of the process's life (task:7fff42f4).
+    threading.local makes that reuse unrepresentable instead of catching it.
     """
 
     def __init__(self) -> None:
         super().__init__()
-        self._conn = None
+        self._local = threading.local()
 
     def _connection(self):
-        if self._conn is None:
-            self._conn = connect()
-        return self._conn
+        conn = getattr(self._local, "conn", None)
+        if conn is None:
+            conn = connect()
+            self._local.conn = conn
+        return conn
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
