@@ -11,7 +11,7 @@ neither owns the rules.
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, Callable
 
 from mcp.server import MCPServer
 
@@ -97,24 +97,34 @@ def _denied(d: lifecycle.Decision) -> dict:
     return {"error": d.reason, "rule": d.rule}
 
 
-def _drift_reflection_call(result_builder):
+def _drift_reflection_call(result_builder, extra: tuple[str, Callable[[], str | None]] | None = None):
     """Wrap a mutating tool call with the periodic active-task nudge.
 
     result_builder is called with no args and must return the dict this tool
     call returns; the nudge (if any) is attached to it in place before return.
     Goes through tool_called, whose post only fires on a truthy "ok" — the
     shape every mutating tool in this module already returns on success.
+
+    extra is an optional (key, nudge_thunk) pair for a second, tool-specific
+    nudge to apply in the same post — e.g. finish_reminder_nudge on
+    tasks__check_item/tasks__update — so those call sites don't need their
+    own local closure just to bolt a second apply_nudge call onto the result.
     """
     scope = _scope()
     active_task_id = store().get_active(scope) or ""
     active_task = store().get(active_task_id) if active_task_id else None
     active_task_title = active_task.title if active_task else ""
-    with dispatcher.tool_called(
-        post=lambda result: dispatcher.apply_nudge(
+
+    def _post(result):
+        dispatcher.apply_nudge(
             result, "drift_reflection_nudge",
             dispatcher.drift_reflection_nudge(scope, active_task_id, active_task_title),
         )
-    ) as call:
+        if extra:
+            key, nudge_thunk = extra
+            dispatcher.apply_nudge(result, key, nudge_thunk())
+
+    with dispatcher.tool_called(post=_post) as call:
         call.result = result_builder()
         return call.result
 
@@ -329,13 +339,10 @@ def tasks__update(
     if not decision:
         return _denied(decision)
     store().save(updated)
-
-    def _result():
-        result = {"ok": True, "id": updated.id, "status": updated.status}
-        dispatcher.apply_nudge(result, "finish_reminder_nudge", dispatcher.finish_reminder_nudge(updated))
-        return result
-
-    return _drift_reflection_call(_result)
+    return _drift_reflection_call(
+        lambda: {"ok": True, "id": updated.id, "status": updated.status},
+        extra=("finish_reminder_nudge", lambda: dispatcher.finish_reminder_nudge(updated)),
+    )
 
 
 @mcp.tool()
@@ -349,13 +356,10 @@ def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, 
     task.resolution[index].done = done
     store().save(task)
     d, total = task.progress
-
-    def _result():
-        result = {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
-        dispatcher.apply_nudge(result, "finish_reminder_nudge", dispatcher.finish_reminder_nudge(task))
-        return result
-
-    return _drift_reflection_call(_result)
+    return _drift_reflection_call(
+        lambda: {"ok": True, "id": task_id, "progress": {"done": d, "total": total}},
+        extra=("finish_reminder_nudge", lambda: dispatcher.finish_reminder_nudge(task)),
+    )
 
 
 @mcp.tool()

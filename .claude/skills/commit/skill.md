@@ -10,6 +10,15 @@ Commit procedure for this repo. Scoped here deliberately: these are
 task-framework's conventions, and a global skill would impose them on repos that
 never agreed to them.
 
+## Simplify first
+
+Invoke the `simplify` skill on the pending diff before anything below. It
+runs its own four-agent review (reuse, simplification, efficiency, altitude)
+and applies what it finds directly — running it here, before the suite and
+the commit, means whatever it fixes lands in the same commit instead of
+needing a follow-up. Skip only if `simplify` was already run against this
+exact diff earlier in the session with nothing left uncommitted since.
+
 ## Before anything is staged
 
 Run the suite. Not a subset, and not "the tests I think I touched" — the
