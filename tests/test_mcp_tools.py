@@ -387,7 +387,9 @@ class TestSkillInvocationLogging:
         test_logging.py's TestJsonlSink) — tasks__logs (SQL-only) intentionally
         never sees test-mode log calls, same as any other taskfw log line, so
         this asserts against the same session jsonl file real calls land in.
-        In production both this and tasks__logs(logger="skill.<name>") see it.
+        In production, query back with tasks__logs(logger="taskfw.skill.<name>")
+        — get_logger() prefixes every name with "taskfw." (see
+        test_logging.py::TestSQLiteSink::test_skill_invocation_logger_name_is_queryable_with_taskfw_prefix).
         """
         import os
 

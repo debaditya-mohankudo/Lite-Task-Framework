@@ -192,6 +192,35 @@ class TestSQLiteSink:
         result = m.tasks__logs(limit=500)
         assert any(marker in row["message"] for row in result["logs"])
 
+    def test_skill_invocation_logger_name_is_queryable_with_taskfw_prefix(self):
+        """Regression for a docstring bug found via task:6c916379:
+
+        get_logger(name) always prefixes with "taskfw.", so a skill logged
+        via get_logger(f"skill.{skill}") (as tasks__log_skill_invocation
+        does) is stored under "taskfw.skill.<name>", not "skill.<name>".
+        A caller querying tasks__logs(logger=f"skill.{skill}") (as the
+        tool's docstring used to say) would silently never match a real row.
+        Exercised directly against SQLiteHandler, same as this class's other
+        tests — a test run's global logger uses JsonlHandler, so round
+        tripping through get_logger()/tasks__log_skill_invocation itself
+        would test nothing here.
+        """
+        import uuid
+
+        from taskfw import mcp_server as m
+        from taskfw.log import SQLiteHandler
+
+        marker = f"probe-{uuid.uuid4().hex}"
+        skill = f"probe-skill-{uuid.uuid4().hex}"
+        record = logging.LogRecord(f"taskfw.skill.{skill}", logging.INFO, __file__, 1, marker, None, None)
+        SQLiteHandler().emit(record)
+
+        wrong_prefix = m.tasks__logs(logger=f"skill.{skill}", limit=500)
+        assert wrong_prefix["logs"] == []
+
+        result = m.tasks__logs(logger=f"taskfw.skill.{skill}", limit=500)
+        assert any(marker in row["message"] for row in result["logs"])
+
 
 class TestJsonlSink:
     def test_emit_writes_one_json_line_per_record(self, tmp_path):
