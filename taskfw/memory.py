@@ -219,16 +219,30 @@ class MemoryStore:
             where.append("superseded_by=''")
         if where:
             sql += " WHERE " + " AND ".join(where)
-        sql += " ORDER BY updated_at DESC LIMIT ?"
+        if slugs is None:
+            sql += " ORDER BY updated_at DESC"
+        sql += " LIMIT ?"
         params.append(limit)
-        return [self._hydrate(r) for r in self.conn.execute(sql, params)]
+        rows = [self._hydrate(r) for r in self.conn.execute(sql, params)]
+        if slugs is not None:
+            # _matching_slugs is already ranked by bm25 (best match first);
+            # the IN (...) clause above does not preserve that order, so
+            # re-sort by it here rather than falling back to recency.
+            rank = {slug: i for i, slug in enumerate(slugs)}
+            rows.sort(key=lambda m: rank.get(m["slug"], len(slugs)))
+        log.info(
+            "memory recall query=%r kind=%r fetched=%d slugs=%s",
+            query, kind, len(rows), [r["slug"] for r in rows],
+        )
+        return rows
 
     def _matching_slugs(self, query: str, limit: int) -> list[str]:
         if self.fts:
             try:
                 rows = self.conn.execute(
-                    "SELECT slug FROM memories_fts WHERE memories_fts MATCH ? LIMIT ?",
-                    (query, limit * 4),
+                    "SELECT slug FROM memories_fts WHERE memories_fts MATCH ? "
+                    "ORDER BY bm25(memories_fts) LIMIT ?",
+                    (self._fts_or_query(query), limit * 4),
                 ).fetchall()
                 return [r["slug"] for r in rows]
             except sqlite3.OperationalError as exc:
@@ -241,6 +255,19 @@ class MemoryStore:
             (like, like, limit * 4),
         ).fetchall()
         return [r["slug"] for r in rows]
+
+    @staticmethod
+    def _fts_or_query(query: str) -> str:
+        """OR the query's terms instead of FTS5's default implicit AND.
+
+        A paraphrased multi-word query should surface the best partial match,
+        not require every word to appear verbatim. Each term is quoted so a
+        hyphen or stray quote in user input is treated as literal text, never
+        as an FTS5 operator.
+        """
+        terms = query.split()
+        quoted = ['"{}"'.format(t.replace('"', '""')) for t in terms]
+        return " OR ".join(quoted)
 
     def _hydrate(self, row: sqlite3.Row) -> dict:
         """Attach the derived standing. Never reads a stored confidence."""
