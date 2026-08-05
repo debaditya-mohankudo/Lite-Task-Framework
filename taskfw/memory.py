@@ -231,6 +231,16 @@ class MemoryStore:
             # re-sort by it here rather than falling back to recency.
             rank = {slug: i for i, slug in enumerate(slugs)}
             rows.sort(key=lambda m: rank.get(m["slug"], len(slugs)))
+        if rows:
+            hit_at = utcnow()
+            with transaction(self.conn):
+                self.conn.executemany(
+                    "UPDATE memories SET hit_count = hit_count + 1, last_hit = ? WHERE slug = ?",
+                    [(hit_at, m["slug"]) for m in rows],
+                )
+            for m in rows:
+                m["hit_count"] += 1
+                m["last_hit"] = hit_at
         log.info(
             "memory recall query=%r kind=%r fetched=%d slugs=%s",
             query, kind, len(rows), [r["slug"] for r in rows],
@@ -291,6 +301,8 @@ class MemoryStore:
             "confirmed_by": by_relation["confirmed_by"],
             "contradicted_by": by_relation["contradicted_by"],
             "standing": _standing(confirmed, contradicted, bool(row["superseded_by"])),
+            "hit_count": row["hit_count"],
+            "last_hit": row["last_hit"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }

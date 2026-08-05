@@ -213,3 +213,33 @@ class TestRecall:
         for i in range(5):
             stores[1].record(f"lesson-{i}", LESSON, task)
         assert len(stores[1].recall(limit=2)) == 2
+
+
+class TestUsageTracking:
+    def test_record_starts_at_zero_hits(self, stores, task):
+        memory = stores[1].record("a-slug", LESSON, task)
+        assert memory["hit_count"] == 0
+        assert memory["last_hit"] is None
+
+    def test_recall_increments_hit_count(self, stores, task):
+        stores[1].record("degrade-fts", LESSON, task)
+        stores[1].recall("degrade")
+        memory = stores[1].recall("degrade")[0]
+        assert memory["hit_count"] == 2
+
+    def test_recall_sets_last_hit(self, stores, task):
+        stores[1].record("degrade-fts", LESSON, task)
+        assert stores[1].recall("degrade")[0]["last_hit"] is not None
+
+    def test_get_does_not_increment_hit_count(self, stores, task):
+        stores[1].record("a-slug", LESSON, task)
+        stores[1].get("a-slug")
+        stores[1].get("a-slug")
+        assert stores[1].get("a-slug")["hit_count"] == 0
+
+    def test_each_result_in_a_multi_memory_recall_gets_a_hit(self, stores, task):
+        stores[1].record("one-lesson", LESSON, task)
+        stores[1].record("two-lesson", OTHER, task)
+        stores[1].recall()
+        assert stores[1].get("one-lesson")["hit_count"] == 1
+        assert stores[1].get("two-lesson")["hit_count"] == 1

@@ -135,6 +135,11 @@ MEMORIES = Table(
         Column("superseded_by", "TEXT NOT NULL DEFAULT ''"),
         Column("created_at", "TEXT NOT NULL DEFAULT (datetime('now'))"),
         Column("updated_at", "TEXT NOT NULL DEFAULT (datetime('now'))"),
+        # How many times recall() has actually served this memory, and when
+        # last. get() does not count -- it's used internally for existence
+        # checks, not by an agent consulting the memory.
+        Column("hit_count", "INTEGER NOT NULL DEFAULT 0"),
+        Column("last_hit", "TEXT"),
     ),
 )
 
