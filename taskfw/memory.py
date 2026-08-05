@@ -40,6 +40,7 @@ import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
+from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.db.connect import connect, transaction
 from taskfw.log import get_logger
 from taskfw.models import utcnow
@@ -197,7 +198,7 @@ class MemoryStore:
             return None
         return memory
 
-    def recall(self, query: str = "", kind: str = "", limit: int = 20,
+    def recall(self, query: str = "", kind: str = "", limit: int = DEFAULT_RECALL_LIMIT,
                include_superseded: bool = False) -> list[dict]:
         """Search memories. Superseded ones are excluded unless asked for.
 

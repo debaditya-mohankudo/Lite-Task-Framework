@@ -19,6 +19,7 @@ from mcp.server import MCPServer
 from taskfw import dispatcher, lifecycle
 from taskfw.accuracy import grooming_accuracy
 from taskfw.concepts import ConceptStore
+from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.context import build_context
 from taskfw.db.connect import connect
 from taskfw.log import get_logger
@@ -676,7 +677,7 @@ def task_memory__record(slug: str, text: str, task_id: str, kind: str = "constra
 
 
 @_tool()
-def task_memory__recall(query: str = "", kind: str = "", limit: int = 20,
+def task_memory__recall(query: str = "", kind: str = "", limit: int = DEFAULT_RECALL_LIMIT,
                         include_superseded: bool = False) -> dict[str, Any]:
     """Search loop memories. Omit query to list the most recent.
 

@@ -20,6 +20,11 @@ LOG_LEVEL = os.environ.get("TASKFW_LOG_LEVEL", "INFO").upper()
 #: write this file concurrently, so this is load-bearing, not decorative.
 BUSY_TIMEOUT_MS = int(os.environ.get("TASKFW_BUSY_TIMEOUT_MS", "5000"))
 
+#: task_memory__recall's default result count. Kept small since results are
+#: bm25-ranked — the top few are the relevant ones by construction, not an
+#: arbitrary truncation.
+DEFAULT_RECALL_LIMIT = int(os.environ.get("TASKFW_DEFAULT_RECALL_LIMIT", "5"))
+
 
 def db_path() -> Path:
     """Return the DB path, creating its parent directory if needed."""
