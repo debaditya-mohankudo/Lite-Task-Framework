@@ -190,16 +190,25 @@
         "link(slug, task_id, relation) records confirmed_by / contradicted_by / learned_from",
         "supersede(slug, by) keeps the row; forget(slug) deletes it",
         "Rejected is raised for shape errors only; the store enforces no policy",
-        "Exposed as task_memory__record / recall / get / link / supersede / forget"
+        "Exposed as task_memory__record / recall / get / link / supersede / forget",
+        "recall(query=...) matches by ORing the query's whitespace-split terms (not FTS5's default implicit AND) and orders results by bm25(memories_fts) relevance; the empty-query 'list recent' path is the only one still ordered by updated_at",
+        "recall()'s default limit is DEFAULT_RECALL_LIMIT (5), defined in taskfw/config.py and env-overridable via TASKFW_DEFAULT_RECALL_LIMIT — not a literal in memory.py",
+        "Every memory returned by recall() carries hit_count and last_hit, both bumped for every appearance in a result set; get() does not bump either, since it's used internally for existence checks (record/link/supersede), not by an agent consulting the memory's content"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "Memory scoped to the loop: the lessons introspection produces that nothing else can hold — a constraint discovered the hard way, a technique worth reusing, a recurring pitfall. Graded risks, decisions, and architectural facts already have homes, so this deliberately covers only what is left over, and must not grow into a general knowledge store.",
       "evidence": [
         "taskfw/memory.py:MemoryStore.record",
+        "taskfw/memory.py:MemoryStore.recall",
+        "taskfw/memory.py:MemoryStore._matching_slugs",
+        "taskfw/memory.py:MemoryStore._fts_or_query",
         "taskfw/memory.py:_standing",
+        "taskfw/config.py:DEFAULT_RECALL_LIMIT",
         "taskfw/db/schema.py:MEMORIES",
         "tests/test_memory.py:TestStanding",
-        "tests/test_memory.py:TestSupersede"
+        "tests/test_memory.py:TestSupersede",
+        "tests/test_memory.py:TestRecall",
+        "tests/test_memory.py:TestUsageTracking"
       ],
       "invariants": [
         "Standing is DERIVED from the confirm/contradict links on every read and is never stored — a stored confidence would agree with whatever was typed",
@@ -209,9 +218,11 @@
         "Superseded memories leave recall by default, because stale knowledge that keeps surfacing reads as current",
         "Links are idempotent, so re-running introspection cannot inflate a memory's standing",
         "Lives in the task database as one file rather than a second store; the memory-to-task citation is validated at the tool layer, NOT by a foreign key, so the single file is about having one source to check rather than about referential integrity",
-        "Nothing is injected — a memory reaches an agent only via task_memory__recall"
+        "Nothing is injected — a memory reaches an agent only via task_memory__recall",
+        "A malformed FTS5 query falls back to an unranked LIKE match rather than being treated as proof no memories exist",
+        "hit_count/last_hit are purely observational usage signals, not staleness inputs — nothing currently reads them to drive supersede/forget automation (see task:582dba10, open)"
       ],
-      "last_validated": "2026-08-01T00:00:00+00:00",
+      "last_validated": "2026-08-06T00:10:19.489194+00:00",
       "module": "taskfw/memory.py",
       "name": "loop-memory-derived-standing"
     },
@@ -412,6 +423,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-04T15:26:14.233169+00:00"
+    "updated_at": "2026-08-06T00:10:19.489665+00:00"
   }
 }
