@@ -145,23 +145,11 @@ def related_candidates(store: TaskStore, task: Task) -> list[dict]:
     """
     if not task.title:
         return []
-    hits = store.search(_title_or_query(task.title), limit=MAX_RELATED + 1)
+    # store.search() builds its own OR-of-terms query internally — passing
+    # the whole title as a plain string (not pre-formatted FTS5 syntax) is
+    # what makes term overlap work instead of requiring an exact phrase.
+    hits = store.search(task.title, limit=MAX_RELATED + 1)
     return [_task_summary(t) for t in hits if t.id != task.id][:MAX_RELATED]
-
-
-def _title_or_query(title: str) -> str:
-    """OR the title's terms instead of matching it as one exact phrase.
-
-    A whole-title phrase query (the previous approach) requires every word to
-    appear, consecutively, in that exact order, in another task's indexed
-    text — titles are long, specific, near-unique sentences, so that can
-    practically never match anything but a near-duplicate title. Each term is
-    quoted individually so punctuation in a title is read as literal text,
-    never as an FTS5 operator.
-    """
-    terms = title.split()
-    quoted = ['"{}"'.format(t.replace('"', '""')) for t in terms]
-    return " OR ".join(quoted)
 
 
 def _size(bundle: dict) -> int:

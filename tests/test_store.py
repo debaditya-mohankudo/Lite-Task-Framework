@@ -117,6 +117,28 @@ class TestSearch:
         assert store.search("before") == []
         assert len(store.search("after")) == 1
 
+    def test_finds_on_partial_term_overlap_not_just_exact_phrase(self, store):
+        store.save(make(title="Add hit_count tracking"))
+        store.save(make(title="Add usage tracking to memory"))
+        titles = [t.title for t in store.search("Add hit_count tracking")]
+        assert "Add usage tracking to memory" in titles
+
+    def test_tag_match_ranks_above_body_only_match(self, store):
+        # "widget" appears only in the body of one task, only as a tag on the
+        # other -- the tag match must rank first despite otherwise-equal titles.
+        store.save(make(title="a task", motivation="build a widget for the UI"))
+        store.save(make(title="a task", tags=["widget"]))
+        results = store.search("widget")
+        assert results[0].tags == ["widget"]
+
+    def test_non_tag_query_ranking_is_unaffected_by_tag_weighting(self, store):
+        """A query that matches neither task's tags still returns both, most-
+        overlapping body first — tag weighting must not break plain search."""
+        store.save(make(title="alpha widget gadget"))
+        store.save(make(title="alpha widget"))
+        results = store.search("alpha widget gadget")
+        assert results[0].title == "alpha widget gadget"
+
 
 class TestEvents:
     def test_events_are_appended_newest_first(self, store):

@@ -10,6 +10,7 @@ rejects only what it structurally cannot do.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -112,15 +113,28 @@ class TaskStore:
         return self.list(status=None, parent=parent_id)
 
     def search(self, query: str, limit: int = 25) -> list[Task]:
-        """Full-text search, degrading to LIKE where FTS5 is unavailable."""
+        """Full-text search, degrading to LIKE where FTS5 is unavailable.
+
+        `query` is a plain string, not pre-formatted FTS5 syntax — search()
+        builds its own OR-of-terms MATCH expression (each term quoted, so
+        punctuation is read as literal text, never an FTS5 operator), then
+        re-ranks the matched candidates by _combination_score instead of
+        FTS5's own bm25 `rank`, so a shared tag outweighs a shared body word.
+        """
+        terms = query.split()
+        if not terms:
+            return []
         if self.fts:
             try:
+                quoted = ['"{}"'.format(t.replace('"', '""')) for t in terms]
                 rows = self.conn.execute(
                     """SELECT t.data FROM tasks_fts f JOIN tasks t ON t.id = f.id
-                       WHERE tasks_fts MATCH ? ORDER BY rank LIMIT ?""",
-                    (query, limit),
+                       WHERE tasks_fts MATCH ? LIMIT ?""",
+                    (" OR ".join(quoted), limit * 4),
                 ).fetchall()
-                return [Task.from_json(r["data"]) for r in rows]
+                tasks = [Task.from_json(r["data"]) for r in rows]
+                tasks.sort(key=lambda t: self._combination_score(t, terms), reverse=True)
+                return tasks[:limit]
             except sqlite3.OperationalError as exc:
                 # A malformed FTS5 query (unbalanced quote, bare operator) is a
                 # user-input problem, not a reason to return nothing.
@@ -130,6 +144,27 @@ class TaskStore:
             "SELECT data FROM tasks WHERE title LIKE ? OR data LIKE ? LIMIT ?", (like, like, limit)
         ).fetchall()
         return [Task.from_json(r["data"]) for r in rows]
+
+    #: Tag overlap outweighs body overlap — a task's tags are a deliberate,
+    #: hand-curated signal, while body text is incidental prose. Mirrors
+    #: claude-hooks' LoadMemoriesNode combination scorer (task:c3b53021),
+    #: which uses the same 3:1 ratio for the same reason.
+    _TAG_WEIGHT = 3.0
+    _BODY_WEIGHT = 1.0
+
+    @staticmethod
+    def _combination_score(task: Task, terms: list[str]) -> float:
+        """How well `terms` overlaps task.tags versus its other search text.
+
+        Word-level set intersection, not substring matching — "log" should
+        not score against "dialog". Tags and body are scored against
+        disjoint word sets so a tag word doesn't get counted twice.
+        """
+        term_set = {t.lower() for t in terms}
+        tag_words = {w.lower() for tag in task.tags for w in re.findall(r"\w+", tag)}
+        body_words = {w.lower() for w in re.findall(r"\w+", task.search_text())} - tag_words
+        return (len(term_set & tag_words) * TaskStore._TAG_WEIGHT
+                + len(term_set & body_words) * TaskStore._BODY_WEIGHT)
 
     # -- events -------------------------------------------------------------
 
