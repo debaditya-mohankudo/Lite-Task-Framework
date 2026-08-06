@@ -13,7 +13,8 @@
         "stale_memory_nudge(memory: dict) -> str | None; fires when memory['standing'] is 'disputed' or 'contradicted', wired onto task_memory__link via mcp_server._stale_memory_hook. Stateless like finish_reminder_nudge, not throttled like drift_reflection_nudge — re-fires on every link() call that still finds the memory disputed/contradicted, including an idempotent re-link, since task_memory__link is an infrequent call with no need for call-count throttling (task:582dba10)",
         "tool_called(name, pre=None, post=None): the name-carrying wrapper around one MCP tool call. On a clean exit it logs 'tool=<name> OK' when call.result has no 'error' key (or is not a dict, e.g. tasks__list's bare list), 'tool=<name> REFUSE rule=<rule>' when it does; on an exception it logs 'tool=<name> ERROR <type>: <msg>' and re-raises. post fires on any non-refused, dict-shaped result — NOT gated on a truthy 'ok' key the way it was in an earlier iteration of this design; that gate was widened to 'no error key' so the same hook mechanism composes uniformly onto read tools (whose raw success dicts carry no 'ok' key at all) and write tools alike (task:58782207). No log/silent-mode flag — an earlier iteration of this design had one to prevent double-logging from a nested inner+outer tool_called pair; the pair was eliminated instead of suppressed, so the flag became unnecessary and was removed.",
         "combine(*hooks) -> Callable[[dict], None] is a composite hook: runs each hook in order, same Callable[[dict], None] shape as any single one, so a tool needing several nudges (e.g. tasks__update wants both drift_reflection_nudge and finish_reminder_nudge) composes them at its own decorator line instead of tool_called/_tool needing a special multi-hook parameter.",
-        "apply_nudge(result, key, nudge) is the one shared result-mutation helper for every nudge function — call the nudge function yourself, then apply_nudge(result, key, nudge) sets result[key] only if nudge is truthy."
+        "apply_nudge(result, key, nudge) is the one shared result-mutation helper for every nudge function — call the nudge function yourself, then apply_nudge(result, key, nudge) sets result[key] only if nudge is truthy.",
+        "ungroomed_progress_nudge(task) returns None or a string; fires when task.progress has at least one checked item AND task.grooming is empty — matches task_phase()'s own bool(task.grooming) definition of 'groomed' so the two can never disagree. Stateless like finish_reminder_nudge and stale_memory_nudge: re-checks current state on every qualifying save rather than firing once and remembering it fired (task:a9e7082d)."
       ],
       "created_at": "2026-08-01T10:02:54.174596+00:00",
       "description": "Single home for advisory, non-blocking response annotations (nudges) AND unconditional per-call logging on MCP tool results. Distinct from lifecycle.py (blocking rule enforcement, checked before a write) and store.py (persistence) — a nudge never refuses a write and never changes what's stored, it only surfaces something true that would otherwise be silent; logging never changes a result either, it only records that a call happened. Exists to prevent mcp_server.py tools from each growing their own private _foo_check() helper. tool_called is the pre/post-hook shape nudges run through: the same shape as claude-hooks' own gates, weighed deliberately (task:7b25ee0d) before building — worth it here because it is self-contained inside taskfw's own server (no external hook dependency) and scoped only to taskfw's own tools, never another server's calls. As of task:58782207 (after a design pass that walked from 'a decorator per tool' through 'not decorator, one route' to a composite-hook design), tool_called ALSO logs every call it wraps, and every one of mcp_server.py's ~35 registered tools goes through it via exactly one mechanism: the _tool decorator in mcp_server.py, which is the single route for registration + logging + an optional composed hook. A switched-active-task signal briefly lived here as switched_active_nudge (task:5c7b15f7) before being superseded by a real blocking rule (lifecycle.check_active_switch, task:209f33c8) — evidence that not everything advisory stays advisory once it turns out to be load-bearing enough that skipping it is itself the failure mode.",
@@ -28,12 +29,16 @@
         "taskfw/dispatcher.py:stale_memory_nudge",
         "taskfw/dispatcher.py:task_phase",
         "taskfw/dispatcher.py:apply_nudge",
-        "taskfw/mcp_server.py:_tool, _drift_reflection_hook, _finish_reminder_hook, _finish_hook, _introspection_hook, _stale_memory_hook",
+        "taskfw/dispatcher.py:ungroomed_progress_nudge",
+        "taskfw/mcp_server.py:_tool, _drift_reflection_hook, _finish_reminder_hook, _finish_hook, _introspection_hook, _stale_memory_hook, _ungroomed_progress_hook",
         "tests/test_dispatcher.py::TestToolCalled",
         "tests/test_dispatcher.py::TestCombine",
         "tests/test_dispatcher.py::TestStaleMemoryNudge",
+        "tests/test_dispatcher.py::TestUngroomedProgressNudge",
         "tests/test_mcp_tools.py::TestToolCallLogging",
-        "tests/test_mcp_tools.py::TestStaleMemoryNudge"
+        "tests/test_mcp_tools.py::TestStaleMemoryNudge",
+        "tests/test_mcp_tools.py:TestUpdate",
+        "tests/test_mcp_tools.py:TestChecklist"
       ],
       "invariants": [
         "Never blocks or changes a write — advisory only",
@@ -42,9 +47,10 @@
         "Log level is INFO, one terse line per call — tool name and outcome only, never arguments, to avoid flooding `logs` with payloads or PII",
         "task_phase's 'groomed' has no separate groomed_at flag — a task is groomed exactly when task.grooming is non-empty",
         "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires AFTER tasks__finish when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called",
-        "stale_memory_nudge never calls supersede()/forget() itself — advisory only, same as every other nudge here, consistent with task-introspection's 'never unilaterally delete stale memories' rule"
+        "stale_memory_nudge never calls supersede()/forget() itself — advisory only, same as every other nudge here, consistent with task-introspection's 'never unilaterally delete stale memories' rule",
+        "ungroomed_progress_nudge is the first nudge built as a thin wrapper deriving its condition the same way task_phase() derives 'groomed' (bool(task.grooming)), rather than re-deriving its own independent condition from raw task fields — still fits the plain Callable[[dict], None] shape with no new mechanism."
       ],
-      "last_validated": "2026-08-06T00:16:42.614267+00:00",
+      "last_validated": "2026-08-06T12:46:05.245442+00:00",
       "module": "taskfw/dispatcher.py",
       "name": "advisory-nudge-dispatcher"
     },
@@ -453,6 +459,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-06T00:59:20.716101+00:00"
+    "updated_at": "2026-08-06T12:46:05.245523+00:00"
   }
 }
