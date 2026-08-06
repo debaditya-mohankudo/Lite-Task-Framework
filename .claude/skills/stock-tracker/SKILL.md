@@ -199,6 +199,11 @@ Hold this baseline in context — you'll diff against it in Step 6.
 
 ## Step 2 — Fetch live price
 
+**Call `mcp__wyckoff-analyzer__update_run(slug)` for this step** — it fetches
+and writes `price_history` (unconditionally) as part of its single call, along
+with Steps 4/4a/4c below. Only fall back to the manual script if the MCP tool
+errors or is unavailable.
+
 ```bash
 cd ~/workspace/claude_for_mac_local && uv run python - <<'EOF'
 import yfinance as yf, json, sqlite3, os
@@ -688,6 +693,13 @@ a new standalone trigger.
 
 ## Step 4 — Wyckoff phase update
 
+**Call `mcp__wyckoff-analyzer__update_run(slug)` for this step** (same call
+as Step 2 — it covers price, Wyckoff, fib, and DMA in one shot; do not call
+it multiple times per run). It runs the analyzer below and writes
+`wyckoff_state` only when phase/score/support/resistance changed, per the
+same rule stated below. Only fall back to the manual script if the MCP tool
+errors or is unavailable.
+
 `~/workspace/wyckoff_anlayzer/wyckoff_accumulation_analyzer.py` is
 ticker-agnostic — `analyze(ticker, period=...)` takes any NSE/BSE symbol,
 which is what makes this step config-driven too:
@@ -772,6 +784,11 @@ read it rather than re-deriving the rule each run.
 ---
 
 ## Step 4a — Fibonacci retracement levels
+
+**Covered by the same `mcp__wyckoff-analyzer__update_run(slug)` call as Step
+2/4/4c** — writes `fib_levels` only when the swing high/low or nearest-level
+distance actually moved, per the rule below. Only fall back to the manual
+script if the MCP tool errors or is unavailable.
 
 Ticker-agnostic, runs for every config regardless of `thesis_mode`. Identifies
 the most recent significant swing (high→low for an uptrend read, or
@@ -901,6 +918,13 @@ and say so plainly in the run's output — matching the config's own
 
 ## Step 4c — DMA (moving average) signal
 
+**Covered by the same `mcp__wyckoff-analyzer__update_run(slug)` call as Step
+2/4/4a** — computes DMAs and writes `dma_levels` only when a real crossover
+happened or the 20/50 gap moved ≥1pp, per the rule below, and skips writing
+(returning an error in its `dma` sub-result) if there's not even enough
+history for a 20DMA. Only fall back to the manual script if the MCP tool
+errors or is unavailable.
+
 Ticker-agnostic, runs for every config regardless of `thesis_mode` — same
 category of context as Step 4a's fib levels: a second, independent
 technical read to corroborate or contradict the Wyckoff phase, not a
@@ -1006,10 +1030,6 @@ as the thing that actually moves on a session-to-session basis. A
 fib confluence (Step 4a) is a stronger combined signal than any one of the
 three alone; one with no such overlap is still worth flagging (see Step 6)
 but weaker context on its own.
-
-**MCP shortcut:** `update_run(slug)`'s `dma` field covers this step's
-compute-and-write logic end to end, same "only write if meaningfully
-changed" semantics — see the note in Step 0.
 
 ---
 
