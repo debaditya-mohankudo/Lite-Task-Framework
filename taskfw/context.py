@@ -47,7 +47,7 @@ log = get_logger(__name__)
 CHAR_BUDGET = 12000
 
 MAX_DECISIONS = 15
-MAX_COMMITS = 20
+MAX_COMMITS = 5
 MAX_RELATED = 5
 MAX_EDGES = 5  # per direction
 
