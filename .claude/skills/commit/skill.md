@@ -19,6 +19,16 @@ the commit, means whatever it fixes lands in the same commit instead of
 needing a follow-up. Skip only if `simplify` was already run against this
 exact diff earlier in the session with nothing left uncommitted since.
 
+Run the four review agents in sequence, not in parallel — a user preference
+to save budget, since the four passes together already cost more than
+running them one at a time serially.
+
+Simplify means simplify, not "simplify unless it breaks something": any
+change it applies must not introduce a regression or break an existing test.
+If a proposed simplification would do either, skip that specific change
+rather than applying it — the rest of the diff still gets simplified. Verify
+this against the suite run below, not by inspection alone.
+
 ## Before anything is staged
 
 Run the suite. Not a subset, and not "the tests I think I touched" — the
