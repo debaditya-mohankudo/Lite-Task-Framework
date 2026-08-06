@@ -176,6 +176,27 @@ def finish_reminder_nudge(task) -> str | None:
     return f"task:{task.id} has all {total} resolution item(s) checked but is still open. Call tasks__finish when the work is done."
 
 
+def stale_memory_nudge(memory: dict[str, Any]) -> str | None:
+    """Advisory nudge for task_memory__link, or None when there's nothing to say.
+
+    Stateless by design, matching finish_reminder_nudge's precedent: checks
+    the memory's current standing on every call rather than only on the
+    link that caused the transition. An idempotent re-link against an
+    already-disputed memory re-fires this, same as finish_reminder_nudge
+    re-fires on a later save that still finds a task 100%-done-but-open —
+    task_memory__link is an infrequent call, not a hot path that needs
+    drift_reflection_nudge-style throttling.
+
+    Fires only on 'disputed' or 'contradicted' standing, never 'superseded':
+    a superseded memory is already flagged by definition, and re-nudging
+    about it would be noise about a decision already made.
+    """
+    if memory.get("standing") not in ("disputed", "contradicted"):
+        return None
+    return (f"memory {memory['slug']} is now {memory['standing']} — "
+            f"consider task_memory__supersede or reviewing its evidence.")
+
+
 def task_phase(task) -> dict[str, bool]:
     """Where a task stands in the grooming -> implementation -> introspection loop.
 

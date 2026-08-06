@@ -178,6 +178,18 @@ def _finish_hook(result: dict[str, Any]) -> None:
         dispatcher.apply_nudge(result, "introspection_nudge", dispatcher.finish_nudge(task))
 
 
+def _stale_memory_hook(result: dict[str, Any]) -> None:
+    """stale_memory_nudge, for task_memory__link.
+
+    The memory is already in `result["memory"]` (task_memory__link's own
+    return shape re-fetches it after linking), so no separate lookup is
+    needed the way the task hooks above need _refetch.
+    """
+    memory = result.get("memory")
+    if memory:
+        dispatcher.apply_nudge(result, "stale_memory_nudge", dispatcher.stale_memory_nudge(memory))
+
+
 def _introspection_hook(result: dict[str, Any]) -> None:
     """introspection_nudge, for tasks__add_introspection.
 
@@ -696,7 +708,7 @@ def task_memory__get(slug: str) -> dict[str, Any]:
     return found or {"error": f"No memory {slug!r}"}
 
 
-@_tool()
+@_tool(hook=_stale_memory_hook)
 def task_memory__link(slug: str, task_id: str, relation: str = "confirmed_by") -> dict[str, Any]:
     """Record that a task confirmed or contradicted a memory. Idempotent.
 

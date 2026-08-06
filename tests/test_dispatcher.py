@@ -20,6 +20,7 @@ from taskfw.dispatcher import (
     finish_reminder_nudge,
     introspection_nudge,
     is_implemented,
+    stale_memory_nudge,
     task_phase,
     tool_called,
 )
@@ -123,6 +124,26 @@ class TestFinishReminderNudge:
         )
         tasks.save(t)
         assert finish_reminder_nudge(t) is None
+
+
+class TestStaleMemoryNudge:
+    def test_none_on_unverified_standing(self):
+        assert stale_memory_nudge({"slug": "x", "standing": "unverified"}) is None
+
+    def test_none_on_confirmed_standing(self):
+        assert stale_memory_nudge({"slug": "x", "standing": "confirmed"}) is None
+
+    def test_none_on_superseded_standing(self):
+        """Already flagged by definition — re-nudging would be noise."""
+        assert stale_memory_nudge({"slug": "x", "standing": "superseded"}) is None
+
+    def test_fires_on_contradicted_standing(self):
+        nudge = stale_memory_nudge({"slug": "x", "standing": "contradicted"})
+        assert nudge is not None and "x" in nudge
+
+    def test_fires_on_disputed_standing(self):
+        nudge = stale_memory_nudge({"slug": "x", "standing": "disputed"})
+        assert nudge is not None and "x" in nudge
 
     def test_refires_on_repeated_checks_while_still_complete_and_open(self, stores):
         tasks, _ = stores

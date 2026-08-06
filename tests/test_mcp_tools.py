@@ -482,6 +482,45 @@ class TestLoopMemory:
         assert "error" in m.task_memory__get(slug="wrong-lesson")
 
 
+class TestStaleMemoryNudge:
+    """stale_memory_nudge — see taskfw.dispatcher.stale_memory_nudge for the logic itself."""
+
+    def test_nudges_when_a_link_makes_a_memory_contradicted(self):
+        tid = create(title="Source")["id"]
+        later = create(title="Later")["id"]
+        m.task_memory__record(slug="a-lesson", task_id=tid,
+                              text="A lesson long enough to count as one.")
+        r = m.task_memory__link(slug="a-lesson", task_id=later, relation="contradicted_by")
+        assert "stale_memory_nudge" in r
+
+    def test_nudges_when_a_link_makes_a_memory_disputed(self):
+        tid = create(title="Source")["id"]
+        confirmer = create(title="Confirmer")["id"]
+        disputer = create(title="Disputer")["id"]
+        m.task_memory__record(slug="a-lesson", task_id=tid,
+                              text="A lesson long enough to count as one.")
+        m.task_memory__link(slug="a-lesson", task_id=confirmer, relation="confirmed_by")
+        r = m.task_memory__link(slug="a-lesson", task_id=disputer, relation="contradicted_by")
+        assert "stale_memory_nudge" in r
+
+    def test_no_nudge_on_a_confirmed_only_link(self):
+        tid = create(title="Source")["id"]
+        later = create(title="Later")["id"]
+        m.task_memory__record(slug="a-lesson", task_id=tid,
+                              text="A lesson long enough to count as one.")
+        r = m.task_memory__link(slug="a-lesson", task_id=later, relation="confirmed_by")
+        assert "stale_memory_nudge" not in r
+
+    def test_stateless_refires_on_an_idempotent_relink(self):
+        tid = create(title="Source")["id"]
+        later = create(title="Later")["id"]
+        m.task_memory__record(slug="a-lesson", task_id=tid,
+                              text="A lesson long enough to count as one.")
+        m.task_memory__link(slug="a-lesson", task_id=later, relation="contradicted_by")
+        r = m.task_memory__link(slug="a-lesson", task_id=later, relation="contradicted_by")
+        assert "stale_memory_nudge" in r
+
+
 class TestRegistration:
     @pytest.mark.anyio
     async def test_every_tool_is_registered_with_the_server(self):
