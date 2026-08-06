@@ -2,7 +2,7 @@
 name: task-introspection
 description: Post-task retrospective that improves the engineering system. Grades grooming's predictions, captures unlogged decisions, and evolves concepts and skills so the next execution is cheaper. Use when the user says /task-introspection or "retrospect on task:<id>".
 user-invocable: true
-updated: 2026-08-01
+updated: 2026-08-06
 doc: docs/methodology/05-introspection.md
 repo: ~/workspace/task-framework/.claude/skills/task-introspection/skill.md
 deployed: ~/.claude/skills/task-introspection/skill.md
@@ -38,6 +38,8 @@ git log --grep "task:<id>" --oneline -p --max-count=5
 ```
 
 If that is empty because commits were never tagged, fall back to `git log --since=<task created_at> -- <files from the task>`. Never let this step come up silently empty.
+
+**Link any commit the bundle is missing.** `tasks__add_commit` is a manual, unhooked step — a commit made via a raw `git commit` (not through the /commit skill) never reaches it, so the bundle's `commits` section can be empty even when `git log --grep` just found a real, correctly-tagged commit. Diff the two: for every sha `git log --grep` surfaces that isn't already in the bundle's `commits`, call `tasks__add_commit(task_id, sha, repo)`. Cheap, idempotent, and this is the step that would have caught it — three tasks in one session shipped with silently-missing commit links before this was added (see loop memory: raw-git-commit-skips-tasks-add-commit).
 
 The bundle also carries no operational trace — what the tools actually did while the task was active, as opposed to what was decided. `tasks__logs` fills that gap:
 
