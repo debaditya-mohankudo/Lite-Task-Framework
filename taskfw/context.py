@@ -139,9 +139,23 @@ def _related(store: TaskStore, task: Task) -> list[dict]:
     """
     if not task.title:
         return []
-    # Quote the query so punctuation in a title cannot be read as FTS syntax.
-    hits = store.search(f'"{task.title}"', limit=MAX_RELATED + 1)
+    hits = store.search(_title_or_query(task.title), limit=MAX_RELATED + 1)
     return [_task_summary(t) for t in hits if t.id != task.id][:MAX_RELATED]
+
+
+def _title_or_query(title: str) -> str:
+    """OR the title's terms instead of matching it as one exact phrase.
+
+    A whole-title phrase query (the previous approach) requires every word to
+    appear, consecutively, in that exact order, in another task's indexed
+    text — titles are long, specific, near-unique sentences, so that can
+    practically never match anything but a near-duplicate title. Each term is
+    quoted individually so punctuation in a title is read as literal text,
+    never as an FTS5 operator.
+    """
+    terms = title.split()
+    quoted = ['"{}"'.format(t.replace('"', '""')) for t in terms]
+    return " OR ".join(quoted)
 
 
 def _size(bundle: dict) -> int:

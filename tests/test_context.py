@@ -99,6 +99,25 @@ class TestFullBundle:
         c = build_context(store, a.id)
         assert a.id not in [r["id"] for r in c["related"]]
 
+    def test_related_matches_on_partial_word_overlap(self, store):
+        """A shared word need not appear as a contiguous phrase to match.
+
+        Under the pre-fix whole-title phrase query, "Add hit_count tracking"
+        would never match "Add usage tracking to memory" — the words "Add"
+        and "tracking" aren't consecutive across the two titles. OR-ing terms
+        fixes exactly this case.
+        """
+        a = store.save(Task(title="Add hit_count tracking"))
+        b = store.save(Task(title="Add usage tracking to memory"))
+        c = build_context(store, a.id)
+        assert b.id in [r["id"] for r in c["related"]]
+
+    def test_related_still_matches_an_exact_title_phrase(self, store):
+        a = store.save(Task(title="degrade FTS to LIKE"))
+        b = store.save(Task(title="degrade FTS to LIKE gracefully"))
+        c = build_context(store, a.id)
+        assert b.id in [r["id"] for r in c["related"]]
+
 
 class TestBudget:
     def test_small_bundle_is_not_truncated(self, populated):
