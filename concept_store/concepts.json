@@ -160,7 +160,8 @@
       "contracts": [
         "Every check returns Decision(allowed, rule, reason); Decision is falsy when denied",
         "check_save(task, previous=None, parent=None) is the single entry point for validating a mutation",
-        "check_active_switch(previous_task_id, task_id, confirm) is the entry point tasks__set_active calls before writing; not folded into check_save because it validates the active-task pointer, not a Task mutation — same reasoning that already keeps active_task in its own store.py section rather than on the Task model"
+        "check_active_switch(previous_task_id, task_id, confirm) is the entry point tasks__set_active calls before writing; not folded into check_save because it validates the active-task pointer, not a Task mutation — same reasoning that already keeps active_task in its own store.py section rather than on the Task model",
+        "check_link_rel(rel) -> Decision gates tasks__link only, denying any rel not in TASK_EDGE_RELATIONS — mirrors check_status(status)'s exact closed-set-against-a-tuple shape. Deliberately NOT called from tasks__unlink: removal must always work for a legacy or out-of-vocabulary rel, or a bad historical row becomes permanently stuck (task:1c9d37d7)."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "The single implementation of every task rule, imported by both the MCP tools and the hooks. Pure functions over (inputs, store) with no session, prompt, or host state. Deliberately small: body-template validation became schema validation, the hierarchy matrix collapsed to one sentence with two issue types, and commit traceability left entirely once the pre-commit gate was dropped.",
@@ -168,10 +169,13 @@
         "taskfw/lifecycle.py:check_transition",
         "taskfw/lifecycle.py:check_save",
         "taskfw/lifecycle.py:check_active_switch",
+        "taskfw/lifecycle.py:check_link_rel",
         "taskfw/mcp_server.py:tasks__set_active",
         "taskfw/mcp_server.py:tasks__finish",
+        "taskfw/mcp_server.py:tasks__link",
         "tests/test_lifecycle.py",
-        "tests/test_mcp_tools.py:TestActiveTask"
+        "tests/test_mcp_tools.py:TestActiveTask",
+        "tests/test_mcp_tools.py:TestGraph::test_link_rejects_an_unrecognised_relation"
       ],
       "invariants": [
         "Rules are pure — the tests need no fixtures at all, which is the observable signal that portability holds",
@@ -181,9 +185,10 @@
         "Denials log at INFO with rule, reason, and ids; allows log at DEBUG",
         "check_active_switch allows unconditionally (ignoring confirm) when there is no previous active task or the target is already active — confirm is only consulted on a genuine switch, so it can never make an already-safe call fail",
         "Switching the active task without confirm is refused (rule=active_switch) rather than merely nudged — task:209f33c8 replaced dispatcher.py's advisory switched_active_nudge with this blocking rule once it became clear a caller could silently ignore the nudge and lose track of the previous active task",
-        "tasks__finish clears active_task for its own scope when the task it finished was the active one, which is what keeps the ordinary finish-then-activate-next flow from tripping check_active_switch on its very next call"
+        "tasks__finish clears active_task for its own scope when the task it finished was the active one, which is what keeps the ordinary finish-then-activate-next flow from tripping check_active_switch on its very next call",
+        "check_link_rel is the FIRST policy check ever added to tasks__link — before task:1c9d37d7 it had zero lifecycle validation, calling store().link() directly after only confirming both task ids exist"
       ],
-      "last_validated": "2026-08-04T02:35:02.291259+00:00",
+      "last_validated": "2026-08-06T00:49:27.576824+00:00",
       "module": "taskfw/lifecycle.py",
       "name": "lifecycle-single-rule-implementation"
     },
@@ -413,22 +418,26 @@
       "contracts": [
         "Task.to_dict()/to_json() and Task.from_dict()/from_json() round-trip every field",
         "Task.progress -> (done, total), derived from resolution on every read",
-        "Task.search_text() flattens the fields worth indexing"
+        "Task.search_text() flattens the fields worth indexing",
+        "TASK_EDGE_RELATIONS is the closed vocabulary for task_edges.rel (10 relations: depends_on, blocks, relates_to, duplicates, removes, implements, supersedes, reverts, writes_to, extends), enforced by lifecycle.check_link_rel on tasks__link. Confirmed against real usage in task_edges before being formalised (task:1c9d37d7) — 4 trace to Jira's issue-link-type vocabulary, the other 6 are this framework's own emergent vocabulary. parent_of was deliberately excluded as redundant with Task.parent."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "A task is one typed dataclass serialised to JSON. Two issue types only (epic, task) and four statuses. Typing removes two things outright rather than relocating them: required-section validation becomes schema validation, and 'resolution must be a checklist' becomes unrepresentable because resolution IS a list of items.",
       "evidence": [
         "taskfw/models.py:Task",
         "taskfw/models.py:Task.progress",
-        "tests/test_store.py:TestRoundTrip"
+        "taskfw/models.py:TASK_EDGE_RELATIONS",
+        "tests/test_store.py:TestRoundTrip",
+        "tests/test_lifecycle.py:TestCheckLinkRel"
       ],
       "invariants": [
         "from_dict drops unknown keys rather than raising, so a store written by a newer version stays readable by an older one",
         "progress is never stored — it cannot drift from the list it counts",
         "notes exists deliberately as the escape hatch for anything the schema did not anticipate, and must survive later tidying",
-        "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent"
+        "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent",
+        "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck"
       ],
-      "last_validated": "2026-08-01T00:00:00+00:00",
+      "last_validated": "2026-08-06T00:49:28.638637+00:00",
       "module": "taskfw/models.py",
       "name": "typed-task-object"
     }
@@ -437,6 +446,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-06T00:43:59.697411+00:00"
+    "updated_at": "2026-08-06T00:49:28.638683+00:00"
   }
 }
