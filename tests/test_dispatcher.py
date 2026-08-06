@@ -23,6 +23,7 @@ from taskfw.dispatcher import (
     stale_memory_nudge,
     task_phase,
     tool_called,
+    ungroomed_progress_nudge,
 )
 from taskfw.memory import MemoryStore
 from taskfw.models import ResolutionItem, Task
@@ -124,6 +125,38 @@ class TestFinishReminderNudge:
         )
         tasks.save(t)
         assert finish_reminder_nudge(t) is None
+
+
+class TestUngroomedProgressNudge:
+    def test_none_with_no_progress(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", resolution=[ResolutionItem("a")])
+        tasks.save(t)
+        assert ungroomed_progress_nudge(t) is None
+
+    def test_none_once_grooming_is_recorded(self, stores):
+        tasks, _ = stores
+        t = Task(
+            title="A task",
+            resolution=[ResolutionItem("a", done=True)],
+            grooming={"clarifications": ["x"]},
+        )
+        tasks.save(t)
+        assert ungroomed_progress_nudge(t) is None
+
+    def test_fires_on_progress_with_no_grooming(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", resolution=[ResolutionItem("a", done=True), ResolutionItem("b")])
+        tasks.save(t)
+        nudge = ungroomed_progress_nudge(t)
+        assert nudge is not None and t.id in nudge
+
+    def test_refires_on_repeated_checks_while_still_ungroomed(self, stores):
+        tasks, _ = stores
+        t = Task(title="A task", resolution=[ResolutionItem("a", done=True)])
+        tasks.save(t)
+        assert ungroomed_progress_nudge(t) is not None
+        assert ungroomed_progress_nudge(t) is not None
 
 
 class TestStaleMemoryNudge:

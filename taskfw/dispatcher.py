@@ -197,6 +197,35 @@ def stale_memory_nudge(memory: dict[str, Any]) -> str | None:
             f"consider task_memory__supersede or reviewing its evidence.")
 
 
+def ungroomed_progress_nudge(task) -> str | None:
+    """Advisory nudge for tasks__check_item/tasks__update, or None when there's nothing to say.
+
+    Fires when checklist progress exists (at least one resolution item
+    checked) but task.grooming is still empty — implementation is underway
+    on a task that never went through /task-grooming, the step that exists
+    specifically to remove uncertainty before building starts. Stateless by
+    design, matching finish_reminder_nudge and stale_memory_nudge: checks
+    the task's current state on every qualifying save rather than firing
+    once and remembering it fired, since re-observing "still ungroomed" on a
+    later save costs nothing extra.
+
+    Deliberately silent once task.grooming is non-empty, even if the actual
+    grooming pass happened after implementation started — the field being
+    non-empty is the same signal task_phase()'s "groomed" already treats as
+    authoritative (task-grooming/skill.md: "a task is groomed when its
+    grooming is non-empty"), so this nudge and task_phase can never disagree
+    about what counts as groomed.
+    """
+    done, _total = task.progress
+    if done == 0 or task.grooming:
+        return None
+    return (
+        f"task:{task.id} has checklist progress but was never groomed. "
+        "Consider whether uncertainty was actually removed before starting, "
+        "or run /task-grooming now to capture it retroactively."
+    )
+
+
 def task_phase(task) -> dict[str, bool]:
     """Where a task stands in the grooming -> implementation -> introspection loop.
 

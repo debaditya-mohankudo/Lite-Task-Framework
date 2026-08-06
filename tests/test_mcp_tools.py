@@ -130,6 +130,19 @@ class TestUpdate:
         r = m.tasks__update(t["id"], title="still working on it")
         assert "finish_reminder_nudge" in r
 
+    def test_ungroomed_progress_fires_once_a_checked_item_exists(self):
+        t = create(resolution=["a"])
+        m.tasks__check_item(t["id"], 0)
+        r = m.tasks__update(t["id"], title="still working on it")
+        assert "ungroomed_progress_nudge" in r and t["id"] in r["ungroomed_progress_nudge"]
+
+    def test_no_ungroomed_progress_once_grooming_is_recorded(self):
+        t = create(resolution=["a"])
+        m.tasks__check_item(t["id"], 0)
+        m.tasks__update(t["id"], grooming={"clarifications": ["x"]})
+        r = m.tasks__update(t["id"], title="still working on it")
+        assert "ungroomed_progress_nudge" not in r
+
 
 class TestChecklist:
     def test_ticking_updates_progress(self):
@@ -158,6 +171,17 @@ class TestChecklist:
         m.tasks__finish(t["id"])
         r = m.tasks__check_item(t["id"], 0)
         assert "finish_reminder_nudge" not in r
+
+    def test_ungroomed_progress_fires_on_checking_an_item(self):
+        t = create(resolution=["a", "b"])
+        r = m.tasks__check_item(t["id"], 0)
+        assert "ungroomed_progress_nudge" in r and t["id"] in r["ungroomed_progress_nudge"]
+
+    def test_no_ungroomed_progress_when_task_was_groomed(self):
+        t = create(resolution=["a", "b"])
+        m.tasks__update(t["id"], grooming={"clarifications": ["x"]})
+        r = m.tasks__check_item(t["id"], 0)
+        assert "ungroomed_progress_nudge" not in r
 
 
 class TestFinish:

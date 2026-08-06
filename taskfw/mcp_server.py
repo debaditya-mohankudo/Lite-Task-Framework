@@ -169,6 +169,13 @@ def _finish_reminder_hook(result: dict[str, Any]) -> None:
         dispatcher.apply_nudge(result, "finish_reminder_nudge", dispatcher.finish_reminder_nudge(task))
 
 
+def _ungroomed_progress_hook(result: dict[str, Any]) -> None:
+    """ungroomed_progress_nudge, for tasks__update/tasks__check_item."""
+    task = _refetch(result)
+    if task:
+        dispatcher.apply_nudge(result, "ungroomed_progress_nudge", dispatcher.ungroomed_progress_nudge(task))
+
+
 def _finish_hook(result: dict[str, Any]) -> None:
     """finish_nudge, for tasks__finish. task.introspection is untouched by
     tasks__finish's own mutation (only status changes), so the re-fetched
@@ -373,7 +380,7 @@ def tasks__create(
     return result
 
 
-@_tool(hook=dispatcher.combine(_drift_reflection_hook, _finish_reminder_hook))
+@_tool(hook=dispatcher.combine(_drift_reflection_hook, _finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__update(
     task_id: str,
     title: str = "",
@@ -423,7 +430,7 @@ def tasks__update(
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 
-@_tool(hook=dispatcher.combine(_drift_reflection_hook, _finish_reminder_hook))
+@_tool(hook=dispatcher.combine(_drift_reflection_hook, _finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
     """Tick or untick one resolution checklist item by its zero-based index."""
     task = store().get(task_id)
