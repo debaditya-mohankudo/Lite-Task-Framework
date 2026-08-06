@@ -142,13 +142,19 @@ def related_candidates(store: TaskStore, task: Task) -> list[dict]:
     The only approximate section of tasks__context's bundle, and the first to
     be trimmed there. Everything else in the bundle is an exact lookup — this
     is the one place a wrong answer is merely unhelpful rather than misleading.
+
+    Query terms are title words plus tags, not title alone — tags are the
+    hand-curated signal store.search()'s own scoring weights 3:1 over body
+    text, so leaving them out of the query meant two tasks sharing only tags
+    (no title overlap) could never surface as related to each other.
     """
-    if not task.title:
+    query = " ".join([task.title, *task.tags]).strip()
+    if not query:
         return []
     # store.search() builds its own OR-of-terms query internally — passing
-    # the whole title as a plain string (not pre-formatted FTS5 syntax) is
-    # what makes term overlap work instead of requiring an exact phrase.
-    hits = store.search(task.title, limit=MAX_RELATED + 1)
+    # plain words (not pre-formatted FTS5 syntax) is what makes term overlap
+    # work instead of requiring an exact phrase.
+    hits = store.search(query, limit=MAX_RELATED + 1)
     return [_task_summary(t) for t in hits if t.id != task.id][:MAX_RELATED]
 
 
