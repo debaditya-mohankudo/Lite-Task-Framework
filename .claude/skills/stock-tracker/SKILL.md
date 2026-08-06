@@ -118,6 +118,9 @@ CREATE TABLE IF NOT EXISTS thesis_checkpoints (
     invalidation_trigger TEXT
 );
 CREATE TABLE IF NOT EXISTS quarterly_results (
+    -- quarter MUST be written as FY<yy>-Q<n> (e.g. "FY27-Q1"), not
+    -- Q<n>FY<yy> ("Q1FY27") -- see the hard rules and Step 5b-i for why:
+    -- plain lexicographic ORDER BY quarter DESC (Step 1) depends on it.
     quarter TEXT PRIMARY KEY,
     report_date TEXT,
     revenue_cr REAL, revenue_est_cr REAL,
@@ -179,6 +182,12 @@ prior_shareholding  = dict(db.execute("SELECT * FROM shareholding     ORDER BY q
 prior_news_date     = (db.execute("SELECT MAX(date) FROM news_events").fetchone() or (None,))[0]
 prior_checkpoint    = dict(db.execute("SELECT * FROM thesis_checkpoints ORDER BY date DESC LIMIT 1").fetchone() or {})
 prior_quarterly     = dict(db.execute("SELECT * FROM quarterly_results ORDER BY quarter DESC LIMIT 1").fetchone() or {})
+# Correct only if every row's quarter is FY<yy>-Q<n> (e.g. "FY27-Q1") -- that
+# format sorts chronologically as plain text. The old Q<n>FY<yy> convention
+# ("Q4FY26" vs "Q1FY27") does NOT: it compares the quarter digit before the
+# year digits, so a later fiscal year's Q1 can lexicographically sort BEHIND
+# an earlier year's Q4. If a config's DB still has legacy Q<n>FY<yy> rows,
+# rewrite them to FY<yy>-Q<n> before trusting this query -- see the hard rules.
 prior_forecast      = dict(db.execute("SELECT * FROM analyst_forecasts ORDER BY date DESC LIMIT 1").fetchone() or {})
 prior_sector_forecast = dict(db.execute("SELECT * FROM sector_forecasts ORDER BY quarter DESC LIMIT 1").fetchone() or {})
 db.close()
@@ -1128,6 +1137,11 @@ Check `prior_quarterly.quarter`. If it matches the latest published quarter, **s
 Source order: (1) BSE result filing, scrip code `cfg["bse_scrip_code"]`;
 (2) Moneycontrol / Tickertape quarterly financials.
 
+**Write `quarter` as `FY<yy>-Q<n>`** (e.g. `"FY27-Q1"` for the quarter ended
+June 2026 of a company on an April–March fiscal year), never `Q<n>FY<yy>`
+(`"Q1FY27"`) — see the schema comment and Step 1's note on why the digit
+order matters for sorting.
+
 ```python
 import sqlite3, os
 db = sqlite3.connect(os.path.expanduser("{{cfg.db_path}}"))
@@ -1358,3 +1372,11 @@ for a stock with no clean sector peers to compare to.
 - Do not treat a `bullish`/`bearish` sector forecast as a stock-specific
   trigger on its own — it calibrates the existing stock-level flags (Step 6),
   it does not replace them.
+- Do not write `quarterly_results.quarter` as `Q<n>FY<yy>` — always
+  `FY<yy>-Q<n>`. `Q<n>FY<yy>` breaks Step 1's `ORDER BY quarter DESC`
+  (`"Q4FY26"` sorts lexicographically after `"Q1FY27"` even though it's
+  chronologically earlier), which silently makes `prior_quarterly` point at
+  a stale quarter and can make an already-published result look unfetched.
+  If a config's DB has legacy `Q<n>FY<yy>` rows, rewrite them to
+  `FY<yy>-Q<n>` (a plain `UPDATE quarterly_results SET quarter = ...`, one
+  time) before relying on this query for that config.
