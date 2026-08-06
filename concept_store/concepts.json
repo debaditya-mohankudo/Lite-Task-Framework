@@ -243,6 +243,7 @@
         "tasks__logs(logger, level, limit) filters by EXACT match only (SQL 'logger=?'/'level=?'), no LIKE/prefix/wildcard support — auditing a family of related logger names (e.g. every 'taskfw.skill.<name>/<step>' row for one skill) requires either querying each exact name individually or pulling unfiltered rows and filtering client-side by string prefix (verified task:a0bb2c26).",
         "tasks__log_skill_invocation(skill, task_id='') is a thin wrapper around get_logger()",
         "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task",
+        "tasks__create(...) returns {ok, id, type, status} plus an OPTIONAL related_candidates key (list of task summaries, context.related_candidates() against the new task's title) — present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657).",
         "_tool(hook=None) is the single decorator every tool carries instead of @mcp.tool(): it wraps fn in dispatcher.tool_called(fn.__name__, post=hook) and registers the WRAPPED function with mcp.tool() itself, so the module-level name bound is the logged version too. Plain tools use @_tool(); tools needing one or more nudges pass @_tool(hook=some_hook) or @_tool(hook=dispatcher.combine(hook_a, hook_b)).",
         "The 4 hook functions (_drift_reflection_hook, _finish_reminder_hook, _finish_hook, _introspection_hook) are all Callable[[dict], None], defined once near _tool and referenced by name at each tool's own decorator line — never centrally dispatched by tool name. _finish_reminder_hook/_finish_hook/_introspection_hook re-fetch the task via store().get(result['id']) rather than closing over a local variable computed mid-function, since the mutation is already persisted (store().save() already ran) by the time any hook fires — this is what let hook-bearing and plain tools converge on one decorator instead of two different wiring mechanisms (task:58782207)."
       ],
@@ -256,16 +257,18 @@
         "taskfw/mcp_server.py:tasks__phase",
         "tests/test_mcp_tools.py::TestRegistration",
         "tests/test_mcp_tools.py::TestToolCallLogging",
-        "tests/test_mcp_tools.py::TestPhase"
+        "tests/test_mcp_tools.py::TestPhase",
+        "tests/test_mcp_tools.py::TestCreate::test_surfaces_related_candidates_when_titles_overlap"
       ],
       "invariants": [
         "No tool enforces a rule itself — all validation goes through lifecycle.check_*, so a tool cannot enforce a different set than a hook",
         "The store is opened lazily, so importing the module never touches disk",
         "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global",
         "No tool is missing the _tool wrapper and none is double-wrapped — pinned by tests/test_mcp_tools.py::TestToolCallLogging, which enumerates the live m.mcp.list_tools() registry rather than a hand-maintained list, so a new tool that forgets the decorator fails this test rather than silently going unlogged",
-        "drift_reflection_nudge is wired onto reads and mutating tools alike (7 tools total) but NOT onto tasks__create, tasks__finish, or tasks__add_introspection — a deliberate existing selectivity this refactor preserved rather than widened to 'every mutating tool automatically'"
+        "drift_reflection_nudge is wired onto reads and mutating tools alike (7 tools total) but NOT onto tasks__create, tasks__finish, or tasks__add_introspection — a deliberate existing selectivity this refactor preserved rather than widened to 'every mutating tool automatically'",
+        "related_candidates in tasks__create's response is computed inline in the tool body, NOT via the dispatcher hook/nudge mechanism — every existing nudge is str | None, a candidate list is list[dict], a structurally different shape (task:78853657)"
       ],
-      "last_validated": "2026-08-04T15:26:14.233101+00:00",
+      "last_validated": "2026-08-06T00:43:41.333386+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface"
     },
@@ -297,17 +300,19 @@
         "Sections in fixed order: task, decisions, grooming, graph, commits, related",
         "verbosity='summary' returns identity, status, progress, and open items only",
         "graph.edges is capped at MAX_EDGES (5) per direction (outgoing/incoming independently), sliced in _graph(); when either direction is capped, the drop counts are reported in a bundle-level `edges_truncated` dict, e.g. {'outgoing': 3, 'incoming': 2}",
-        "related matches by ORing the task title's terms (each quoted individually, so punctuation in a title is read as literal text, never an FTS5 operator) and ranks by store.search()'s existing bm25 ordering — NOT an exact-phrase match on the whole title. Fixed in task:99416906 after the whole-title phrase-query version silently returned [] for nearly every real task, since titles are long enough that an exact consecutive-phrase match almost never occurs across two different tasks."
+        "related_candidates(store, task) (public, renamed from _related in task:78853657 -- mcp_server.tasks__create is now a second, cross-module caller) matches by ORing the task title's terms (each quoted individually, so punctuation in a title is read as literal text, never an FTS5 operator) and ranks by store.search()'s existing bm25 ordering — NOT an exact-phrase match on the whole title. Fixed in task:99416906 after the whole-title phrase-query version silently returned [] for nearly every real task.",
+        "related_candidates has NO minimum-relevance floor — it always fills up to MAX_RELATED with the best-available matches among ALL tasks in the store, however weak, since ranking-by-relevance only orders candidates, it doesn't exclude poor ones. In a store spanning multiple unrelated projects this can surface genuinely unrelated tasks sharing only generic words (observed live, task:78853657)."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "build_context assembles the whole working bundle for a task in one call — the sole replacement for per-turn prompt injection. Fixed section order, a documented trim order dropping whole sections least-useful-first, and a truncated list so an omitted section is distinguishable from an empty one. Independently, several sections also carry a fixed per-section cap (MAX_DECISIONS, MAX_COMMITS, MAX_RELATED, MAX_EDGES) applied by slicing before CHAR_BUDGET enforcement ever runs — a separate, silent mechanism from the whole-section drop that TRIM_ORDER implements, except for edges: edges' cap is the one case that IS surfaced, via `edges_truncated`.",
       "evidence": [
         "taskfw/context.py:build_context",
         "taskfw/context.py:_graph",
-        "taskfw/context.py:_related",
+        "taskfw/context.py:related_candidates",
         "taskfw/context.py:_title_or_query",
         "taskfw/context.py:TRIM_ORDER",
         "taskfw/context.py:MAX_EDGES",
+        "taskfw/mcp_server.py:tasks__create",
         "tests/test_context.py:TestBudget",
         "tests/test_context.py:TestEdgesCap",
         "tests/test_context.py::test_related_matches_on_partial_word_overlap"
@@ -318,9 +323,9 @@
         "Separately, MAX_DECISIONS/MAX_COMMITS/MAX_RELATED apply a fixed pre-slice cap regardless of CHAR_BUDGET, and do so SILENTLY — none of them appear in `truncated` when the fixed cap (not the budget) is what cut the list. This is a known asymmetry, not yet resolved for the other three.",
         "MAX_EDGES is the one fixed cap that reports its own truncation, via `edges_truncated` — a field distinct from `truncated` on purpose: `truncated` means CHAR_BUDGET dropped a whole section, `edges_truncated` means the section is present but its edges list was capped",
         "If CHAR_BUDGET forces `graph` to drop entirely, `edges_truncated` is cleared too, so a truncation count can never outlive the section it describes",
-        "related is the only approximate section and is always trimmed first; every other section is an exact lookup — approximate now means 'fuzzy OR-term FTS match; may include partial/loose overlaps,' not merely 'best-effort exact match that often comes back empty'"
+        "related is the only approximate section and is always trimmed first; every other section is an exact lookup — approximate now means 'fuzzy OR-term FTS match, no relevance floor; may include weak or partial overlaps,' not merely 'best-effort exact match that often comes back empty'"
       ],
-      "last_validated": "2026-08-06T00:37:37.965560+00:00",
+      "last_validated": "2026-08-06T00:43:59.697272+00:00",
       "module": "taskfw/context.py",
       "name": "pull-context-bundle"
     },
@@ -432,6 +437,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-06T00:37:37.966374+00:00"
+    "updated_at": "2026-08-06T00:43:59.697411+00:00"
   }
 }
