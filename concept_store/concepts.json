@@ -305,7 +305,7 @@
         "Sections in fixed order: task, decisions, grooming, graph, commits, related",
         "verbosity='summary' returns identity, status, progress, and open items only",
         "graph.edges is capped at MAX_EDGES (5) per direction (outgoing/incoming independently), sliced in _graph(); when either direction is capped, the drop counts are reported in a bundle-level `edges_truncated` dict, e.g. {'outgoing': 3, 'incoming': 2}",
-        "related_candidates(store, task) (public, renamed from _related in task:78853657 -- mcp_server.tasks__create is now a second, cross-module caller) matches by ORing the task title's terms (each quoted individually, so punctuation in a title is read as literal text, never an FTS5 operator) and ranks by store.search()'s existing bm25 ordering — NOT an exact-phrase match on the whole title. Fixed in task:99416906 after the whole-title phrase-query version silently returned [] for nearly every real task.",
+        "related_candidates(store, task) (public, renamed from _related in task:78853657) passes task.title straight through as a plain string to store.search() -- search() itself builds the OR-of-terms FTS5 query AND ranks by _combination_score (tag overlap weighted 3x over body overlap), not bm25 `rank` as of task:f24a88e3. context.py no longer builds any FTS query string itself -- _title_or_query was removed once search() took over that responsibility, so context.py has no FTS-syntax-construction code left at all.",
         "related_candidates has NO minimum-relevance floor — it always fills up to MAX_RELATED with the best-available matches among ALL tasks in the store, however weak, since ranking-by-relevance only orders candidates, it doesn't exclude poor ones. In a store spanning multiple unrelated projects this can surface genuinely unrelated tasks sharing only generic words (observed live, task:78853657)."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
@@ -314,9 +314,10 @@
         "taskfw/context.py:build_context",
         "taskfw/context.py:_graph",
         "taskfw/context.py:related_candidates",
-        "taskfw/context.py:_title_or_query",
         "taskfw/context.py:TRIM_ORDER",
         "taskfw/context.py:MAX_EDGES",
+        "taskfw/store.py:TaskStore.search",
+        "taskfw/store.py:TaskStore._combination_score",
         "taskfw/mcp_server.py:tasks__create",
         "tests/test_context.py:TestBudget",
         "tests/test_context.py:TestEdgesCap",
@@ -328,9 +329,9 @@
         "Separately, MAX_DECISIONS/MAX_COMMITS/MAX_RELATED apply a fixed pre-slice cap regardless of CHAR_BUDGET, and do so SILENTLY — none of them appear in `truncated` when the fixed cap (not the budget) is what cut the list. This is a known asymmetry, not yet resolved for the other three.",
         "MAX_EDGES is the one fixed cap that reports its own truncation, via `edges_truncated` — a field distinct from `truncated` on purpose: `truncated` means CHAR_BUDGET dropped a whole section, `edges_truncated` means the section is present but its edges list was capped",
         "If CHAR_BUDGET forces `graph` to drop entirely, `edges_truncated` is cleared too, so a truncation count can never outlive the section it describes",
-        "related is the only approximate section and is always trimmed first; every other section is an exact lookup — approximate now means 'fuzzy OR-term FTS match, no relevance floor; may include weak or partial overlaps,' not merely 'best-effort exact match that often comes back empty'"
+        "related is the only approximate section and is always trimmed first; every other section is an exact lookup — approximate now means 'fuzzy OR-term FTS match ranked by tag/body combination score, no relevance floor; may include weak or partial overlaps,' not merely 'best-effort exact match that often comes back empty'"
       ],
-      "last_validated": "2026-08-06T00:43:59.697272+00:00",
+      "last_validated": "2026-08-06T00:59:20.715848+00:00",
       "module": "taskfw/context.py",
       "name": "pull-context-bundle"
     },
@@ -393,23 +394,29 @@
         "save(task) upserts and returns the task; get(id) -> Task | None",
         "link() and add_commit() return True when a row was created, False when it already existed",
         "unlink(from_id, to_id, rel=None) -> rows removed; omitting rel removes every edge between the pair",
-        "search(query) falls back to LIKE when FTS5 is unavailable or the query is malformed"
+        "search(query, limit) falls back to LIKE when FTS5 is unavailable or the query is malformed",
+        "search(query)'s `query` is a PLAIN string, not pre-formatted FTS5 syntax -- search() builds its own OR-of-terms MATCH expression internally (each term quoted, so punctuation is read as literal text). Callers (tasks__search, context.related_candidates()) never construct FTS syntax themselves.",
+        "search() ranks results by _combination_score(task, terms), NOT FTS5's own bm25 `rank` -- tag-word overlap is weighted 3x over body-word overlap (_TAG_WEIGHT/_BODY_WEIGHT), mirroring claude-hooks' LoadMemoriesNode combination scorer (task:c3b53021). FTS5 MATCH still does candidate recall (over-fetched at limit*4); only the final ordering is Python-side (task:f24a88e3)."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "Persistence for tasks, events, edges, commits, and the active-task pointer. Contains no rule enforcement at all, so LifecycleRules keeps a single allocation; a store method rejects only what it structurally cannot do. save() is the sole writer of both the scalar columns and the JSON blob, which is what keeps them from drifting.",
       "evidence": [
         "taskfw/store.py:TaskStore.save",
         "taskfw/store.py:TaskStore.unlink",
-        "tests/test_store.py"
+        "taskfw/store.py:TaskStore.search",
+        "taskfw/store.py:TaskStore._combination_score",
+        "tests/test_store.py",
+        "tests/test_store.py::TestSearch::test_tag_match_ranks_above_body_only_match"
       ],
       "invariants": [
         "No store method ever rejects a write for a policy reason — that is LifecycleRules' job",
         "save() is the only writer of the scalar columns and `data`, which is what prevents projection drift",
         "Edge and commit inserts are idempotent via table constraints, not application checks",
         "The active-task pointer is durable, scoped by workspace, and survives restarts",
-        "FTS5 absence degrades search rather than failing at import"
+        "FTS5 absence degrades search rather than failing at import",
+        "_combination_score scores tags and body against DISJOINT word sets — a word counted as a tag match is excluded from the body-overlap count, so it can never score twice"
       ],
-      "last_validated": "2026-08-01T00:00:00+00:00",
+      "last_validated": "2026-08-06T00:58:58.307807+00:00",
       "module": "taskfw/store.py",
       "name": "taskstore-data-access-only"
     },
@@ -446,6 +453,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-06T00:49:28.638683+00:00"
+    "updated_at": "2026-08-06T00:59:20.716101+00:00"
   }
 }
