@@ -2,7 +2,7 @@
 name: task-create
 description: Reference for creating tasks and epics in taskfw — the two types, what each field is for, and how linking works. Use before calling tasks__create or when the user says /task-create.
 user-invocable: true
-updated: 2026-08-01
+updated: 2026-08-06
 doc: docs/methodology/02-create.md
 repo: ~/workspace/task-framework/.claude/skills/task-create/skill.md
 deployed: ~/.claude/skills/task-create/skill.md
@@ -94,7 +94,7 @@ tasks__unlink(from_id, to_id, rel="depends_on")   # omit rel to remove all
 tasks__edges(task_id)                             # both directions
 ```
 
-Conventional relations: `depends_on`, `blocks`, `relates_to`, `duplicates`. Any short label is accepted.
+Enforced vocabulary (`TASK_EDGE_RELATIONS`, checked on `tasks__link` — not `tasks__unlink`, which must always remove any existing edge): `depends_on`, `blocks`, `relates_to`, `duplicates`, `removes`, `implements`, `supersedes`, `reverts`, `writes_to`, `extends`. An unrecognised relation is rejected.
 
 Record sequencing as edges rather than only in prose. Prose is for a human reading one task; edges are what lets anything else reason about order.
 

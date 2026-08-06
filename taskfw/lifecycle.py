@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from taskfw.log import get_logger
-from taskfw.models import STATUSES, TASK_TYPES, Task
+from taskfw.models import STATUSES, TASK_EDGE_RELATIONS, TASK_TYPES, Task
 
 log = get_logger(__name__)
 
@@ -104,6 +104,19 @@ def check_type(task_type: str) -> Decision:
         return _deny("type", f"Unknown type {task_type!r}. Valid: {', '.join(TASK_TYPES)}.",
                      type=task_type)
     return _allow("type", type=task_type)
+
+
+def check_link_rel(rel: str) -> Decision:
+    """Closed vocabulary for task_edges.rel — see TASK_EDGE_RELATIONS.
+
+    Only gates creation (tasks__link). Removal (tasks__unlink) must stay
+    ungated: an edge with an invalid or legacy rel value still has to be
+    removable, or a bad historical row becomes permanently stuck.
+    """
+    if rel not in TASK_EDGE_RELATIONS:
+        return _deny("rel", f"Unknown relation {rel!r}. Valid: {', '.join(TASK_EDGE_RELATIONS)}.",
+                     rel=rel)
+    return _allow("rel", rel=rel)
 
 
 def check_transition(current: str, target: str) -> Decision:

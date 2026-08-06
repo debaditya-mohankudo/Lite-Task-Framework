@@ -12,12 +12,14 @@ from taskfw.lifecycle import (
     TERMINAL,
     TRANSITIONS,
     Decision,
+    check_link_rel,
     check_parent,
     check_save,
     check_status,
     check_transition,
     check_type,
 )
+from taskfw.models import TASK_EDGE_RELATIONS
 from taskfw.models import STATUSES, Task
 
 
@@ -98,6 +100,20 @@ class TestTypeAndStatus:
     def test_status_validation(self):
         assert check_status("open")
         assert not check_status("in_progress")
+
+
+class TestCheckLinkRel:
+    def test_accepts_every_relation_in_the_closed_set(self):
+        for rel in TASK_EDGE_RELATIONS:
+            assert check_link_rel(rel)
+
+    def test_rejects_an_unrecognised_relation(self):
+        d = check_link_rel("made_up_rel")
+        assert not d and d.rule == "rel" and "made_up_rel" in d.reason
+
+    def test_rejects_the_excluded_parent_of(self):
+        """parent_of is deliberately not in the closed set — redundant with Task.parent."""
+        assert not check_link_rel("parent_of")
 
 
 class TestCheckSave:

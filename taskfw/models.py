@@ -22,6 +22,17 @@ TASK_TYPES = ("epic", "task")
 
 STATUSES = ("open", "blocked", "done", "abandoned")
 
+#: Closed vocabulary for task_edges.rel, enforced by lifecycle.check_link_rel.
+#: depends_on/blocks/relates_to/duplicates trace to Jira's issue-link-type
+#: vocabulary; removes/implements/supersedes/reverts/writes_to/extends are
+#: this framework's own emergent vocabulary, confirmed against real usage in
+#: task_edges before being formalised here (task:1c9d37d7). parent_of is
+#: deliberately excluded — redundant with Task.parent.
+TASK_EDGE_RELATIONS = (
+    "depends_on", "blocks", "relates_to", "duplicates",
+    "removes", "implements", "supersedes", "reverts", "writes_to", "extends",
+)
+
 
 def new_id() -> str:
     return uuid.uuid4().hex[:8]

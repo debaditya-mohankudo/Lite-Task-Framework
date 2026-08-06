@@ -70,8 +70,12 @@ tasks__link(from_id, to_id, rel="depends_on")   # idempotent
 tasks__unlink(from_id, to_id, rel="depends_on") # rel optional — omit to remove all
 ```
 
-Conventional relations: `depends_on`, `blocks`, `relates_to`, `duplicates`.
-Any short label is accepted.
+Enforced vocabulary (`taskfw.models.TASK_EDGE_RELATIONS`, checked by
+`lifecycle.check_link_rel` on `tasks__link` — not on `tasks__unlink`, which
+must always be able to remove any existing edge): `depends_on`, `blocks`,
+`relates_to`, `duplicates`, `removes`, `implements`, `supersedes`, `reverts`,
+`writes_to`, `extends`. An unrecognised relation is rejected, not silently
+accepted.
 
 Record sequencing as edges rather than only in prose. Prose is for humans
 reading one task; edges are what lets anything else reason about order.

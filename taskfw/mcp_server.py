@@ -504,10 +504,16 @@ def tasks__add_decision(task_id: str, decision: str) -> dict[str, Any]:
 
 @_tool()
 def tasks__link(from_id: str, to_id: str, rel: str = "relates_to") -> dict[str, Any]:
-    """Create an edge between two tasks. Idempotent."""
+    """Create an edge between two tasks. Idempotent.
+
+    rel must be one of TASK_EDGE_RELATIONS — see lifecycle.check_link_rel.
+    """
     for tid in (from_id, to_id):
         if store().get(tid) is None:
             return {"error": f"No task {tid!r}"}
+    decision = lifecycle.check_link_rel(rel)
+    if not decision:
+        return _denied(decision)
     return {"ok": True, "created": store().link(from_id, to_id, rel)}
 
 

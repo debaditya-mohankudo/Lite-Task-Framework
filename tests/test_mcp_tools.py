@@ -224,6 +224,18 @@ class TestGraph:
         a = create()
         assert "error" in m.tasks__link(a["id"], "nosuch")
 
+    def test_link_rejects_an_unrecognised_relation(self):
+        a, b = create(title="a"), create(title="b")
+        r = m.tasks__link(a["id"], b["id"], "made_up_rel")
+        assert r["rule"] == "rel" and "error" in r
+
+    def test_unlink_is_never_gated_by_the_closed_set(self, store):
+        """A legacy/out-of-vocabulary edge (bypassing tasks__link's gate,
+        simulating a pre-existing row) must still be removable via the tool."""
+        a, b = create(title="a"), create(title="b")
+        store.link(a["id"], b["id"], "parent_of")
+        assert m.tasks__unlink(a["id"], b["id"], "parent_of")["removed"] == 1
+
     def test_commit_capture_is_idempotent(self):
         t = create()
         assert m.tasks__add_commit(t["id"], "abc")["recorded"] is True
