@@ -20,7 +20,7 @@ from taskfw import dispatcher, lifecycle
 from taskfw.accuracy import grooming_accuracy
 from taskfw.concepts import ConceptStore
 from taskfw.config import DEFAULT_RECALL_LIMIT
-from taskfw.context import build_context
+from taskfw.context import build_context, related_candidates
 from taskfw.db.connect import connect
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
@@ -349,6 +349,10 @@ def tasks__create(
     Two types only: "epic" groups, "task" does work. resolution is a list of
     checklist item texts — there is no body template to satisfy and no required
     sections, because the object's shape is the schema.
+
+    The response's related_candidates is advisory only — titles that share
+    words with an existing task, surfaced for a human to review. Nothing here
+    ever creates a tasks__link edge; that stays a deliberate, separate call.
     """
     task = Task(
         title=title, type=type, parent=parent or None, motivation=motivation,
@@ -362,7 +366,11 @@ def tasks__create(
     if not decision:
         return _denied(decision)
     store().save(task)
-    return {"ok": True, "id": task.id, "type": task.type, "status": task.status}
+    result: dict[str, Any] = {"ok": True, "id": task.id, "type": task.type, "status": task.status}
+    candidates = related_candidates(store(), task)
+    if candidates:
+        result["related_candidates"] = candidates
+    return result
 
 
 @_tool(hook=dispatcher.combine(_drift_reflection_hook, _finish_reminder_hook))

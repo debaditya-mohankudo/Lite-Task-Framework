@@ -100,7 +100,7 @@ def build_context(store: TaskStore, task_id: str, verbosity: str = "full") -> di
         "grooming": task.grooming or {},
         "graph": graph,
         "commits": store.commits(task_id)[:MAX_COMMITS],
-        "related": _related(store, task),
+        "related": related_candidates(store, task),
     }
     if edges_dropped:
         bundle["edges_truncated"] = edges_dropped
@@ -130,12 +130,18 @@ def _graph(store: TaskStore, task: Task) -> dict:
     return graph, dropped
 
 
-def _related(store: TaskStore, task: Task) -> list[dict]:
+def related_candidates(store: TaskStore, task: Task) -> list[dict]:
     """Full-text neighbours, excluding the task itself.
 
-    The only approximate section, and the first to be trimmed. Everything else
-    in the bundle is an exact lookup — this is the one place a wrong answer is
-    merely unhelpful rather than misleading.
+    Public rather than a module-private helper: build_context is not the only
+    caller — mcp_server.tasks__create uses this too, to surface candidates at
+    creation time. A leading-underscore name reached from outside its own
+    module is a signal the behaviour deserves a shared name, not a private one
+    imported across the boundary anyway.
+
+    The only approximate section of tasks__context's bundle, and the first to
+    be trimmed there. Everything else in the bundle is an exact lookup — this
+    is the one place a wrong answer is merely unhelpful rather than misleading.
     """
     if not task.title:
         return []

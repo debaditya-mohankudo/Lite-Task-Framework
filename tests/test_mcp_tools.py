@@ -57,6 +57,21 @@ class TestCreate:
             {"text": "one", "done": False}, {"text": "two", "done": False}
         ]
 
+    def test_surfaces_related_candidates_when_titles_overlap(self):
+        create(title="Add hit_count tracking")
+        r = create(title="Add usage tracking to memory")
+        assert "related_candidates" in r
+        assert any("hit_count" in c["title"] for c in r["related_candidates"])
+
+    def test_omits_related_candidates_when_none_found(self):
+        r = create(title="Completely unrelated one-off task xyzzy")
+        assert "related_candidates" not in r
+
+    def test_new_task_never_appears_in_its_own_candidates(self):
+        create(title="Wire up the widget")
+        r = create(title="Wire up the widget again")
+        assert r["id"] not in [c["id"] for c in r.get("related_candidates", [])]
+
 
 class TestPhase:
     def test_all_false_on_a_fresh_task(self):
