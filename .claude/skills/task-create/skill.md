@@ -76,7 +76,7 @@ whether the original implementation sketch was followed exactly.
 
 **motivation** — why, not what. The most valuable field six months later and the one most often left thin. Say what breaks if this is not done. If the task exists because something surprised you, record the surprise.
 
-**resolution** — a checklist of concrete steps, each naming a file or module where possible. Progress is derived from it, so it doubles as the completion signal. Vague items produce a task that is never quite done.
+**resolution** — a checklist of concrete steps, phrased as verifiable behavioural outcomes by default (see "Frame the task around behaviour, not implementation detail" above). Progress is derived from it, so it doubles as the completion signal. Vague items produce a task that is never quite done. Name a file or module only when doing so genuinely constrains scope or clarifies the outcome — routine "what files does this touch" guidance belongs in `files` below, not duplicated here.
 
 **files** — the files this task is expected to touch. Read directly by `tasks__context` and by grooming, so it is not documentation; it is how the system finds relevant work. Wrong here is cheap to fix and expensive to leave.
 
@@ -129,7 +129,8 @@ Skip silently if the repo has no store.
 
 - **An epic cannot have a parent.** A task cannot be its own parent. Those are the only two structural rules; both return `{"error": ..., "rule": ...}`, and `rule` names which one fired so you can react without matching on message text.
 - **Use `tags`, not new types**, for anything the two types do not express.
-- **Write `resolution` as concrete steps naming files** for anything with three or more discrete targets.
-- **Specify observable behaviour before internal design.** Keep implementation
-  choices flexible unless they are a real constraint.
+- **Specify observable behaviour before internal design.** Write `resolution`
+  as verifiable behavioural outcomes; name files or modules only when that
+  genuinely constrains scope — otherwise that belongs in `files`. Keep
+  implementation choices flexible unless they are a real constraint.
 - Activate after creating: `tasks__set_active(task_id)` — then call `tasks__context`.
