@@ -2,7 +2,7 @@
 name: task-implementation
 description: Engineering execution philosophy for active tasks. Stay in scope, log decisions as they happen, remove failure modes rather than policing them, and finish decisively. Use while working, after /task-grooming and before /task-introspection.
 user-invocable: true
-updated: 2026-08-01
+updated: 2026-08-08
 doc: docs/methodology/04-implementation.md
 repo: ~/workspace/task-framework/.claude/skills/task-implementation/skill.md
 deployed: ~/.claude/skills/task-implementation/skill.md
@@ -33,6 +33,12 @@ The grooming findings are the point. Reading the title and starting to type disc
 If the difficulty is *what a thing returns* rather than how it works, write the contract in prose first — sections, ordering, limits, failure behaviour — then implement against it.
 
 This turns coding into transcription: no design happens mid-implementation, and tests get written against the stated contract rather than against whatever the code turned out to do. It is the single highest-leverage habit in this loop.
+
+## Be behavioural, not detail-oriented
+
+Lead with what a user or caller can observe: the outcome, boundaries, failure behaviour, and invariants that must hold. Implementation details are a means to that end, not the contract. Prefer guidance and tests that leave room for a better internal design while pinning the behaviour that matters.
+
+When deciding whether to add detail, ask whether it changes an observable promise. If it does not, keep it flexible unless it is needed to make the work safe, understandable, or consistent with an established convention.
 
 ## Prefer removing a failure mode over policing it
 
@@ -111,6 +117,6 @@ Repeated searches without implementation; repeated edits to the same code; expan
 
 ## Principles
 
-**Reduce uncertainty before increasing complexity** — never stack unknowns. **Search with purpose** — to answer a question, then stop. **Prefer evidence over intuition** — code, tests, logs, runtime behaviour. **Keep momentum** — many small verified steps beat one large speculative change. **Replan when evidence changes** — plans guide execution, they do not constrain learning. **Stay in scope** — record adjacent improvements as new tasks. **Finish decisively** — completion means implemented, validated, and remaining risks recorded.
+**Reduce uncertainty before increasing complexity** — never stack unknowns. **Search with purpose** — to answer a question, then stop. **Prefer evidence over intuition** — code, tests, logs, runtime behaviour. **Specify behaviour, not incidental detail** — preserve observable promises while leaving internals free to improve. **Keep momentum** — many small verified steps beat one large speculative change. **Replan when evidence changes** — plans guide execution, they do not constrain learning. **Stay in scope** — record adjacent improvements as new tasks. **Finish decisively** — completion means implemented, validated, and remaining risks recorded.
 
 Clarity over cleverness. Completion over perfection.

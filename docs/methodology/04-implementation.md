@@ -22,6 +22,17 @@ This turns coding into transcription: no design happens mid-implementation, and
 tests get written against the stated contract rather than against whatever the
 code turned out to do. It is the single highest-leverage habit in this loop.
 
+## Be behavioural, not detail-oriented
+
+Lead with what a user or caller can observe: the outcome, boundaries, failure
+behaviour, and invariants that must hold. Implementation details are a means to
+that end, not the contract. Prefer guidance and tests that leave room for a
+better internal design while pinning the behaviour that matters.
+
+When deciding whether to add detail, ask whether it changes an observable
+promise. If it does not, keep it flexible unless it is needed to make the work
+safe, understandable, or consistent with an established convention.
+
 ## Log decisions as they happen
 
 ```python
