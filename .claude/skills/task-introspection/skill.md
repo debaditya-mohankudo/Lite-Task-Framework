@@ -2,7 +2,7 @@
 name: task-introspection
 description: Post-task retrospective that improves the engineering system. Grades grooming's predictions, captures unlogged decisions, and evolves concepts and skills so the next execution is cheaper. Use when the user says /task-introspection or "retrospect on task:<id>".
 user-invocable: true
-updated: 2026-08-06
+updated: 2026-08-08
 doc: docs/methodology/05-introspection.md
 repo: ~/workspace/task-framework/.claude/skills/task-introspection/skill.md
 deployed: ~/.claude/skills/task-introspection/skill.md
@@ -103,17 +103,31 @@ Act on what comes back:
 
 Both of the first two are signals to change grooming itself, not just to note the miss.
 
+## Behavioural lens
+
+Judge the task by what a user or caller can observe: the promised outcome,
+boundaries, failure behaviour, and invariants. Ask whether those promises held
+in reality, including the paths that fail quietly. Do not turn an internal
+implementation choice into a lesson merely because it differs from the plan;
+record it only when it affected behaviour, safety, clarity, or an established
+convention.
+
+A useful retrospective leaves future work free to improve the internals while
+preserving the behaviour that matters. Capture durable contracts and causal
+lessons, not a transcript of implementation details.
+
 ## Step 5 — Ask
 
 ```python
 tasks__log_skill_invocation(skill="task-introspection/step-5-ask", task_id=task_id)
 ```
 
-1. **Where did the uncertainty come from?** Could grooming have removed it?
-2. **What decisions were never recorded?** Compare the plan to what was built. Log every gap with `tasks__add_decision` — **this is the highest-value part of the pass.**
-3. **What surprised us?** Should it become durable knowledge?
-4. **What should already exist next time?** Prefer improving the system over documenting history. If the improvement is a new capability, recommend it as a follow-up task rather than hand-rolling a script mid-retrospective.
-5. **What became obsolete?** Flag it; do not delete it unilaterally.
+1. **Did the intended behaviour hold?** Compare the promised outcomes, boundaries, failure behaviour, and invariants to what callers actually experienced.
+2. **Where did the uncertainty come from?** Could grooming have removed it?
+3. **What decisions were never recorded?** Compare the plan to what was built. Log every gap with `tasks__add_decision` — **this is the highest-value part of the pass.**
+4. **What surprised us?** Should it become durable knowledge?
+5. **What should already exist next time?** Prefer improving the system over documenting history. If the improvement is a new capability, recommend it as a follow-up task rather than hand-rolling a script mid-retrospective.
+6. **What became obsolete?** Flag it; do not delete it unilaterally.
 
 ## Step 6 — Record
 
@@ -233,6 +247,9 @@ If a pass produces none of those, it was probably not worth running — say so r
 - **Never skip decision-logging.** It is the highest-value part of the pass.
 - **Keep risk text byte-identical when grading**, or recurrence tracking silently breaks.
 - **Pass the whole grooming object back** — it replaces, it does not merge.
+- **Record behaviour, not incidental detail.** Preserve observable promises and
+  causal lessons; leave implementation choices flexible unless they affect a
+  contract, safety, clarity, or convention.
 - **Never unilaterally delete stale memories, skills, or concepts.** Flag them; let the user decide.
 - **New capabilities are code tasks, not inline scripts.**
 - Do not ask the user what you can derive from the task.

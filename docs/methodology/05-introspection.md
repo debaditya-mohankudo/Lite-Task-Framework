@@ -14,13 +14,33 @@ For every risk in `grooming.risks`, grade what actually happened:
 - **materialized** — predicted, and it happened. Did the mitigation hold?
 - **avoided** — predicted, and the prediction caused the change that dodged it.
 - **wrong** — predicted, but irrelevant. Noise in that pass.
-- **missed** — a surprise no prediction anticipated.
+- **missed** — a surprise no prediction anticipated. This has no risk in
+  `grooming.risks` to grade against — it is not one of the four grades above,
+  it goes in the introspection report's `missed_surprises` field instead.
 
 Be honest about the difference between *materialized* and *unresolved*. A risk
 that said "decide X now" and was simply not decided has not materialized — it
 is still open, and grading it as inevitable launders a skipped decision into a
 recorded outcome. If grading surfaces a decision you skipped, **make the
 decision now**; that is the loop working, not a failure of it.
+
+Write the grades back by re-passing the whole grooming object with `graded`
+filled in:
+
+```python
+tasks__update(task_id, grooming={
+    **existing_grooming,
+    "risks": [
+        {"text": "<unchanged text>", "graded": "avoided"},
+        {"text": "<unchanged text>", "graded": "wrong"},
+    ],
+})
+```
+
+**`grooming` replaces wholesale**, so pass the other keys back unchanged or
+they are lost. Keep each risk's `text` byte-identical — `tasks__grooming_accuracy`
+groups recurring risks by text, and a reworded risk stops matching its own
+history.
 
 Repeated `wrong` grades mean grooming is asking the wrong questions. Repeated
 `missed` grades mean it is not asking enough of them. Both are signals to
@@ -51,15 +71,30 @@ Tallies are recomputed from the individual grades rather than read back from
 the `grooming_accuracy` counts in the reports, so a report that overstates its
 own accuracy is reported as a disagreement instead of being believed.
 
+## Assess behaviour, not incidental detail
+
+Judge the task by what a user or caller can observe: the promised outcome,
+boundaries, failure behaviour, and invariants. Ask whether those promises held
+in reality, including paths that fail quietly. An internal implementation
+choice is worth recording only when it affected behaviour, safety, clarity, or
+an established convention.
+
+A useful retrospective preserves the behaviour that matters while leaving
+future work free to improve the internals. Capture durable contracts and causal
+lessons, not a transcript of implementation details.
+
 ## Ask
 
-1. **Where did the uncertainty come from?** Could grooming have removed it?
-2. **What decisions were never recorded?** Compare the plan to what was built.
+1. **Did the intended behaviour hold?** Compare the promised outcomes,
+   boundaries, failure behaviour, and invariants to what callers actually
+   experienced.
+2. **Where did the uncertainty come from?** Could grooming have removed it?
+3. **What decisions were never recorded?** Compare the plan to what was built.
    Log every gap — this is the highest-value part of the pass.
-3. **What surprised us?** Should it become durable knowledge?
-4. **What should already exist next time?** Prefer improving the system over
+4. **What surprised us?** Should it become durable knowledge?
+5. **What should already exist next time?** Prefer improving the system over
    documenting history.
-5. **What became obsolete?** Flag it; do not delete it unilaterally.
+6. **What became obsolete?** Flag it; do not delete it unilaterally.
 
 ## Record
 
