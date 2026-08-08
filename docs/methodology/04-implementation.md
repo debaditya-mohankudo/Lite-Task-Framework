@@ -4,6 +4,10 @@ Grooming removed the uncertainty. This document is about not reintroducing it.
 
 ## Start
 
+Use the supplied `task_id`. If none was given, read the active task instead
+of guessing. Switching away from a different active task is refused unless
+confirmed — surface that rather than retrying blind.
+
 ```python
 tasks__set_active(task_id)
 tasks__context(task_id)     # read the grooming findings before writing code

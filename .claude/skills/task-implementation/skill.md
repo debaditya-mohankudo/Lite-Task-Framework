@@ -20,6 +20,11 @@ In effect for any active task. Also reach for it when the user says "just implem
 
 ## Start
 
+Use the supplied `task_id`. If none was given, read the active task with
+`tasks__active()` instead of guessing. `tasks__set_active` refuses to switch
+away from a different active task unless `confirm=True` — if that happens,
+surface it and confirm before overriding, rather than retrying blind.
+
 ```python
 tasks__set_active(task_id)
 tasks__log_skill_invocation(skill="task-implementation/start", task_id=task_id)
@@ -92,7 +97,7 @@ Test the contract, not the implementation. A test asserting what the code alread
 
 **Test what fails silently** — logging, fail-open paths, idempotence. Anything whose failure produces no error is exactly what needs a test, because nothing else will ever tell you it broke.
 
-Verify against reality where the cost is small. A real temporary git repository catches what a mocked subprocess cannot.
+Verify against reality where the cost is small. A real temporary git repository catches what a mocked subprocess cannot, and a live end-to-end run catches what assertions do not.
 
 ## When a test fails, decide which side is wrong
 
@@ -107,7 +112,7 @@ tasks__finish(task_id, reason="what actually shipped")
 
 The checklist should already be checked off by now (see above) — this call closes the task, it does not reconcile it.
 
-Commit with `task:<id>` in the message so the link is captured. Where the hook is not installed, `python -m taskfw.backfill` recovers it from git history.
+Commit with `task:<id>` in the message, then call `tasks__add_commit(task_id, sha, repo)` yourself — there is no hook that does this automatically, so the link only exists if you make the call. `python -m taskfw.backfill` re-derives it from git history if the call is missed; that is the recovery path, not a substitute for making it.
 
 State outcomes plainly. If tests fail, say so. If a step was skipped, say that. A `reason` that overstates what landed is worse than none, because it will be believed.
 
