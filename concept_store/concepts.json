@@ -394,6 +394,35 @@
       "module": "taskfw/log.py",
       "name": "stderr-only-logging"
     },
+    "tasks-table-projection-contract": {
+      "confidence": 0.85,
+      "contracts": [
+        "schema.TASKS declares the 5 scalar columns (id, type, status, parent, title) plus data/created_at/updated_at — adding a 6th scalar means updating BOTH schema.TASKS and the explicit column list in TaskStore.save()'s INSERT/ON CONFLICT statement, which is not derived from TABLES",
+        "Task (models.py) is the superset: every schema scalar name (type, status, parent, title, id) must exist as a same-named Task field, or save() breaks on task.<attr> access",
+        "TaskStore.save(task) is the ONLY place that writes tasks.type/status/parent/title — no other method in store.py, lifecycle.py, or mcp_server.py issues an UPDATE/INSERT against those columns",
+        "TaskStore.list(status=, type=, parent=) and TaskStore.children() filter on the scalar columns only — a field promoted into `data` but not mirrored as a scalar is invisible to these filters and to idx_tasks_status/idx_tasks_parent",
+        "TaskStore.get(task_id) and .search() read ONLY the `data` column and reconstruct via Task.from_json — they never read the scalars, so a scalar/data mismatch is invisible to these two paths specifically"
+      ],
+      "created_at": "2026-08-08T04:30:33.942098+00:00",
+      "description": "The tasks table has two kinds of columns that must stay in lockstep: five indexable scalars (id, type, status, parent, title) that mirror fields on Task, and one `data` column holding the full Task as JSON, which is authoritative for every field not promoted to a scalar. There is exactly one writer of both — TaskStore.save() — which is what prevents the projection from drifting. Anything that reads a scalar (tasks__list's status/type/parent filters, the idx_tasks_status/idx_tasks_parent indexes) is reading a value that also exists inside `data`; anything that reads `data` (Task.from_json, every other field) never touches the scalars at all.",
+      "evidence": [
+        "taskfw/db/schema.py:TASKS",
+        "taskfw/models.py:Task",
+        "taskfw/store.py:TaskStore.save",
+        "taskfw/store.py:TaskStore.list",
+        "taskfw/store.py:TaskStore.children",
+        "taskfw/mcp_server.py:tasks__list"
+      ],
+      "invariants": [
+        "A scalar column name in schema.TASKS that has no matching Task field is a silent breakage point: save() would raise AttributeError on task.<name>, but nothing enforces the two lists match except manual read-through — there is no test pinning column-name/field-name parity the way test_foundation.py pins additive-only migration",
+        "Renaming a Task field without renaming the corresponding schema.TASKS column (or vice versa) is exactly the kind of change concept__search on the old/new name should catch before it ships",
+        "New Task fields do NOT need a matching scalar column by default — only fields that need to be filtered/indexed independent of JSON parsing get promoted (see schema.py's own comment on TASKS.data)",
+        "schema.migrate()'s additive-only guarantee (see schema-single-source-additive-migration) means a scalar column can be added but never renamed in place — a Task field rename therefore always means a NEW scalar column plus an orphaned old one, not an in-place rename"
+      ],
+      "last_validated": "2026-08-08T05:41:07.507641+00:00",
+      "module": "taskfw/store.py",
+      "name": "tasks-table-projection-contract"
+    },
     "taskstore-data-access-only": {
       "confidence": 0.94,
       "contracts": [
@@ -459,6 +488,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-06T12:46:05.245523+00:00"
+    "updated_at": "2026-08-08T05:41:07.507850+00:00"
   }
 }
