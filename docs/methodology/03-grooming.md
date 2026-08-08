@@ -7,6 +7,18 @@ pause.
 After a grooming pass, an engineer should know what to build, where, why that
 way, what risks remain, and what success looks like.
 
+Everything below is in service of one question:
+
+> **Do we understand this task, the existing behaviour, consequences,
+> unknowns, risks, and complexity well enough to make an informed
+> implementation decision?**
+
+Grooming is done when the answer is yes — not when every field has been
+filled in. A "no" is a legitimate outcome too, as long as what's blocking a
+"yes" is named. Use judgement about what "well enough" requires for this
+task; a one-line config change and a cross-service behaviour change do not
+need the same amount of digging.
+
 ## Read first
 
 ```python
@@ -22,31 +34,33 @@ what is new. A prior risk graded `avoided` or `materialized` is evidence about
 what actually held up; discarding it throws away the most expensive information
 in the task.
 
-## Verify the premise
+## Investigate
 
-The highest-value step, and the easiest to skip.
+There is no fixed checklist here — what counts as "understood well enough"
+depends on the task, and a capable engineer chasing the guiding question will
+naturally end up checking the things a checklist would have listed: whether
+the plan is unambiguous, whether work can start today, what's hidden, what
+history says, whether it's a duplicate or too large for one session, and what
+would most likely stall it.
 
-For anything claiming "X is the authoritative file", "Y calls Z", "this is the
-production path", or "this duplication is accidental" — **spend one concrete
-verification step before accepting it.** Read the file. Grep for callers.
-Check the git history. Inspect the running system.
+The one habit worth calling out because it's the easiest to skip: for
+anything the plan rests on — "X is the authoritative file", "Y calls Z",
+"this is the production path", "this duplication is accidental" — **spend one
+concrete verification step before accepting it.** Read the file. Grep for
+callers. Check the git history. Inspect the running system. This applies just
+as much to a premise you wrote yourself an hour ago as to one you inherited —
+self-authored premises are exactly as unexamined as inherited ones, and feel
+more trustworthy, which makes them worse.
 
-This applies just as much to a premise you wrote yourself an hour ago as to one
-you inherited. Self-authored premises are exactly as unexamined as inherited
-ones, and feel more trustworthy, which makes them worse.
+When a claim is contested enough that a future reader would trust it without
+re-checking, say plainly how well-supported it is: `fact`, `inference`,
+`assumption`, or `unknown`. Most claims don't need the label — only the ones
+where the distinction changes what happens next.
 
-## Review
-
-1. **Is the outcome obvious?** Would two engineers produce essentially the same
-   implementation? If not, name the ambiguity.
-2. **Can work start today?** If not, what decision or dependency is missing?
-3. **What assumptions are hidden?** Architecture, data format, ordering,
-   deployment. Validate what you can; record the rest.
-4. **Does history change the plan?** Read the neighbours and the commits.
-5. **Is it a duplicate or an orphan?** Check against parent and siblings, not
-   just search results.
-6. **Is it one session's work?** If not, split it.
-7. **What will stall this?** Predict the largest remaining risk.
+Consult the task graph, not just search hits, when judging whether something
+is a duplicate or an orphan. Don't abandon a task unilaterally — surface it to
+the user first, and consolidate duplicate ownership onto one task rather than
+leaving two tasks that agree on the work but disagree on who's done with it.
 
 ## Write findings
 
@@ -54,11 +68,17 @@ ones, and feel more trustworthy, which makes them worse.
 tasks__update(task_id, grooming={
     "clarifications":       ["..."],
     "hidden_assumptions":   ["..."],
+    "open_questions":       [{"question": "...", "blocking": False}],
     "risks":                [{"text": "...", "graded": None}],
     "prior_art":            ["..."],
     "suggested_improvements": ["..."],
 })
 ```
+
+`hidden_assumptions` is something believed and left unverified.
+`open_questions` is something known to be unknown, with `blocking: true` when
+work cannot start without an answer. Only add an entry where the distinction
+changes what happens next.
 
 Findings go in `grooming`, not the motivation. Fixing the checklist, files, or
 motivation itself is fine and encouraged — that is repair, not annotation.
@@ -78,20 +98,6 @@ Introspection grades every risk, so a risk that cannot be graded is noise.
 
 The first can be graded `materialized`, `avoided`, or `wrong`. The second
 cannot be graded at all, and so teaches nothing.
-
-## Structural checks
-
-| Check | Passes when |
-|---|---|
-| Resolution is a checklist | `resolution` has concrete items |
-| File paths named | Items name a file or module |
-| Dependencies recorded | Prerequisites exist as edges, not just prose |
-| No duplicate ownership | No other task's checklist owns the same file edit |
-| No blocking TBD | Nothing needed to start is unresolved |
-
-Duplicate ownership is distinct from contradiction: two tasks can agree on what
-to do and still be a problem, because neither is the source of truth for when
-it is done. Consolidate to one owner and link the others.
 
 ## Grooming is not starting
 

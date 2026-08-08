@@ -2,7 +2,7 @@
 name: task-grooming
 description: Pre-implementation grooming pass. Removes uncertainty before implementation by pulling context, verifying premises, and recording falsifiable risks. Invoke with /task-grooming, /task-grooming task:<id>, or /task-grooming epic:<id>.
 user-invocable: true
-updated: 2026-08-01
+updated: 2026-08-08
 doc: docs/methodology/03-grooming.md
 repo: ~/workspace/task-framework/.claude/skills/task-grooming/skill.md
 deployed: ~/.claude/skills/task-grooming/skill.md
@@ -12,7 +12,11 @@ Grooming is not for making a task prettier. It is for **removing uncertainty bef
 
 The reasoning lives in [03-grooming.md](../../../docs/methodology/03-grooming.md). This file is the operational pass.
 
-After a grooming pass, an engineer should know what to build, where, why that way, what risks remain, and what success looks like.
+Everything below is in service of one question:
+
+> **Do we understand this task, the existing behaviour, consequences, unknowns, risks, and complexity well enough to make an informed implementation decision?**
+
+Grooming is done when the answer is yes — not when every field has been filled in. A "no" is a legitimate outcome too, as long as what's blocking a "yes" is named. Use judgement about what "well enough" requires for this task; a one-line config change and a cross-service behaviour change do not need the same amount of digging.
 
 ## Input resolution
 
@@ -54,86 +58,44 @@ The bundle's `grooming` section holds the last pass. **Revise it; do not start f
 
 A risk already graded `avoided` or `materialized` is evidence about what actually held up — the most expensive information in the task. Discarding it to write a fresh block throws that away and risks re-flagging something already settled.
 
-## Step 3 — Concept lookup
+## Step 3 — Investigate
 
 ```python
-tasks__log_skill_invocation(skill="task-grooming/step-3-concept-lookup", task_id=task_id)
+tasks__log_skill_invocation(skill="task-grooming/step-3-investigate", task_id=task_id)
+```
+
+Do whatever it takes to answer the guiding question — no fixed checklist, because the right investigation depends on the task. Tools commonly worth reaching for:
+
+```python
 concept__list(repo="<abs repo path>")
 concept__search(repo="<abs repo path>", query="<module or idea>")
 concept__get(repo="<abs repo path>", name="<slug>")
-```
-
-Match the task's `files` against each concept's `module`. `repo` is always required. Skip silently if the repo has no store.
-
-For each match, check:
-
-- **Invariant conflict** — does the plan violate something the concept asserts as always-true?
-- **Contract break** — does the plan change what the module promises callers?
-- **New concept** — does the task introduce behaviour no concept captures?
-
-Also worth running when the task adds a module:
-
-```python
 concept__uncovered(repo="<abs repo path>", modules=["<file>", "..."])
 ```
 
-Record findings in `prior_art` and note the slugs.
+`repo` is always required for concept tools; skip silently if the repo has no store. Anything a concept surfaces (an invariant, a contract, a gap no concept covers) goes in `prior_art` with the slug.
 
-## Step 4 — Verify the premise
+For every claim the task's plan rests on — "X is the authoritative file", "Y calls Z", "this is the production path", "this duplication is accidental" — **spend one concrete verification step before accepting it.** Read the file. Grep for callers. Check `git log`. Inspect the running system. This applies as much to a premise you wrote yourself an hour ago as to one you inherited — self-authored premises are exactly as unexamined and feel more trustworthy, which makes them worse.
 
-```python
-tasks__log_skill_invocation(skill="task-grooming/step-4-verify-premise", task_id=task_id)
-```
+When a claim is contested enough that a future reader would need to trust it without re-checking, say plainly how well-supported it is: `fact` (read and confirmed), `inference` (implied but not stated), `assumption` (believed, unverified), or `unknown` (flagged, not yet checked). Most claims don't need the label spelled out — only the ones where the distinction changes what happens next.
 
-The highest-value step, and the easiest to skip.
+Consult the task graph rather than search hits alone when judging whether this is a duplicate, an orphan, or blocked on something else. If another task owns the same work, consolidate to one owner and link the rest with `tasks__link(..., rel="duplicates")` — but don't abandon a task unilaterally; surface it to the user first.
 
-For anything claiming "X is the authoritative file", "Y calls Z", "this is the production path", or "this duplication is accidental" — **spend one concrete verification step before accepting it.** Read the file. Grep for callers. Check `git log`. Inspect the running system.
-
-This applies just as much to a premise you wrote yourself an hour ago as to one you inherited. Self-authored premises are exactly as unexamined and feel more trustworthy, which makes them worse.
-
-## Step 5 — Engineering review
+## Step 4 — Write findings
 
 ```python
-tasks__log_skill_invocation(skill="task-grooming/step-5-engineering-review", task_id=task_id)
-```
-
-1. **Is the outcome obvious?** Would two engineers produce essentially the same implementation? If not, name the ambiguity.
-2. **Can work start today?** If not, what decision or dependency is missing?
-3. **What assumptions are hidden?** Architecture, data format, ordering, deployment. Validate what you can; record the rest.
-4. **Does history change the plan?** Read the neighbours and the commits in the bundle.
-5. **Is it a duplicate or an orphan?** Check against parent and siblings, not just search hits.
-6. **Is it one session's work?** If not, split it.
-7. **What will stall this?** Predict the largest remaining risk.
-
-## Step 6 — Structural checks
-
-```python
-tasks__log_skill_invocation(skill="task-grooming/step-6-structural-checks", task_id=task_id)
-```
-
-| Check | Passes when |
-|---|---|
-| Resolution is a checklist | `resolution` has concrete items |
-| File paths named | Items name a file or module |
-| Dependencies recorded | Prerequisites exist as edges, not just prose |
-| No duplicate ownership | No other task's checklist owns the same file edit |
-| No blocking TBD | Nothing needed to start is unresolved |
-| Progress matches status | Not every item ticked while status is still `open` |
-
-Duplicate ownership is distinct from contradiction: two tasks can agree on what to do and still be a problem, because neither is the source of truth for when it is done. Consolidate to one owner and link the others with `tasks__link(..., rel="duplicates")`.
-
-## Step 7 — Write findings
-
-```python
-tasks__log_skill_invocation(skill="task-grooming/step-7-write-findings", task_id=task_id)
+tasks__log_skill_invocation(skill="task-grooming/step-4-write-findings", task_id=task_id)
 tasks__update(task_id, grooming={
     "clarifications":         ["..."],
     "hidden_assumptions":     ["..."],
+    "open_questions":         [{"question": "...", "blocking": False}],
     "risks":                  [{"text": "...", "graded": None}],
     "prior_art":              ["..."],
     "suggested_improvements": ["..."],
 })
 ```
+
+`hidden_assumptions` is something believed and left unverified. `open_questions` is something known to be unknown, with `blocking: true` when work cannot start without an answer. Only add an entry where the distinction changes what happens next — a task with no genuine open question doesn't need an empty list.
 
 `grooming` replaces wholesale — only the latest pass is kept. That is about **storage, not authorship**: the object you pass should be the edited revision from Step 2. If a prior finding is worth keeping as history rather than as a live finding, put it in `prior_art`.
 
@@ -151,10 +113,10 @@ Introspection grades every risk, so a risk that cannot be graded is noise.
 
 The first can be graded `materialized`, `avoided`, or `wrong`. The second cannot be graded at all, and so teaches nothing. `tasks__grooming_accuracy` counts the ungradeable ones against you.
 
-## Step 8 — Report
+## Step 5 — Report
 
 ```python
-tasks__log_skill_invocation(skill="task-grooming/step-8-report", task_id=task_id)
+tasks__log_skill_invocation(skill="task-grooming/step-5-report", task_id=task_id)
 ```
 
 ```
