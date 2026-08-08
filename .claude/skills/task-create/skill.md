@@ -2,7 +2,7 @@
 name: task-create
 description: Reference for creating tasks and epics in taskfw — the two types, what each field is for, and how linking works. Use before calling tasks__create or when the user says /task-create.
 user-invocable: true
-updated: 2026-08-06
+updated: 2026-08-08
 doc: docs/methodology/02-create.md
 repo: ~/workspace/task-framework/.claude/skills/task-create/skill.md
 deployed: ~/.claude/skills/task-create/skill.md
@@ -50,6 +50,20 @@ Log the invocation once the id comes back:
 ```python
 tasks__log_skill_invocation(skill="task-create", task_id=result["id"])
 ```
+
+## Frame the task around behaviour, not implementation detail
+
+Describe the observable change: who or what experiences it, the outcome that
+must hold, relevant boundaries, failure behaviour, and invariants. A task
+should preserve room to choose or improve the implementation during grooming
+and execution; do not make a preferred internal design its definition of done
+unless that design is itself a required constraint.
+
+Use `motivation` for the user or system consequence, and write `resolution`
+items as verifiable behavioural outcomes where possible. Internal steps belong
+there only when they are necessary for safety, clarity, or an established
+convention. The completion test is whether the promised behaviour holds, not
+whether the original implementation sketch was followed exactly.
 
 ## What each field is for
 
@@ -116,4 +130,6 @@ Skip silently if the repo has no store.
 - **An epic cannot have a parent.** A task cannot be its own parent. Those are the only two structural rules; both return `{"error": ..., "rule": ...}`, and `rule` names which one fired so you can react without matching on message text.
 - **Use `tags`, not new types**, for anything the two types do not express.
 - **Write `resolution` as concrete steps naming files** for anything with three or more discrete targets.
+- **Specify observable behaviour before internal design.** Keep implementation
+  choices flexible unless they are a real constraint.
 - Activate after creating: `tasks__set_active(task_id)` — then call `tasks__context`.

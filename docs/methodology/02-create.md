@@ -17,6 +17,26 @@ tasks__create(
 )
 ```
 
+`tasks__create` also returns `related_candidates` — tasks whose titles
+overlap with the one just created. It is advisory only; nothing links
+automatically. Look it over and either `tasks__link` (as `duplicates` or
+`relates_to`), fold the new task into the existing one, or consciously
+continue past it — but don't ignore it unseen.
+
+## Frame the task around behaviour, not implementation detail
+
+Describe the observable change: who or what experiences it, the outcome that
+must hold, relevant boundaries, failure behaviour, and invariants. A task
+should leave room to choose or improve the implementation during grooming and
+execution; a preferred internal design is not its definition of done unless it
+is itself a required constraint.
+
+Use `motivation` for the user or system consequence, and write `resolution`
+items as verifiable behavioural outcomes where possible. Internal steps belong
+there only when they are necessary for safety, clarity, or an established
+convention. Completion means the promised behaviour holds, not that an initial
+implementation sketch was followed exactly.
+
 ## What each field is for
 
 **title** — how the task appears in every list. Specific beats short: "fix
@@ -27,9 +47,13 @@ tells them the whole story.
 later, and the one most often left thin. Say what breaks if this is not done.
 If the task exists because something surprised you, record the surprise.
 
-**resolution** — a checklist of concrete steps, each naming a file or module
-where possible. Progress is derived from it, so it doubles as the completion
-signal. Vague items produce a task that is never quite done.
+**resolution** — a checklist of concrete steps, phrased as verifiable
+behavioural outcomes by default (see "Frame the task around behaviour,
+not implementation detail" above). Progress is derived from it, so it
+doubles as the completion signal. Vague items produce a task that is never
+quite done. Name a file or module only when doing so genuinely constrains
+scope or clarifies the outcome — routine "what files does this touch"
+guidance belongs in `files` below, not duplicated here.
 
 **files** — the files this task is expected to touch. Read directly by
 `tasks__context` and by grooming, so it is not documentation; it is how the
