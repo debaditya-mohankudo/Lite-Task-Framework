@@ -144,3 +144,7 @@ Failing open is only acceptable when it does not mean losing data quietly.
 - Introspection got skipped because the work went well.
 
 The last one is the one that actually happens.
+
+## Memory
+
+Cross-session memory lives in `~/.claude/MEMORY.sqlite`, shared across projects. Use the `mcp__claude-hooks__memory__*` tools to read/write it — `memory__add` / `memory__add_batch` to save, `memory__search` to recall. Tag entries with domain `task-framework` for this project.
