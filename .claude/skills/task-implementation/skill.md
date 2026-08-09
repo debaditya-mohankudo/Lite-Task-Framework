@@ -58,6 +58,7 @@ Before writing a check, ask whether the thing being checked needs to be represen
 ## Log decisions as they happen
 
 ```python
+tasks__log_skill_invocation(skill="task-implementation/decision", task_id=task_id)
 tasks__add_decision(task_id, "Chose X over Y because Z.")
 ```
 
@@ -72,6 +73,7 @@ Stop and write it down before continuing. A surprise mid-task is the cheapest kn
 ## Check off deliverables as they land
 
 ```python
+tasks__log_skill_invocation(skill="task-implementation/check-item", task_id=task_id)
 tasks__check_item(task_id, index=..., done=True)
 ```
 

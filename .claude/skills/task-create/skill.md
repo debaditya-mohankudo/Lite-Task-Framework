@@ -31,6 +31,7 @@ Kind of work — bug, refactor, urgent, research — goes in `tags`, which is ex
 ## Signature
 
 ```python
+tasks__log_skill_invocation(skill="task-create/create")
 tasks__create(
     title="Short, specific, and readable in a list",
     type="task",                      # or "epic"
@@ -45,11 +46,7 @@ tasks__create(
 
 Every argument except `title` is optional. Nothing is auto-filled with `(pending)` or `TBD`, because nothing is required.
 
-Log the invocation once the id comes back:
-
-```python
-tasks__log_skill_invocation(skill="task-create", task_id=result["id"])
-```
+The log call above has no `task_id` yet — there isn't one until `tasks__create` returns. Once the id comes back, subsequent calls in this skill carry it (see below).
 
 ## Frame the task around behaviour, not implementation detail
 
@@ -87,6 +84,7 @@ whether the original implementation sketch was followed exactly.
 ## Checklist items
 
 ```python
+tasks__log_skill_invocation(skill="task-create/check-item", task_id=task_id)
 tasks__check_item(task_id, index=0, done=True)
 ```
 
@@ -95,6 +93,7 @@ Zero-based. Progress is computed from the list on every read, so it can never di
 ## Updating
 
 ```python
+tasks__log_skill_invocation(skill="task-create/update", task_id=task_id)
 tasks__update(task_id, motivation="...", resolution=["..."], tags=["..."])
 ```
 
@@ -103,6 +102,7 @@ tasks__update(task_id, motivation="...", resolution=["..."], tags=["..."])
 ## Linking
 
 ```python
+tasks__log_skill_invocation(skill="task-create/link", task_id=from_id)
 tasks__link(from_id, to_id, rel="depends_on")     # idempotent
 tasks__unlink(from_id, to_id, rel="depends_on")   # omit rel to remove all
 tasks__edges(task_id)                             # both directions
@@ -117,6 +117,7 @@ Record sequencing as edges rather than only in prose. Prose is for a human readi
 Where the repo has a concept store, check whether the files this task touches already have concepts:
 
 ```python
+tasks__log_skill_invocation(skill="task-create/concept-lookup", task_id=task_id)
 concept__list(repo="<abs repo path>")
 concept__search(repo="<abs repo path>", query="<module or idea>")
 ```
