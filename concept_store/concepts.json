@@ -6,7 +6,8 @@
         "introspection_nudge(report, task_id, conn) returns None or a string; never raises, never mutates the report or the task",
         "Fires only when the report has an unpromoted lesson AND the task has never cited any memory",
         "finish_nudge(task) returns None or a string; fires only when task.introspection is empty",
-        "drift_reflection_nudge(scope, active_task_id, active_task_title) returns None or a string; fires every _DRIFT_REFLECTION_INTERVAL (4) calls under the same (scope, active_task_id) pair",
+        "drift_reflection_nudge(scope, active_task_id, active_task_title='', active_task_phase='') returns None or a string; fires every _DRIFT_REFLECTION_INTERVAL (4) calls under the same (scope, active_task_id) pair. active_task_phase (added task:afd462e3) is an optional keyword param appended after active_task_title specifically so existing positional call sites keep working; when non-empty it is appended to the label as a bracketed suffix, e.g. 'task:x (title) [implementation]'.",
+        "phase_label(phase: dict[str,bool]) -> str collapses task_phase's three independent booleans into a single word — 'grooming' | 'implementation' | 'introspection' | 'done' — by returning the first stage not yet reached in that order. Lives next to task_phase, takes task_phase's dict output rather than a Task, so a caller composes the two rather than task_phase growing a mode flag (task:afd462e3).",
         "is_implemented(task) -> bool is the pure predicate (task.progress total>0 and done==total), status-independent — extracted from finish_reminder_nudge's inline check (task:bf95ced8)",
         "finish_reminder_nudge(task) returns None or a string; fires when is_implemented(task) is True AND task.status == 'open'",
         "task_phase(task) -> {groomed, implemented, introspected} (all bool), fully derived every call, never stored — exposed via mcp_server.tasks__phase (task:bf95ced8)",
@@ -24,6 +25,7 @@
         "taskfw/dispatcher.py:introspection_nudge",
         "taskfw/dispatcher.py:finish_nudge",
         "taskfw/dispatcher.py:drift_reflection_nudge",
+        "taskfw/dispatcher.py:phase_label",
         "taskfw/dispatcher.py:is_implemented",
         "taskfw/dispatcher.py:finish_reminder_nudge",
         "taskfw/dispatcher.py:stale_memory_nudge",
@@ -35,6 +37,8 @@
         "tests/test_dispatcher.py::TestCombine",
         "tests/test_dispatcher.py::TestStaleMemoryNudge",
         "tests/test_dispatcher.py::TestUngroomedProgressNudge",
+        "tests/test_dispatcher.py::TestDriftReflectionNudge",
+        "tests/test_dispatcher.py::TestPhaseLabel",
         "tests/test_mcp_tools.py::TestToolCallLogging",
         "tests/test_mcp_tools.py::TestStaleMemoryNudge",
         "tests/test_mcp_tools.py:TestUpdate",
@@ -48,9 +52,10 @@
         "task_phase's 'groomed' has no separate groomed_at flag — a task is groomed exactly when task.grooming is non-empty",
         "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires AFTER tasks__finish when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called",
         "stale_memory_nudge never calls supersede()/forget() itself — advisory only, same as every other nudge here, consistent with task-introspection's 'never unilaterally delete stale memories' rule",
-        "ungroomed_progress_nudge is the first nudge built as a thin wrapper deriving its condition the same way task_phase() derives 'groomed' (bool(task.grooming)), rather than re-deriving its own independent condition from raw task fields — still fits the plain Callable[[dict], None] shape with no new mechanism."
+        "ungroomed_progress_nudge is the first nudge built as a thin wrapper deriving its condition the same way task_phase() derives 'groomed' (bool(task.grooming)), rather than re-deriving its own independent condition from raw task fields — still fits the plain Callable[[dict], None] shape with no new mechanism.",
+        "phase_label never throws on a real Task's task_phase() output: grooming/introspection are dataclass fields with default_factory (never None) and progress is a derived property, so the dict it reads is always well-formed (task:afd462e3)."
       ],
-      "last_validated": "2026-08-06T12:46:05.245442+00:00",
+      "last_validated": "2026-08-12T04:53:23.115937+00:00",
       "module": "taskfw/dispatcher.py",
       "name": "advisory-nudge-dispatcher"
     },
@@ -488,6 +493,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-08T05:41:07.507850+00:00"
+    "updated_at": "2026-08-12T04:53:23.116060+00:00"
   }
 }
