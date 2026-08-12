@@ -143,9 +143,10 @@ def _drift_reflection_hook(result: dict[str, Any]) -> None:
     active_task_id = store().get_active(scope) or ""
     active_task = store().get(active_task_id) if active_task_id else None
     active_task_title = active_task.title if active_task else ""
+    active_task_phase = dispatcher.phase_label(dispatcher.task_phase(active_task)) if active_task else ""
     dispatcher.apply_nudge(
         result, "drift_reflection_nudge",
-        dispatcher.drift_reflection_nudge(scope, active_task_id, active_task_title),
+        dispatcher.drift_reflection_nudge(scope, active_task_id, active_task_title, active_task_phase),
     )
 
 

@@ -86,7 +86,9 @@ _DRIFT_REFLECTION_INTERVAL = 4  # calls between nudges, per (scope, task) — ti
 _drift_reflection_call_counts: dict[tuple[str, str], int] = {}  # (scope, active_task_id) -> count
 
 
-def drift_reflection_nudge(scope: str, active_task_id: str, active_task_title: str = "") -> str | None:
+def drift_reflection_nudge(
+    scope: str, active_task_id: str, active_task_title: str = "", active_task_phase: str = "",
+) -> str | None:
     """Port of claude-hooks' _maybe_drift_reflection_nudge (hooks/dispatcher.py), moved
     into task-framework itself.
 
@@ -119,6 +121,8 @@ def drift_reflection_nudge(scope: str, active_task_id: str, active_task_title: s
     if count % _DRIFT_REFLECTION_INTERVAL != 0:
         return None
     label = f"task:{active_task_id}" + (f" ({active_task_title})" if active_task_title else "")
+    if active_task_phase:
+        label += f" [{active_task_phase}]"
     return (
         f"Quiet check-in: {count} calls made so far under {label}. Take a moment — "
         "does this stretch of work still match the task's stated intent, or has it "
@@ -244,6 +248,27 @@ def task_phase(task) -> dict[str, bool]:
         "implemented": is_implemented(task),
         "introspected": bool(task.introspection),
     }
+
+
+def phase_label(phase: dict[str, bool]) -> str:
+    """Collapse task_phase's three independent booleans into the single word a
+    reader expects — "grooming", "implementation", "introspection", or "done".
+
+    task_phase deliberately stays three booleans (a task can be re-groomed
+    after being implemented, introspected without every checklist item done,
+    etc.) so this makes an ordering call the booleans themselves don't: the
+    first stage not yet reached, in grooming -> implementation ->
+    introspection order. Only a caller that wants a single label for display
+    (drift_reflection_nudge) needs this; tasks__phase keeps returning the raw
+    booleans so it never disagrees with task_phase itself.
+    """
+    if not phase["groomed"]:
+        return "grooming"
+    if not phase["implemented"]:
+        return "implementation"
+    if not phase["introspected"]:
+        return "introspection"
+    return "done"
 
 
 def apply_nudge(result: dict[str, Any], key: str, nudge: str | None) -> None:

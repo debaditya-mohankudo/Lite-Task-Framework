@@ -20,6 +20,7 @@ from taskfw.dispatcher import (
     finish_reminder_nudge,
     introspection_nudge,
     is_implemented,
+    phase_label,
     stale_memory_nudge,
     task_phase,
     tool_called,
@@ -288,6 +289,36 @@ class TestDriftReflectionNudge:
             result = drift_reflection_nudge("scope1", "t1", "")
         assert result is not None
         assert "task:t1" in result
+
+    def test_includes_phase_when_given(self):
+        _drift_reflection_call_counts.clear()
+        result = None
+        for _ in range(_DRIFT_REFLECTION_INTERVAL):
+            result = drift_reflection_nudge("scope1", "t1", "Some task", "implementation")
+        assert result is not None
+        assert "[implementation]" in result
+
+    def test_phase_is_optional(self):
+        _drift_reflection_call_counts.clear()
+        result = None
+        for _ in range(_DRIFT_REFLECTION_INTERVAL):
+            result = drift_reflection_nudge("scope1", "t1", "Some task")
+        assert result is not None
+        assert "[" not in result
+
+
+class TestPhaseLabel:
+    def test_ungroomed_is_grooming(self):
+        assert phase_label({"groomed": False, "implemented": False, "introspected": False}) == "grooming"
+
+    def test_groomed_not_implemented_is_implementation(self):
+        assert phase_label({"groomed": True, "implemented": False, "introspected": False}) == "implementation"
+
+    def test_implemented_not_introspected_is_introspection(self):
+        assert phase_label({"groomed": True, "implemented": True, "introspected": False}) == "introspection"
+
+    def test_all_true_is_done(self):
+        assert phase_label({"groomed": True, "implemented": True, "introspected": True}) == "done"
 
 
 class TestToolCalled:
