@@ -279,9 +279,15 @@ def apply_nudge(result: dict[str, Any], key: str, nudge: str | None) -> None:
     introspection_nudge/drift_reflection_nudge/finish_nudge/
     finish_reminder_nudge; there is nothing left to template once the "if
     truthy, set the key" step is factored out).
+
+    Logs the firing here, not in each nudge function, so every nudge is
+    observable in the `logs` table by construction — a nudge type added
+    later gets logged for free just by going through this function, instead
+    of remembering to add a log line at each call site.
     """
     if nudge:
         result[key] = nudge
+        log.info("nudge=%s fired: %s", key, nudge)
 
 
 class tool_called:
