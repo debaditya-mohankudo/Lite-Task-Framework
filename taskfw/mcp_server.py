@@ -11,7 +11,10 @@ neither owns the rules.
 from __future__ import annotations
 
 import functools
+import json
 import os
+import urllib.error
+import urllib.request
 from typing import Any, Callable
 
 from mcp.server import MCPServer
@@ -579,6 +582,36 @@ def tasks__add_commit(task_id: str, sha: str, repo: str = "") -> dict[str, Any]:
 # Active task
 # ---------------------------------------------------------------------------
 
+_PUSH_TIMEOUT_S = 0.5
+
+
+def _push_active_task(workspace: str, task_id: str, title: str = "") -> None:
+    """Best-effort POST to claude-hooks' running FastAPI server (claude-hooks
+    task:996cc8f0), telling it what the active task now is. Pushing is a
+    courtesy, not a dependency — this store is the durable source of truth
+    regardless of whether that server is up, so tasks__set_active/clear_active
+    must succeed identically whether or not this call lands. Swallows every
+    failure (connection refused, timeout, DNS, non-2xx). Reads CLAUDE_HOOKS_URL
+    fresh on every call rather than caching it at import time, so tests can
+    point it at an unreachable port via monkeypatch.setenv.
+
+    Logged at debug, not warning: firing with no claude-hooks server running
+    is the expected common case, not an anomaly worth a human's attention.
+    """
+    base_url = os.environ.get("CLAUDE_HOOKS_URL", "http://127.0.0.1:8766")
+    body = json.dumps({"workspace": workspace, "task_id": task_id, "title": title}).encode()
+    req = urllib.request.Request(
+        f"{base_url}/set-active-taskid",
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(req, timeout=_PUSH_TIMEOUT_S).close()
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        log.debug("push to claude-hooks /set-active-taskid failed (non-fatal): %s", exc)
+
+
 @_tool()
 def tasks__set_active(task_id: str, confirm: bool = False) -> dict[str, Any]:
     """Set the active task for this workspace. Persisted, so it survives a restart.
@@ -587,7 +620,8 @@ def tasks__set_active(task_id: str, confirm: bool = False) -> dict[str, Any]:
     — see lifecycle.check_active_switch. Activating for the first time, or
     re-setting the task that's already active, never requires confirm.
     """
-    if store().get(task_id) is None:
+    task = store().get(task_id)
+    if task is None:
         return {"error": f"No task {task_id!r}"}
     scope = _scope()
     previous = store().get_active(scope)
@@ -595,6 +629,7 @@ def tasks__set_active(task_id: str, confirm: bool = False) -> dict[str, Any]:
     if not decision:
         return _denied(decision)
     store().set_active(task_id, scope)
+    _push_active_task(scope, task_id, task.title)
     return {"ok": True, "active": task_id, "scope": scope}
 
 
@@ -608,8 +643,10 @@ def tasks__active() -> dict[str, Any]:
 @_tool()
 def tasks__clear_active() -> dict[str, Any]:
     """Clear the active task for this workspace."""
-    store().clear_active(_scope())
-    return {"ok": True, "scope": _scope()}
+    scope = _scope()
+    store().clear_active(scope)
+    _push_active_task(scope, "")
+    return {"ok": True, "scope": scope}
 
 
 # ---------------------------------------------------------------------------

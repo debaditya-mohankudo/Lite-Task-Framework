@@ -10,6 +10,8 @@ different set than a hook does.
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from taskfw import mcp_server as m
@@ -21,6 +23,11 @@ def store(tmp_path, monkeypatch):
     s = TaskStore(tmp_path / "t.db")
     m.set_store(s)
     monkeypatch.setenv("TASKFW_SCOPE", "/test/workspace")
+    # Point the claude-hooks push at a port nothing listens on, so tests never
+    # depend on (or pollute) a real claude-hooks server that happens to be
+    # running on this machine. connection-refused is fast and swallowed by
+    # _push_active_task exactly like any other unreachable-server case.
+    monkeypatch.setenv("CLAUDE_HOOKS_URL", "http://127.0.0.1:1")
     yield s
     s.close()
     m.set_store(None)
@@ -356,6 +363,66 @@ class TestActiveTask:
 
     def test_context_without_task_or_active_explains_itself(self):
         assert "error" in m.tasks__context()
+
+
+class TestClaudeHooksPush:
+    """tasks__set_active/clear_active best-effort POST to claude-hooks'
+    /set-active-taskid (task:6906557f, claude-hooks task:996cc8f0)."""
+
+    def test_set_active_pushes_workspace_task_id_and_title(self, monkeypatch):
+        calls = []
+
+        def fake_urlopen(req, timeout=None):
+            calls.append((req.full_url, json.loads(req.data), timeout))
+            return _DummyResponse()
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
+        t = create(title="Push me")
+        m.tasks__set_active(t["id"])
+
+        assert len(calls) == 1
+        url, body, timeout = calls[0]
+        assert url == "http://127.0.0.1:1/set-active-taskid"
+        assert body == {"workspace": "/test/workspace", "task_id": t["id"], "title": "Push me"}
+        assert timeout == m._PUSH_TIMEOUT_S
+
+    def test_clear_active_pushes_empty_task_id(self, monkeypatch):
+        calls = []
+
+        def fake_urlopen(req, timeout=None):
+            calls.append(json.loads(req.data))
+            return _DummyResponse()
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
+        t = create()
+        m.tasks__set_active(t["id"])
+        m.tasks__clear_active()
+
+        assert calls[-1] == {"workspace": "/test/workspace", "task_id": "", "title": ""}
+
+    def test_set_active_still_succeeds_when_push_raises(self, monkeypatch):
+        def raising_urlopen(req, timeout=None):
+            raise ConnectionRefusedError("no server")
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", raising_urlopen)
+        t = create()
+        result = m.tasks__set_active(t["id"])
+
+        assert result["ok"]
+        assert m.tasks__active()["active"] == t["id"]
+
+    def test_set_active_unreachable_url_does_not_raise(self):
+        # No monkeypatch here — exercises the real urllib path against the
+        # unreachable CLAUDE_HOOKS_URL set by the store fixture, proving the
+        # actual network/connection-refused exception (not a mock) is caught.
+        t = create()
+        result = m.tasks__set_active(t["id"])
+        assert result["ok"]
+
+
+class _DummyResponse:
+    def close(self):
+        pass
 
 
 class TestDriftReflectionWiring:
