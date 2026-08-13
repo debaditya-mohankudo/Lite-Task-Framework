@@ -261,7 +261,8 @@
         "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task",
         "tasks__create(...) returns {ok, id, type, status} plus an OPTIONAL related_candidates key (list of task summaries, context.related_candidates() against the new task's title) — present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657).",
         "_tool(hook=None) is the single decorator every tool carries instead of @mcp.tool(): it wraps fn in dispatcher.tool_called(fn.__name__, post=hook) and registers the WRAPPED function with mcp.tool() itself, so the module-level name bound is the logged version too. Plain tools use @_tool(); tools needing one or more nudges pass @_tool(hook=some_hook) or @_tool(hook=dispatcher.combine(hook_a, hook_b)).",
-        "The 4 hook functions (_drift_reflection_hook, _finish_reminder_hook, _finish_hook, _introspection_hook) are all Callable[[dict], None], defined once near _tool and referenced by name at each tool's own decorator line — never centrally dispatched by tool name. _finish_reminder_hook/_finish_hook/_introspection_hook re-fetch the task via store().get(result['id']) rather than closing over a local variable computed mid-function, since the mutation is already persisted (store().save() already ran) by the time any hook fires — this is what let hook-bearing and plain tools converge on one decorator instead of two different wiring mechanisms (task:58782207)."
+        "The 4 hook functions (_drift_reflection_hook, _finish_reminder_hook, _finish_hook, _introspection_hook) are all Callable[[dict], None], defined once near _tool and referenced by name at each tool's own decorator line — never centrally dispatched by tool name. _finish_reminder_hook/_finish_hook/_introspection_hook re-fetch the task via store().get(result['id']) rather than closing over a local variable computed mid-function, since the mutation is already persisted (store().save() already ran) by the time any hook fires — this is what let hook-bearing and plain tools converge on one decorator instead of two different wiring mechanisms (task:58782207).",
+        "tasks__set_active/tasks__clear_active best-effort POST {workspace, task_id, title} to claude-hooks' running server via _push_active_task (task:6906557f) — a courtesy push, not a dependency; every failure mode (connection refused, timeout, DNS, non-2xx) is swallowed and logged at debug, and the tool's own return value/error semantics are unaffected either way."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process — they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store. As of task:58782207, every one of the ~35 registered tools is also wrapped in dispatcher.tool_called for unconditional logging via a single mechanism, mcp_server._tool — the one route every tool goes through for registration + logging + an optional post-success hook. A tool skips registration entirely if it skips _tool; there is no 'registered but unlogged' state.",
@@ -271,10 +272,12 @@
         "taskfw/mcp_server.py:tasks__create",
         "taskfw/mcp_server.py:tasks__finish",
         "taskfw/mcp_server.py:tasks__phase",
+        "taskfw/mcp_server.py:_push_active_task, tasks__set_active, tasks__clear_active",
         "tests/test_mcp_tools.py::TestRegistration",
         "tests/test_mcp_tools.py::TestToolCallLogging",
         "tests/test_mcp_tools.py::TestPhase",
-        "tests/test_mcp_tools.py::TestCreate::test_surfaces_related_candidates_when_titles_overlap"
+        "tests/test_mcp_tools.py::TestCreate::test_surfaces_related_candidates_when_titles_overlap",
+        "tests/test_mcp_tools.py::TestClaudeHooksPush"
       ],
       "invariants": [
         "No tool enforces a rule itself — all validation goes through lifecycle.check_*, so a tool cannot enforce a different set than a hook",
@@ -282,9 +285,10 @@
         "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global",
         "No tool is missing the _tool wrapper and none is double-wrapped — pinned by tests/test_mcp_tools.py::TestToolCallLogging, which enumerates the live m.mcp.list_tools() registry rather than a hand-maintained list, so a new tool that forgets the decorator fails this test rather than silently going unlogged",
         "drift_reflection_nudge is wired onto reads and mutating tools alike (7 tools total) but NOT onto tasks__create, tasks__finish, or tasks__add_introspection — a deliberate existing selectivity this refactor preserved rather than widened to 'every mutating tool automatically'",
-        "related_candidates in tasks__create's response is computed inline in the tool body, NOT via the dispatcher hook/nudge mechanism — every existing nudge is str | None, a candidate list is list[dict], a structurally different shape (task:78853657)"
+        "related_candidates in tasks__create's response is computed inline in the tool body, NOT via the dispatcher hook/nudge mechanism — every existing nudge is str | None, a candidate list is list[dict], a structurally different shape (task:78853657)",
+        "_push_active_task reads CLAUDE_HOOKS_URL from os.environ on every call rather than caching it at import time, specifically so tests can redirect it via monkeypatch.setenv without needing to reload the module — a module-level constant computed once at import would not observe a later monkeypatch.setenv (task:6906557f)."
       ],
-      "last_validated": "2026-08-06T00:43:41.333386+00:00",
+      "last_validated": "2026-08-13T21:29:56.848665+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface"
     },
@@ -493,6 +497,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-12T04:53:23.116060+00:00"
+    "updated_at": "2026-08-13T21:29:56.848844+00:00"
   }
 }
