@@ -236,6 +236,17 @@ class TestListAndSearch:
         create(title="beta")
         assert [t["title"] for t in m.tasks__search("widget")] == ["alpha"]
 
+    def test_list_exposes_timestamps_newest_first(self, monkeypatch):
+        import taskfw.store as store_mod
+
+        monkeypatch.setattr(store_mod, "utcnow", lambda: "2020-01-01 00:00:00")
+        create(title="older")
+        monkeypatch.setattr(store_mod, "utcnow", lambda: "2030-01-01 00:00:00")
+        create(title="newer")
+        rows = m.tasks__list(status="")
+        assert all("created_at" in r and "updated_at" in r for r in rows)
+        assert [r["title"] for r in rows] == ["newer", "older"]
+
 
 class TestGraph:
     def test_link_unlink_round_trip(self):

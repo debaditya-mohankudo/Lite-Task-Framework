@@ -318,12 +318,16 @@ def tasks__phase(task_id: str) -> dict[str, Any]:
 
 @_tool()
 def tasks__list(status: str = "open,blocked", type: str = "", parent: str = "", limit: int = 50) -> list[dict]:
-    """List tasks. status is comma-separated; empty means every status."""
+    """List tasks. status is comma-separated; empty means every status.
+
+    Rows come back ordered by updated_at, most recently touched first.
+    """
     statuses = tuple(s.strip() for s in status.split(",") if s.strip()) or None
     tasks = store().list(status=statuses, type=type or None, parent=parent or None, limit=limit)
     return [
         {"id": t.id, "type": t.type, "status": t.status, "title": t.title,
-         "parent": t.parent, "progress": list(t.progress)}
+         "parent": t.parent, "progress": list(t.progress),
+         "created_at": t.created_at, "updated_at": t.updated_at}
         for t in tasks
     ]
 
