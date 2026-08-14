@@ -132,25 +132,16 @@ def _tool(hook: Callable[[dict[str, Any]], None] | None = None):
     return decorator
 
 
-def _drift_reflection_hook(result: dict[str, Any]) -> None:
-    """The periodic active-task nudge (dispatcher.drift_reflection_nudge).
-
-    Recomputed fresh from global session state (_scope(), the active-task
-    pointer) rather than anything the specific call did, so it composes onto
-    any tool uniformly via dispatcher.combine. Wired onto reads and mutating
-    tools alike; tasks__create, tasks__finish, and tasks__add_introspection
-    don't carry it, matching the behavior this refactor preserved rather than
-    widened (task:58782207).
-    """
-    scope = _scope()
-    active_task_id = store().get_active(scope) or ""
-    active_task = store().get(active_task_id) if active_task_id else None
-    active_task_title = active_task.title if active_task else ""
-    active_task_phase = dispatcher.phase_label(dispatcher.task_phase(active_task)) if active_task else ""
-    dispatcher.apply_nudge(
-        result, "drift_reflection_nudge",
-        dispatcher.drift_reflection_nudge(scope, active_task_id, active_task_title, active_task_phase),
-    )
+# The drift-reflection MCP-tool-wrapper trigger (_drift_reflection_hook, wired
+# onto 7 of this module's tools via _tool(hook=...)/combine(...)) was removed
+# here (task:8be768df). It only ever saw taskfw's own MCP tool calls, so a
+# stretch of Bash/Read/Write/Edit turns with no taskfw tool call never
+# advanced it. The trigger moved to taskfw/drift_hook.py, a PostToolUse hook
+# Claude Code invokes directly on every tool call in the session — dropping
+# this wrapper removes the second, narrower counting path rather than leaving
+# two triggers that could disagree. dispatcher.drift_reflection_nudge itself
+# stayed (now stateless, called only from drift_hook.py); do not re-wire it
+# back onto mcp_server.py's own tools.
 
 
 def _refetch(result: dict[str, Any]) -> Task | None:
@@ -221,7 +212,7 @@ def _introspection_hook(result: dict[str, Any]) -> None:
 # Read
 # ---------------------------------------------------------------------------
 
-@_tool(hook=_drift_reflection_hook)
+@_tool()
 def tasks__context(task_id: str = "", verbosity: str = "full") -> dict[str, Any]:
     """The whole working bundle for a task: object, decisions, grooming, graph, commits, related.
 
@@ -297,14 +288,14 @@ def tasks__log_skill_invocation(skill: str, task_id: str = "") -> dict[str, Any]
     return {"ok": True, "skill": skill, "task_id": task_id}
 
 
-@_tool(hook=_drift_reflection_hook)
+@_tool()
 def tasks__get(task_id: str) -> dict[str, Any]:
     """Return one task object."""
     task = store().get(task_id)
     return task.to_dict() if task else {"error": f"No task {task_id!r}"}
 
 
-@_tool(hook=_drift_reflection_hook)
+@_tool()
 def tasks__phase(task_id: str) -> dict[str, Any]:
     """Where a task stands in the grooming -> implementation -> introspection loop.
 
@@ -388,7 +379,7 @@ def tasks__create(
     return result
 
 
-@_tool(hook=dispatcher.combine(_drift_reflection_hook, _finish_reminder_hook, _ungroomed_progress_hook))
+@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__update(
     task_id: str,
     title: str = "",
@@ -438,7 +429,7 @@ def tasks__update(
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 
-@_tool(hook=dispatcher.combine(_drift_reflection_hook, _finish_reminder_hook, _ungroomed_progress_hook))
+@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
     """Tick or untick one resolution checklist item by its zero-based index."""
     task = store().get(task_id)
@@ -504,7 +495,7 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
     return {"ok": True, "id": task_id, "reports": len(task.introspection)}
 
 
-@_tool(hook=_drift_reflection_hook)
+@_tool()
 def tasks__add_decision(task_id: str, decision: str) -> dict[str, Any]:
     """Record a design decision. Surfaces in tasks__context, where it explains the task's shape."""
     if store().get(task_id) is None:
@@ -569,7 +560,7 @@ def tasks__format_commit_message(task_id: str, subject: str, body: str = "") -> 
     return {"ok": True, "message": message}
 
 
-@_tool(hook=_drift_reflection_hook)
+@_tool()
 def tasks__add_commit(task_id: str, sha: str, repo: str = "") -> dict[str, Any]:
     """Record that a commit implemented a task. Idempotent."""
     if store().get(task_id) is None:

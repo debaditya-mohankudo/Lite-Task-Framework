@@ -12,6 +12,7 @@ dependencies = [
 # `taskfw-backfill` before any entry point existed to provide it.
 taskfw-mcp = "taskfw.mcp_server:main"
 taskfw-backfill = "taskfw.backfill:main"
+taskfw-drift-hook = "taskfw.drift_hook:main"
 
 [project.optional-dependencies]
 dev = [

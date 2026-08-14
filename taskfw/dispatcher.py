@@ -82,52 +82,44 @@ def introspection_nudge(report: dict, task_id: str, conn: sqlite3.Connection) ->
     )
 
 
-_DRIFT_REFLECTION_INTERVAL = 4  # calls between nudges, per (scope, task) — tightened from claude-hooks' original 8 (task:a6fb9f45)
-_drift_reflection_call_counts: dict[tuple[str, str], int] = {}  # (scope, active_task_id) -> count
-
-
 def drift_reflection_nudge(
-    scope: str, active_task_id: str, active_task_title: str = "", active_task_phase: str = "",
+    active_task_id: str, active_task_title: str = "", active_task_phase: str = "",
 ) -> str | None:
-    """Port of claude-hooks' _maybe_drift_reflection_nudge (hooks/dispatcher.py), moved
-    into task-framework itself.
+    """Stateless awareness nudge for the active task, or None when there isn't one.
 
-    That version read active_task_id/title from a claude-hooks session
-    checkpoint and fired on Write/Edit/MultiEdit; this one reads the active
-    task from taskfw's own store (store().get_active(scope)) and fires on
-    taskfw's own mutating tool calls instead — task-framework owns the active
-    task now (commit 6633bf1 deleted claude-hooks' langchain_learning task
-    nodes on that basis), so this holds regardless of host, and regardless of
-    whether claude-hooks' external hook process is even running. A long
-    stretch of tool calls can drift from what's active without the caller
-    noticing, since the active task is otherwise only ever announced once, at
-    activation. No active task means nothing to remind about.
+    Originally a throttled port of claude-hooks' _maybe_drift_reflection_nudge
+    (task:f1d46386), firing every Nth call under an active task. Simplified to
+    fire on every call instead (task:8be768df): the interval existed only to
+    keep a nudge wired onto taskfw's own MCP tools from nagging on every one of
+    them, but the trigger has since moved to a taskfw-owned PostToolUse hook
+    (taskfw/drift_hook.py) that sees every tool call in the session — Bash,
+    Read, Write, Edit included, not just taskfw's own. A counter tied to
+    taskfw-tool-call volume was never the right throttle for that wider
+    surface, and removing it also removes the only piece of cross-process
+    state this module held, which the hook (a fresh subprocess per call) could
+    never have shared with a live MCP server session anyway. No active task
+    means nothing to remind about.
 
     AN AWARENESS NUDGE, NOT A DETECTION MECHANISM. This function has no view
-    into what happened during the calls it's counting — it cannot tell drift
+    into what happened during the call it's attached to — it cannot tell drift
     from a stretch of perfectly on-task work, because it isn't given anything
-    to compare against. What it does is force a periodic re-read of the task
-    label, on a fixed interval, so awareness has to be re-established rather
-    than fading silently after the one-time announcement at activation.
-    Whether that re-established awareness catches anything is left entirely
-    to whoever reads it; the mechanism's job ends at making the check-in
-    happen, not at judging its outcome.
+    to compare against. What it does is put the task label back in front of
+    the caller on every call, so awareness has to be re-established
+    continuously rather than fading silently after the one-time announcement
+    at activation. Whether that re-established awareness catches anything is
+    left entirely to whoever reads it; the mechanism's job ends at making the
+    check-in happen, not at judging its outcome.
     """
     if not active_task_id:
-        return None
-    key = (scope, active_task_id)
-    count = _drift_reflection_call_counts.get(key, 0) + 1
-    _drift_reflection_call_counts[key] = count
-    if count % _DRIFT_REFLECTION_INTERVAL != 0:
         return None
     label = f"task:{active_task_id}" + (f" ({active_task_title})" if active_task_title else "")
     if active_task_phase:
         label += f" [{active_task_phase}]"
     return (
-        f"Quiet check-in: {count} calls made so far under {label}. Take a moment — "
-        "does this stretch of work still match the task's stated intent, or has it "
-        "drifted into something adjacent? No need to answer out loud or stop; just "
-        "worth noticing before continuing."
+        f"{label} is active. Notice — does this call still serve the task's stated "
+        "intent, or has it drifted into something adjacent? Accuracy matters more "
+        "than speed here: verify each step rather than batching changes and hoping "
+        "they land."
     )
 
 

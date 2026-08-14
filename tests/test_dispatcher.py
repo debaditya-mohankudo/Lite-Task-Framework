@@ -12,8 +12,6 @@ import logging
 import pytest
 
 from taskfw.dispatcher import (
-    _DRIFT_REFLECTION_INTERVAL,
-    _drift_reflection_call_counts,
     combine,
     drift_reflection_nudge,
     finish_nudge,
@@ -247,62 +245,38 @@ class TestTaskPhase:
 
 
 class TestDriftReflectionNudge:
+    """Stateless since task:8be768df — fires every call, no counter/interval.
+
+    The trigger moved to taskfw/drift_hook.py (a PostToolUse hook Claude Code
+    invokes on every tool call), which made the old per-N-calls throttle both
+    unnecessary and unimplementable across process boundaries (a fresh
+    subprocess per call has nothing to count with).
+    """
+
     def test_none_without_an_active_task(self):
-        assert drift_reflection_nudge("scope1", "", "") is None
+        assert drift_reflection_nudge("", "") is None
 
-    def test_none_before_interval_reached(self):
-        _drift_reflection_call_counts.clear()
-        result = None
-        for _ in range(_DRIFT_REFLECTION_INTERVAL - 1):
-            result = drift_reflection_nudge("scope1", "t1", "Some task")
-        assert result is None
-
-    def test_fires_once_interval_reached(self):
-        _drift_reflection_call_counts.clear()
-        result = None
-        for _ in range(_DRIFT_REFLECTION_INTERVAL):
-            result = drift_reflection_nudge("scope1", "t1", "Some task")
+    def test_fires_on_a_single_call(self):
+        result = drift_reflection_nudge("t1", "Some task")
         assert result is not None
         assert "task:t1" in result
 
-    def test_recurs_every_interval(self):
-        _drift_reflection_call_counts.clear()
-        results = [
-            drift_reflection_nudge("scope1", "t1", "Some task")
-            for _ in range(_DRIFT_REFLECTION_INTERVAL * 2)
-        ]
-        fired = [i for i, r in enumerate(results, start=1) if r is not None]
-        assert fired == [_DRIFT_REFLECTION_INTERVAL, _DRIFT_REFLECTION_INTERVAL * 2]
-
-    def test_counts_are_scoped_per_scope_and_task(self):
-        _drift_reflection_call_counts.clear()
-        for _ in range(_DRIFT_REFLECTION_INTERVAL - 1):
-            drift_reflection_nudge("scope1", "t1", "Some task")
-        # a different task should not inherit scope1/t1's near-complete count
-        result = drift_reflection_nudge("scope1", "t2", "Other task")
-        assert result is None
+    def test_fires_every_call(self):
+        results = [drift_reflection_nudge("t1", "Some task") for _ in range(5)]
+        assert all(r is not None for r in results)
 
     def test_title_is_optional(self):
-        _drift_reflection_call_counts.clear()
-        result = None
-        for _ in range(_DRIFT_REFLECTION_INTERVAL):
-            result = drift_reflection_nudge("scope1", "t1", "")
+        result = drift_reflection_nudge("t1", "")
         assert result is not None
         assert "task:t1" in result
 
     def test_includes_phase_when_given(self):
-        _drift_reflection_call_counts.clear()
-        result = None
-        for _ in range(_DRIFT_REFLECTION_INTERVAL):
-            result = drift_reflection_nudge("scope1", "t1", "Some task", "implementation")
+        result = drift_reflection_nudge("t1", "Some task", "implementation")
         assert result is not None
         assert "[implementation]" in result
 
     def test_phase_is_optional(self):
-        _drift_reflection_call_counts.clear()
-        result = None
-        for _ in range(_DRIFT_REFLECTION_INTERVAL):
-            result = drift_reflection_nudge("scope1", "t1", "Some task")
+        result = drift_reflection_nudge("t1", "Some task")
         assert result is not None
         assert "[" not in result
 

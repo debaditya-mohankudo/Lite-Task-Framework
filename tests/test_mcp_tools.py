@@ -427,53 +427,23 @@ class _DummyResponse:
 
 class TestDriftReflectionWiring:
     """The nudge (taskfw.dispatcher.drift_reflection_nudge) is unit-tested on its
-    own in test_dispatcher.py; this only checks it's actually reachable from
-    the tool surface it's wired into.
+    own in test_dispatcher.py. It is NOT wired onto mcp_server.py's tools as of
+    task:8be768df — the trigger moved to taskfw/drift_hook.py, a stateless
+    PostToolUse hook Claude Code invokes directly on every tool call in the
+    session, not just taskfw's own. This class now only pins that mcp_server's
+    tool results carry no drift_reflection_nudge key at all, so the two
+    trigger paths can't silently coexist and disagree.
     """
 
-    def setup_method(self):
-        from taskfw.dispatcher import _drift_reflection_call_counts
-        _drift_reflection_call_counts.clear()
-
-    def test_no_nudge_without_an_active_task(self):
-        t = create()
-        r = m.tasks__add_decision(t["id"], "a decision")
-        assert "drift_reflection_nudge" not in r
-
-    def test_get_fires_once_interval_reached(self):
-        from taskfw.dispatcher import _DRIFT_REFLECTION_INTERVAL
+    def test_no_nudge_on_any_tool_result(self):
         t = create()
         m.tasks__set_active(t["id"])
-        result = None
-        for _ in range(_DRIFT_REFLECTION_INTERVAL):
-            result = m.tasks__get(t["id"])
-        assert "drift_reflection_nudge" in result
-        assert t["id"] in result["drift_reflection_nudge"]
-
-    def test_context_fires_once_interval_reached(self):
-        from taskfw.dispatcher import _DRIFT_REFLECTION_INTERVAL
-        t = create()
-        m.tasks__set_active(t["id"])
-        result = None
-        for _ in range(_DRIFT_REFLECTION_INTERVAL):
-            result = m.tasks__context(t["id"])
-        assert "drift_reflection_nudge" in result
-
-    def test_add_decision_fires_once_interval_reached(self):
-        from taskfw.dispatcher import _DRIFT_REFLECTION_INTERVAL
-        t = create()
-        m.tasks__set_active(t["id"])
-        result = None
-        for _ in range(_DRIFT_REFLECTION_INTERVAL):
-            result = m.tasks__add_decision(t["id"], "a decision")
-        assert "drift_reflection_nudge" in result
-
-    def test_get_on_error_result_is_not_nudged(self):
-        t = create()
-        m.tasks__set_active(t["id"])
-        result = m.tasks__get("nosuch")
-        assert "drift_reflection_nudge" not in result
-        assert "error" in result
+        for result in (
+            m.tasks__get(t["id"]),
+            m.tasks__context(t["id"]),
+            m.tasks__add_decision(t["id"], "a decision"),
+        ):
+            assert "drift_reflection_nudge" not in result
 
 
 class TestDecisions:
