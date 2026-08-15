@@ -49,14 +49,28 @@ def _scope() -> str:
 def build_nudge(store: TaskStore, scope: str, call_count: int | None) -> str | None:
     active_task_id = store.get_active(scope) or ""
     if not active_task_id:
+        log.debug("drift nudge skipped: no active task for scope=%s", scope)
         return None
     active_task = store.get(active_task_id)
     if active_task is None:
+        log.debug("drift nudge skipped: active_task_id=%s not found in store", active_task_id)
         return None
-    return dispatcher.drift_reflection_nudge(
+    nudge = dispatcher.drift_reflection_nudge(
         active_task_id, active_task.title, phase_label(task_phase(active_task)),
         next_open_item(active_task) or "", call_count,
     )
+    # info, not debug: get_logger() (taskfw/log.py) pins the root "taskfw"
+    # logger at config.LOG_LEVEL, INFO by default, so a debug call here would
+    # never reach the log store. Kept scoped to the has-an-active-task path
+    # (unlike the two debug calls above) since this hook runs on every
+    # PostToolUse call system-wide — logging the far more common no-active-
+    # task case at info would flood the store with steady-state noise that
+    # was never the throttle behavior worth observing.
+    if nudge is None:
+        log.info("drift nudge skipped: throttled, task=%s call_count=%s", active_task_id, call_count)
+    else:
+        log.info("drift nudge fired: task=%s call_count=%s", active_task_id, call_count)
+    return nudge
 
 
 def main(argv: list[str] | None = None) -> int:
