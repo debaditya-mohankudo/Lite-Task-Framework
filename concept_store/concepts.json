@@ -171,21 +171,18 @@
       "contracts": [
         "Every check returns Decision(allowed, rule, reason); Decision is falsy when denied",
         "check_save(task, previous=None, parent=None) is the single entry point for validating a mutation",
-        "check_active_switch(previous_task_id, task_id, confirm) is the entry point tasks__set_active calls before writing; not folded into check_save because it validates the active-task pointer, not a Task mutation — same reasoning that already keeps active_task in its own store.py section rather than on the Task model",
-        "check_link_rel(rel) -> Decision gates tasks__link only, denying any rel not in TASK_EDGE_RELATIONS — mirrors check_status(status)'s exact closed-set-against-a-tuple shape. Deliberately NOT called from tasks__unlink: removal must always work for a legacy or out-of-vocabulary rel, or a bad historical row becomes permanently stuck (task:1c9d37d7)."
+        "check_link_rel(rel) -> Decision gates tasks__link only, denying any rel not in TASK_EDGE_RELATIONS — mirrors check_status(status)'s exact closed-set-against-a-tuple shape. Deliberately NOT called from tasks__unlink: removal must always work for a legacy or out-of-vocabulary rel, or a bad historical row becomes permanently stuck (task:1c9d37d7).",
+        "There is no check_active_switch anymore (removed task:f302eb2b) — tasks__set_active/push_active is non-destructive by construction, so nothing needs confirm=True to avoid losing state"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "The single implementation of every task rule, imported by both the MCP tools and the hooks. Pure functions over (inputs, store) with no session, prompt, or host state. Deliberately small: body-template validation became schema validation, the hierarchy matrix collapsed to one sentence with two issue types, and commit traceability left entirely once the pre-commit gate was dropped.",
+      "description": "The single implementation of every task rule, imported by both the MCP tools and the hooks. Pure functions over (inputs, store) with no session, prompt, or host state. Deliberately small: body-template validation became schema validation, the hierarchy matrix collapsed to one sentence with two issue types, and commit traceability left entirely once the pre-commit gate was dropped. check_active_switch was deleted outright in task:f302eb2b once the active-task pointer became a non-destructive LIFO stack (push_active) instead of a single overwritten value — there was nothing left to guard against losing.",
       "evidence": [
         "taskfw/lifecycle.py:check_transition",
         "taskfw/lifecycle.py:check_save",
-        "taskfw/lifecycle.py:check_active_switch",
         "taskfw/lifecycle.py:check_link_rel",
-        "taskfw/mcp_server.py:tasks__set_active",
         "taskfw/mcp_server.py:tasks__finish",
         "taskfw/mcp_server.py:tasks__link",
         "tests/test_lifecycle.py",
-        "tests/test_mcp_tools.py:TestActiveTask",
         "tests/test_mcp_tools.py:TestGraph::test_link_rejects_an_unrecognised_relation"
       ],
       "invariants": [
@@ -194,12 +191,10 @@
         "done and abandoned are terminal; any non-terminal state may be abandoned",
         "The entire hierarchy rule is: an epic has no parent, and a task cannot be its own parent",
         "Denials log at INFO with rule, reason, and ids; allows log at DEBUG",
-        "check_active_switch allows unconditionally (ignoring confirm) when there is no previous active task or the target is already active — confirm is only consulted on a genuine switch, so it can never make an already-safe call fail",
-        "Switching the active task without confirm is refused (rule=active_switch) rather than merely nudged — task:209f33c8 replaced dispatcher.py's advisory switched_active_nudge with this blocking rule once it became clear a caller could silently ignore the nudge and lose track of the previous active task",
-        "tasks__finish clears active_task for its own scope when the task it finished was the active one, which is what keeps the ordinary finish-then-activate-next flow from tripping check_active_switch on its very next call",
-        "check_link_rel is the FIRST policy check ever added to tasks__link — before task:1c9d37d7 it had zero lifecycle validation, calling store().link() directly after only confirming both task ids exist"
+        "check_link_rel is the FIRST policy check ever added to tasks__link — before task:1c9d37d7 it had zero lifecycle validation, calling store().link() directly after only confirming both task ids exist",
+        "tasks__finish/tasks__check_item's auto-finish share one _finish_task() helper (mcp_server.py) that pops the active-task stack only when the finished task_id is on top — a buried finish still marks the task done, it just skips the pop (task:f302eb2b)"
       ],
-      "last_validated": "2026-08-06T00:49:27.576824+00:00",
+      "last_validated": "2026-08-15T17:19:39.616655+00:00",
       "module": "taskfw/lifecycle.py",
       "name": "lifecycle-single-rule-implementation"
     },
@@ -261,21 +256,26 @@
         "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task",
         "tasks__create(...) returns {ok, id, type, status} plus an OPTIONAL related_candidates key (list of task summaries, context.related_candidates() against the new task's title) — present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657).",
         "_tool(hook=None) is the single decorator every tool carries instead of @mcp.tool(): it wraps fn in dispatcher.tool_called(fn.__name__, post=hook) and registers the WRAPPED function with mcp.tool() itself, so the module-level name bound is the logged version too. Plain tools use @_tool(); tools needing one or more nudges pass @_tool(hook=some_hook) or @_tool(hook=dispatcher.combine(hook_a, hook_b)).",
-        "The 4 hook functions (_drift_reflection_hook, _finish_reminder_hook, _finish_hook, _introspection_hook) are all Callable[[dict], None], defined once near _tool and referenced by name at each tool's own decorator line — never centrally dispatched by tool name. _finish_reminder_hook/_finish_hook/_introspection_hook re-fetch the task via store().get(result['id']) rather than closing over a local variable computed mid-function, since the mutation is already persisted (store().save() already ran) by the time any hook fires — this is what let hook-bearing and plain tools converge on one decorator instead of two different wiring mechanisms (task:58782207).",
-        "tasks__set_active/tasks__clear_active best-effort POST {workspace, task_id, title} to claude-hooks' running server via _push_active_task (task:6906557f) — a courtesy push, not a dependency; every failure mode (connection refused, timeout, DNS, non-2xx) is swallowed and logged at debug, and the tool's own return value/error semantics are unaffected either way."
+        "The 5 hook functions (_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook) are all Callable[[dict], None], defined once near _tool and referenced by name at each tool's own decorator line — never centrally dispatched by tool name. Hooks that need the post-mutation task re-fetch it via store().get(result['id']) rather than closing over a local variable computed mid-function, since the mutation is already persisted (store().save() already ran) by the time any hook fires — this is what let hook-bearing and plain tools converge on one decorator instead of two different wiring mechanisms (task:58782207).",
+        "tasks__set_active/tasks__clear_active best-effort POST {workspace, task_id, title} to claude-hooks' running server via _push_active_task (task:6906557f) — a courtesy push, not a dependency; every failure mode (connection refused, timeout, DNS, non-2xx) is swallowed and logged at debug, and the tool's own return value/error semantics are unaffected either way.",
+        "tasks__check_item(task_id, index, done=True) auto-activates task_id for the current scope as a direct side effect when done=True — not via the _tool(hook=...) mechanism, but inline in the tool body via _auto_activate_on_checklist_progress (task:718204e5, commit dac78ed). Reuses lifecycle.check_active_switch(previous, task_id, confirm=False): silent when nothing (or the same task) is active; when a genuinely different task is active, does NOT switch — instead adds an 'active_task_notice' key to the result. done=False (unchecking) never activates anything."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process — they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store. As of task:58782207, every one of the ~35 registered tools is also wrapped in dispatcher.tool_called for unconditional logging via a single mechanism, mcp_server._tool — the one route every tool goes through for registration + logging + an optional post-success hook. A tool skips registration entirely if it skips _tool; there is no 'registered but unlogged' state.",
       "evidence": [
         "taskfw/mcp_server.py:_tool",
-        "taskfw/mcp_server.py:_drift_reflection_hook, _finish_reminder_hook, _finish_hook, _introspection_hook",
+        "taskfw/mcp_server.py:_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook",
+        "taskfw/mcp_server.py:_auto_activate_on_checklist_progress, tasks__check_item",
         "taskfw/mcp_server.py:tasks__create",
         "taskfw/mcp_server.py:tasks__finish",
         "taskfw/mcp_server.py:tasks__phase",
         "taskfw/mcp_server.py:_push_active_task, tasks__set_active, tasks__clear_active",
+        "taskfw/drift_hook.py",
         "tests/test_mcp_tools.py::TestRegistration",
         "tests/test_mcp_tools.py::TestToolCallLogging",
         "tests/test_mcp_tools.py::TestPhase",
+        "tests/test_mcp_tools.py::TestChecklist::test_checking_first_item_activates_the_task_when_nothing_else_is_active",
+        "tests/test_mcp_tools.py::TestChecklist::test_checking_an_item_on_a_different_task_does_not_silently_switch",
         "tests/test_mcp_tools.py::TestCreate::test_surfaces_related_candidates_when_titles_overlap",
         "tests/test_mcp_tools.py::TestClaudeHooksPush"
       ],
@@ -284,11 +284,11 @@
         "The store is opened lazily, so importing the module never touches disk",
         "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global",
         "No tool is missing the _tool wrapper and none is double-wrapped — pinned by tests/test_mcp_tools.py::TestToolCallLogging, which enumerates the live m.mcp.list_tools() registry rather than a hand-maintained list, so a new tool that forgets the decorator fails this test rather than silently going unlogged",
-        "drift_reflection_nudge is wired onto reads and mutating tools alike (7 tools total) but NOT onto tasks__create, tasks__finish, or tasks__add_introspection — a deliberate existing selectivity this refactor preserved rather than widened to 'every mutating tool automatically'",
         "related_candidates in tasks__create's response is computed inline in the tool body, NOT via the dispatcher hook/nudge mechanism — every existing nudge is str | None, a candidate list is list[dict], a structurally different shape (task:78853657)",
-        "_push_active_task reads CLAUDE_HOOKS_URL from os.environ on every call rather than caching it at import time, specifically so tests can redirect it via monkeypatch.setenv without needing to reload the module — a module-level constant computed once at import would not observe a later monkeypatch.setenv (task:6906557f)."
+        "_push_active_task reads CLAUDE_HOOKS_URL from os.environ on every call rather than caching it at import time, specifically so tests can redirect it via monkeypatch.setenv without needing to reload the module — a module-level constant computed once at import would not observe a later monkeypatch.setenv (task:6906557f).",
+        "There is no drift-reflection hook left in this module (task:8be768df removed _drift_reflection_hook entirely) — drift-reflection awareness now lives solely in taskfw/drift_hook.py, a standalone PostToolUse hook Claude Code invokes directly on every tool call in the session, independent of any MCP tool call. tasks__check_item's auto-activation (see contracts) is unrelated to that removal — it is a store mutation, not a nudge, and lives in mcp_server.py precisely because dispatcher.py's hooks never mutate stored state (see task_framework_system.sysml's TaskMCPTools doc)."
       ],
-      "last_validated": "2026-08-13T21:29:56.848665+00:00",
+      "last_validated": "2026-08-15T16:57:56.178219+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface"
     },
@@ -440,27 +440,30 @@
         "unlink(from_id, to_id, rel=None) -> rows removed; omitting rel removes every edge between the pair",
         "search(query, limit) falls back to LIKE when FTS5 is unavailable or the query is malformed",
         "search(query)'s `query` is a PLAIN string, not pre-formatted FTS5 syntax -- search() builds its own OR-of-terms MATCH expression internally (each term quoted, so punctuation is read as literal text). Callers (tasks__search, context.related_candidates()) never construct FTS syntax themselves.",
-        "search() ranks results by _combination_score(task, terms), NOT FTS5's own bm25 `rank` -- tag-word overlap is weighted 3x over body-word overlap (_TAG_WEIGHT/_BODY_WEIGHT), mirroring claude-hooks' LoadMemoriesNode combination scorer (task:c3b53021). FTS5 MATCH still does candidate recall (over-fetched at limit*4); only the final ordering is Python-side (task:f24a88e3)."
+        "search() ranks results by _combination_score(task, terms), NOT FTS5's own bm25 `rank` -- tag-word overlap is weighted 3x over body-word overlap (_TAG_WEIGHT/_BODY_WEIGHT), mirroring claude-hooks' LoadMemoriesNode combination scorer (task:c3b53021). FTS5 MATCH still does candidate recall (over-fetched at limit*4); only the final ordering is Python-side (task:f24a88e3).",
+        "push_active(scope, task_id)/pop_active(scope) replaced set_active/clear_active (task:f302eb2b) — push is a no-op if task_id is already on top; pop removes only the top row (ACTIVE_TASK_STACK, id AUTOINCREMENT as ordering, no renumbering on pop). active_stack(scope) returns the full stack for visibility; get_active(scope) keeps returning top-of-stack for existing callers."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "Persistence for tasks, events, edges, commits, and the active-task pointer. Contains no rule enforcement at all, so LifecycleRules keeps a single allocation; a store method rejects only what it structurally cannot do. save() is the sole writer of both the scalar columns and the JSON blob, which is what keeps them from drifting.",
+      "description": "Persistence for tasks, events, edges, commits, and the active-task stack. Contains no rule enforcement at all, so LifecycleRules keeps a single allocation; a store method rejects only what it structurally cannot do. save() is the sole writer of both the scalar columns and the JSON blob, which is what keeps them from drifting.",
       "evidence": [
         "taskfw/store.py:TaskStore.save",
         "taskfw/store.py:TaskStore.unlink",
         "taskfw/store.py:TaskStore.search",
         "taskfw/store.py:TaskStore._combination_score",
-        "tests/test_store.py",
-        "tests/test_store.py::TestSearch::test_tag_match_ranks_above_body_only_match"
+        "taskfw/store.py:TaskStore.push_active",
+        "taskfw/store.py:TaskStore.pop_active",
+        "taskfw/db/schema.py:ACTIVE_TASK_STACK",
+        "tests/test_store.py"
       ],
       "invariants": [
         "No store method ever rejects a write for a policy reason — that is LifecycleRules' job",
         "save() is the only writer of the scalar columns and `data`, which is what prevents projection drift",
         "Edge and commit inserts are idempotent via table constraints, not application checks",
-        "The active-task pointer is durable, scoped by workspace, and survives restarts",
+        "The active-task state is a per-scope LIFO stack, durable, and survives restarts — replacing the old single-row-per-scope ACTIVE_TASK table (task:f302eb2b); the old table is dropped from schema.TABLES but never dropped from the DB itself, per the additive-only migration rule, so orphaned rows are left in place",
         "FTS5 absence degrades search rather than failing at import",
         "_combination_score scores tags and body against DISJOINT word sets — a word counted as a tag match is excluded from the body-overlap count, so it can never score twice"
       ],
-      "last_validated": "2026-08-06T00:58:58.307807+00:00",
+      "last_validated": "2026-08-15T17:19:49.652930+00:00",
       "module": "taskfw/store.py",
       "name": "taskstore-data-access-only"
     },
@@ -497,6 +500,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-13T21:29:56.848844+00:00"
+    "updated_at": "2026-08-15T17:19:49.652999+00:00"
   }
 }
