@@ -96,9 +96,12 @@ def next_open_item(task) -> str | None:
     return None
 
 
+_DRIFT_NUDGE_INTERVAL = 3
+
+
 def drift_reflection_nudge(
     active_task_id: str, active_task_title: str = "", active_task_phase: str = "",
-    active_task_next_item: str = "",
+    active_task_next_item: str = "", call_count: int | None = None,
 ) -> str | None:
     """Stateless awareness nudge for the active task, or None when there isn't one.
 
@@ -115,17 +118,32 @@ def drift_reflection_nudge(
     never have shared with a live MCP server session anyway. No active task
     means nothing to remind about.
 
+    Every-call firing on that wider surface turned out too noisy in practice,
+    so task:1c8f0815 reintroduces the throttle — but sourced differently, since
+    this function still can't hold cross-process state itself. claude-hooks'
+    dispatcher.py runs as a long-running per-session process (unlike this
+    hook's fresh-subprocess-per-call shape) and already tracks an analogous
+    per-session counter for its own context-size nudge, so it now counts
+    PostToolUse calls and passes the raw count in via drift_hook.py's stdin
+    payload. The %N==0 decision stays here, in taskfw, keeping this module the
+    sole owner of whether the nudge fires — claude-hooks supplies data, not
+    policy. call_count of None (no counter supplied, e.g. a manual/non-
+    claude-hooks caller) fires on every call, matching pre-task:1c8f0815
+    behavior for callers that never opted into the counter.
+
     AN AWARENESS NUDGE, NOT A DETECTION MECHANISM. This function has no view
     into what happened during the call it's attached to — it cannot tell drift
     from a stretch of perfectly on-task work, because it isn't given anything
     to compare against. What it does is put the task label back in front of
-    the caller on every call, so awareness has to be re-established
+    the caller on every qualifying call, so awareness has to be re-established
     continuously rather than fading silently after the one-time announcement
     at activation. Whether that re-established awareness catches anything is
     left entirely to whoever reads it; the mechanism's job ends at making the
     check-in happen, not at judging its outcome.
     """
     if not active_task_id:
+        return None
+    if call_count is not None and call_count % _DRIFT_NUDGE_INTERVAL != 0:
         return None
     label = f"task:{active_task_id}" + (f" ({active_task_title})" if active_task_title else "")
     if active_task_phase:

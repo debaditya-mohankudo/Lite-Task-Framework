@@ -246,12 +246,14 @@ class TestTaskPhase:
 
 
 class TestDriftReflectionNudge:
-    """Stateless since task:8be768df — fires every call, no counter/interval.
-
-    The trigger moved to taskfw/drift_hook.py (a PostToolUse hook Claude Code
-    invokes on every tool call), which made the old per-N-calls throttle both
-    unnecessary and unimplementable across process boundaries (a fresh
-    subprocess per call has nothing to count with).
+    """Stateless — this function still holds no counter itself (task:8be768df,
+    task:1c8f0815). Without a call_count, it fires on every call, same as
+    task:8be768df's simplification. With a call_count (sourced from
+    claude-hooks' own per-session counter and passed through
+    taskfw/drift_hook.py's stdin payload, since a fresh subprocess per call
+    has nothing to count with), it throttles to every _DRIFT_NUDGE_INTERVAL-th
+    call — the gating decision stays in taskfw even though the raw count
+    comes from elsewhere.
     """
 
     def test_none_without_an_active_task(self):
@@ -262,9 +264,13 @@ class TestDriftReflectionNudge:
         assert result is not None
         assert "task:t1" in result
 
-    def test_fires_every_call(self):
+    def test_fires_every_call_without_a_counter(self):
         results = [drift_reflection_nudge("t1", "Some task") for _ in range(5)]
         assert all(r is not None for r in results)
+
+    def test_throttles_to_every_third_call_with_a_counter(self):
+        results = [drift_reflection_nudge("t1", "Some task", call_count=n) for n in range(1, 7)]
+        assert [r is not None for r in results] == [False, False, True, False, False, True]
 
     def test_title_is_optional(self):
         result = drift_reflection_nudge("t1", "")

@@ -17,9 +17,15 @@ registers as one more, invoked as a subprocess in taskfw's own venv, with no
 relay through claude-hooks and no new daemon. Same shape as taskfw/backfill.py:
 a plain argparse main(), no dependency on the mcp package.
 
-Stateless by design (dispatcher.drift_reflection_nudge takes no counter) —
-this runs as a fresh subprocess on every call, so there is no cross-process
-state to keep in sync in the first place.
+Stateless by design — this runs as a fresh subprocess on every call, so it
+cannot hold a call counter itself. The every-Nth-call throttle (task:1c8f0815)
+is instead driven by a counter claude-hooks/dispatcher.py maintains in its own
+long-running process (one per session, unlike this subprocess) and passes in
+as "_taskfw_drift_call_count" on the same stdin payload; the gating decision
+itself still lives here, in dispatcher.drift_reflection_nudge, keeping the
+active-task/drift logic solely owned by taskfw even though the raw count is
+sourced elsewhere. Absent that field (e.g. a manual/non-claude-hooks caller),
+the nudge fires on every call, same as before this change.
 """
 from __future__ import annotations
 
@@ -40,7 +46,7 @@ def _scope() -> str:
     return os.environ.get("TASKFW_SCOPE") or os.getcwd()
 
 
-def build_nudge(store: TaskStore, scope: str) -> str | None:
+def build_nudge(store: TaskStore, scope: str, call_count: int | None) -> str | None:
     active_task_id = store.get_active(scope) or ""
     if not active_task_id:
         return None
@@ -49,7 +55,7 @@ def build_nudge(store: TaskStore, scope: str) -> str | None:
         return None
     return dispatcher.drift_reflection_nudge(
         active_task_id, active_task.title, phase_label(task_phase(active_task)),
-        next_open_item(active_task) or "",
+        next_open_item(active_task) or "", call_count,
     )
 
 
@@ -61,12 +67,16 @@ def main(argv: list[str] | None = None) -> int:
     how Claude Code reads "nothing to add" for a PostToolUse hook.
     """
     try:
-        json.load(sys.stdin)  # payload isn't otherwise needed; scope/task come from taskfw's own store
+        payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):
-        return 0
+        payload = {}
+
+    call_count = payload.get("_taskfw_drift_call_count")
+    if not isinstance(call_count, int):
+        call_count = None
 
     try:
-        nudge = build_nudge(TaskStore(), _scope())
+        nudge = build_nudge(TaskStore(), _scope(), call_count)
     except Exception:
         log.exception("drift_hook failed")
         return 0
