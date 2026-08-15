@@ -82,8 +82,23 @@ def introspection_nudge(report: dict, task_id: str, conn: sqlite3.Connection) ->
     )
 
 
+def next_open_item(task) -> str | None:
+    """Text of the first unchecked resolution item, or None if there isn't one.
+
+    Derived from task.resolution on every call, same reasoning as is_implemented
+    and task_phase: a stored "current item" pointer could disagree with the
+    checklist the moment an item gets checked off elsewhere, but a value
+    recomputed from the list itself cannot.
+    """
+    for item in task.resolution:
+        if not item.done:
+            return item.text
+    return None
+
+
 def drift_reflection_nudge(
     active_task_id: str, active_task_title: str = "", active_task_phase: str = "",
+    active_task_next_item: str = "",
 ) -> str | None:
     """Stateless awareness nudge for the active task, or None when there isn't one.
 
@@ -115,6 +130,8 @@ def drift_reflection_nudge(
     label = f"task:{active_task_id}" + (f" ({active_task_title})" if active_task_title else "")
     if active_task_phase:
         label += f" [{active_task_phase}]"
+    if active_task_next_item:
+        label += f' — next: "{active_task_next_item}"'
     return (
         f"{label} is active. Notice — does this call still serve the task's stated "
         "intent, or has it drifted into something adjacent? Accuracy matters more "

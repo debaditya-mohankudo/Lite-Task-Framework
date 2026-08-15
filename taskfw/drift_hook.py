@@ -28,7 +28,7 @@ import os
 import sys
 
 from taskfw import dispatcher
-from taskfw.dispatcher import phase_label, task_phase
+from taskfw.dispatcher import next_open_item, phase_label, task_phase
 from taskfw.log import get_logger
 from taskfw.store import TaskStore
 
@@ -49,6 +49,7 @@ def build_nudge(store: TaskStore, scope: str) -> str | None:
         return None
     return dispatcher.drift_reflection_nudge(
         active_task_id, active_task.title, phase_label(task_phase(active_task)),
+        next_open_item(active_task) or "",
     )
 
 

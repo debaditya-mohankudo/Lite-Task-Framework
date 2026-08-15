@@ -18,6 +18,7 @@ from taskfw.dispatcher import (
     finish_reminder_nudge,
     introspection_nudge,
     is_implemented,
+    next_open_item,
     phase_label,
     stale_memory_nudge,
     task_phase,
@@ -279,6 +280,37 @@ class TestDriftReflectionNudge:
         result = drift_reflection_nudge("t1", "Some task")
         assert result is not None
         assert "[" not in result
+
+    def test_includes_next_item_when_given(self):
+        result = drift_reflection_nudge("t1", "Some task", "implementation", "Write the thing")
+        assert result is not None
+        assert 'next: "Write the thing"' in result
+
+    def test_next_item_is_optional(self):
+        result = drift_reflection_nudge("t1", "Some task")
+        assert result is not None
+        assert "next:" not in result
+
+
+class TestNextOpenItem:
+    def test_none_when_no_resolution(self):
+        task = Task(id="t1", type="task", title="x")
+        assert next_open_item(task) is None
+
+    def test_none_when_all_done(self):
+        task = Task(id="t1", type="task", title="x", resolution=[
+            ResolutionItem(text="a", done=True),
+            ResolutionItem(text="b", done=True),
+        ])
+        assert next_open_item(task) is None
+
+    def test_returns_first_undone_item(self):
+        task = Task(id="t1", type="task", title="x", resolution=[
+            ResolutionItem(text="a", done=True),
+            ResolutionItem(text="b", done=False),
+            ResolutionItem(text="c", done=False),
+        ])
+        assert next_open_item(task) == "b"
 
 
 class TestPhaseLabel:
