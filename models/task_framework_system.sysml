@@ -44,8 +44,8 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "fd9c5060cc597f6c39c551ebb1572a31dacc7de1";
-        derivedAt = "2026-08-12";
+        derivedFromCommit = "dac78edd81f688de07b3d9366e1fb24883d84a26";
+        derivedAt = "2026-08-15";
         modelledPaths = (
             "taskfw/store.py",
             "taskfw/models.py",
@@ -103,7 +103,18 @@ package TaskFrameworkSystem {
              * It lives here as a documented behaviour of the interface layer,
              * the same way tasks__context's trim/truncation behaviour is
              * documented in this part's doc rather than given a part of its
-             * own. */
+             * own.
+             *
+             * ONE TOOL IS THE EXCEPTION TO "dispatcher never changes what is
+             * stored": tasks__check_item(done=True) also activates its task
+             * for the current scope as a direct side effect, mirroring
+             * tasks__set_active's own LifecycleRules.check_active_switch gate
+             * rather than bypassing it — a checked-off item is unambiguous
+             * evidence implementation started, so it removes the "forgot to
+             * call set_active" failure mode instead of merely nudging about
+             * it. This mutation lives in mcp_server.py itself, not
+             * dispatcher.py — it is a tool's own write, gated by
+             * LifecycleRules like any other, not an advisory annotation. */
         part foundation : Foundation;
         part rules : LifecycleRules;
         part store : TaskStore;
