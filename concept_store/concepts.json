@@ -135,6 +135,32 @@
       "module": "taskfw/db/connect.py",
       "name": "connection-pragmas-single-point"
     },
+    "drift-hook-posttooluse-entrypoint": {
+      "confidence": 0.8,
+      "contracts": [
+        "build_nudge(store, scope, call_count) returns None if no active task for scope, else dispatcher.drift_reflection_nudge(...)'s result, passing call_count through unchanged",
+        "main() reads JSON from stdin; a malformed/empty payload is treated as {} rather than raising",
+        "main() reads payload.get('_taskfw_drift_call_count'); a missing or non-int value is normalized to None, which makes drift_reflection_nudge fire on every call (pre-task:1c8f0815 behavior)",
+        "main() fails open on any exception from build_nudge (log.exception, return 0) — a crashing hook must never block the tool call it's attached to",
+        "main() emits nothing on stdout (not even an empty JSON object) when there's no nudge — PostToolUse reads silence as 'nothing to add'",
+        "_scope() mirrors mcp_server._scope(): TASKFW_SCOPE env var if set, else os.getcwd()"
+      ],
+      "created_at": "2026-08-15T19:44:25.908079+00:00",
+      "description": "A standalone PostToolUse hook Claude Code (via claude-hooks' dispatcher.py) invokes as a fresh subprocess on every tool call in a session — not just taskfw's own MCP tools. Reads a JSON hook payload from stdin, looks up the active task for the calling scope via TaskStore, and if one exists, calls dispatcher.drift_reflection_nudge to build an awareness-nudge string, writing it back as PostToolUse hookSpecificOutput.additionalContext on stdout. A plain argparse-free main(), same shape as taskfw/backfill.py, with no dependency on the mcp package — it runs in taskfw's own venv, independent of any MCP server process. Genuinely stateless: since it's a fresh subprocess per call, it cannot hold a cross-call counter itself (task:8be768df). task:1c8f0815 reintroduced an every-Nth-call throttle sourced from outside this process: claude-hooks' dispatcher.py, which runs as a long-running per-session process, counts PostToolUse calls itself and passes the raw count in via the same stdin payload as \"_taskfw_drift_call_count\"; this module reads that field and forwards it unchanged to dispatcher.drift_reflection_nudge, which does the %3==0 gating. This module never decides whether to nudge — it only wires the stdin payload, the active-task lookup, and the stdout hook-output shape together.",
+      "evidence": [
+        "taskfw/drift_hook.py:build_nudge",
+        "taskfw/drift_hook.py:main",
+        "taskfw/drift_hook.py:_scope",
+        "tests/test_drift_hook.py"
+      ],
+      "invariants": [
+        "No relay through claude-hooks and no new daemon — registers as one more independent PostToolUse hook entry alongside claude-hooks' own client.py and concept_store/diff_hook.py",
+        "task-framework remains sole owner of the active-task/drift decision even though claude-hooks supplies the raw call count — this module and dispatcher.drift_reflection_nudge are the only place that decides whether a given call fires"
+      ],
+      "last_validated": "2026-08-15T19:44:25.908153+00:00",
+      "module": "taskfw/drift_hook.py",
+      "name": "drift-hook-posttooluse-entrypoint"
+    },
     "grooming-accuracy-aggregate": {
       "confidence": 0.92,
       "contracts": [
@@ -500,6 +526,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-15T17:19:49.652999+00:00"
+    "updated_at": "2026-08-15T19:44:25.908235+00:00"
   }
 }
