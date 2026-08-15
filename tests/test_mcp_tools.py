@@ -190,6 +190,32 @@ class TestChecklist:
         r = m.tasks__check_item(t["id"], 0)
         assert "ungroomed_progress_nudge" not in r
 
+    def test_checking_first_item_activates_the_task_when_nothing_else_is_active(self):
+        t = create(resolution=["a"])
+        assert m.tasks__active()["active"] is None
+        m.tasks__check_item(t["id"], 0)
+        assert m.tasks__active()["active"] == t["id"]
+
+    def test_checking_an_item_on_the_already_active_task_is_a_silent_no_op(self):
+        t = create(resolution=["a", "b"])
+        m.tasks__set_active(t["id"])
+        r = m.tasks__check_item(t["id"], 1)
+        assert "active_task_notice" not in r
+        assert m.tasks__active()["active"] == t["id"]
+
+    def test_checking_an_item_on_a_different_task_does_not_silently_switch(self):
+        a = create(resolution=["a"])
+        b = create(resolution=["b"])
+        m.tasks__set_active(a["id"])
+        r = m.tasks__check_item(b["id"], 0)
+        assert m.tasks__active()["active"] == a["id"]
+        assert "active_task_notice" in r and b["id"] in r["active_task_notice"] and a["id"] in r["active_task_notice"]
+
+    def test_unchecking_an_item_does_not_activate_the_task(self):
+        t = create(resolution=["a"])
+        m.tasks__check_item(t["id"], 0, done=False)
+        assert m.tasks__active()["active"] is None
+
 
 class TestFinish:
     def test_finishes_an_open_task(self):

@@ -429,9 +429,46 @@ def tasks__update(
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 
+def _auto_activate_on_checklist_progress(task_id: str, task_title: str, result: dict[str, Any]) -> None:
+    """Checking off a checklist item is unambiguous evidence of implementation
+    starting on task_id -- so this removes the "forgot to call set_active"
+    failure mode at its source instead of relying on the caller to remember a
+    separate step (task:718204e5's grooming in bee-bug-hunter surfaced this:
+    a task was groomed, implemented, and finished without set_active ever
+    being called, so taskfw's PostToolUse drift-reflection nudge stayed silent
+    for the whole implementation).
+
+    Reuses lifecycle.check_active_switch's existing rule rather than a new
+    one: activating for the first time or re-confirming the same task always
+    succeeds silently; switching away from a *different* active task is never
+    done silently here either, matching tasks__set_active's own confirm=True
+    guard -- an item checked off for task_id while a different task is active
+    is surfaced as a notice on the result, not a silent override, since a
+    different active task is deliberate state, not an oversight.
+    """
+    scope = _scope()
+    previous = store().get_active(scope)
+    decision = lifecycle.check_active_switch(previous, task_id, confirm=False)
+    if decision:
+        if previous != task_id:
+            store().set_active(task_id, scope)
+            _push_active_task(scope, task_id, task_title)
+        return
+    result["active_task_notice"] = (
+        f"task:{previous} is active for this scope, not task:{task_id} — its checklist "
+        f"progress won't switch focus automatically. Call tasks__set_active(task_id="
+        f"'{task_id}', confirm=True) if you're actually implementing this one now."
+    )
+
+
 @_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
-    """Tick or untick one resolution checklist item by its zero-based index."""
+    """Tick or untick one resolution checklist item by its zero-based index.
+
+    Ticking an item on (done=True) also activates task_id for this scope if
+    nothing else is active, or leaves a notice if a different task already is
+    — see _auto_activate_on_checklist_progress.
+    """
     task = store().get(task_id)
     if task is None:
         return {"error": f"No task {task_id!r}"}
@@ -440,7 +477,10 @@ def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, 
     task.resolution[index].done = done
     store().save(task)
     d, total = task.progress
-    return {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
+    result: dict[str, Any] = {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
+    if done:
+        _auto_activate_on_checklist_progress(task_id, task.title, result)
+    return result
 
 
 @_tool(hook=_finish_hook)
