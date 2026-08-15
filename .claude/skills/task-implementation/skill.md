@@ -21,9 +21,10 @@ In effect for any active task. Also reach for it when the user says "just implem
 ## Start
 
 Use the supplied `task_id`. If none was given, read the active task with
-`tasks__active()` instead of guessing. `tasks__set_active` refuses to switch
-away from a different active task unless `confirm=True` — if that happens,
-surface it and confirm before overriding, rather than retrying blind.
+`tasks__active()` instead of guessing. `tasks__set_active` pushes task_id onto
+a LIFO stack rather than overwriting whatever was active — nothing is lost,
+so no confirmation is needed. `tasks__finish`/`tasks__clear_active` pop back
+to whatever was pushed underneath automatically.
 
 ```python
 tasks__set_active(task_id)

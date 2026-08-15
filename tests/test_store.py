@@ -186,23 +186,36 @@ class TestCommits:
 
 
 class TestActiveTask:
-    def test_set_get_clear(self, store):
+    def test_push_get_pop(self, store):
         t = store.save(make())
         assert store.get_active() is None
-        store.set_active(t.id)
+        store.push_active(t.id)
         assert store.get_active() == t.id
-        store.clear_active()
+        store.pop_active()
         assert store.get_active() is None
 
     def test_scopes_are_independent(self, store):
         a, b = store.save(make(title="a")), store.save(make(title="b"))
-        store.set_active(a.id, scope="/work/one")
-        store.set_active(b.id, scope="/work/two")
+        store.push_active(a.id, scope="/work/one")
+        store.push_active(b.id, scope="/work/two")
         assert store.get_active("/work/one") == a.id
         assert store.get_active("/work/two") == b.id
 
-    def test_set_active_replaces_within_a_scope(self, store):
+    def test_push_active_stacks_rather_than_replaces(self, store):
         a, b = store.save(make(title="a")), store.save(make(title="b"))
-        store.set_active(a.id)
-        store.set_active(b.id)
+        store.push_active(a.id)
+        store.push_active(b.id)
         assert store.get_active() == b.id
+        assert store.active_stack() == [b.id, a.id]
+        store.pop_active()
+        assert store.get_active() == a.id
+
+    def test_push_active_already_on_top_is_a_no_op(self, store):
+        t = store.save(make())
+        store.push_active(t.id)
+        store.push_active(t.id)
+        assert store.active_stack() == [t.id]
+
+    def test_pop_active_on_empty_scope_is_a_no_op(self, store):
+        assert store.pop_active() is None
+        assert store.get_active() is None

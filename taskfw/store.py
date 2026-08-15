@@ -243,29 +243,59 @@ class TaskStore:
         )
         return [dict(r) for r in rows]
 
-    # -- active task --------------------------------------------------------
+    # -- active task stack ---------------------------------------------------
+    #
+    # A LIFO stack per scope (task:f302eb2b), not a single pointer: starting a
+    # dependency task mid-run pushes it on top without losing track of the
+    # task that was already active. Durable rather than in-memory on purpose
+    # -- it is the one piece of session-ish state whose loss on restart is a
+    # daily annoyance.
 
-    def set_active(self, task_id: str, scope: str = "global") -> None:
-        """Persist the active-task pointer.
+    def push_active(self, task_id: str, scope: str = "global") -> None:
+        """Push task_id onto the active-task stack for scope.
 
-        Durable rather than in-memory on purpose: it is the one piece of
-        session-ish state whose loss on restart is a daily annoyance, and a
-        one-row table removes that for essentially nothing.
+        Re-pushing the task already on top is a no-op rather than a second
+        row -- there is nothing to detour from if you never left. Any other
+        push (including one already elsewhere in the stack) always adds a new
+        top; nothing here needs to compare against or care about that case.
         """
+        if self.get_active(scope) == task_id:
+            return
         with transaction(self.conn):
             self.conn.execute(
-                """INSERT INTO active_task (scope, task_id, updated_at) VALUES (?,?,?)
-                   ON CONFLICT(scope) DO UPDATE SET task_id=excluded.task_id,
-                                                    updated_at=excluded.updated_at""",
+                "INSERT INTO active_task_stack (scope, task_id, pushed_at) VALUES (?,?,?)",
                 (scope, task_id, utcnow()),
             )
-        log.info("active task=%s scope=%s", task_id, scope)
+        log.info("active push task=%s scope=%s", task_id, scope)
 
     def get_active(self, scope: str = "global") -> str | None:
-        row = self.conn.execute("SELECT task_id FROM active_task WHERE scope=?", (scope,)).fetchone()
+        """The task on top of the stack for scope, if any."""
+        row = self.conn.execute(
+            "SELECT task_id FROM active_task_stack WHERE scope=? ORDER BY id DESC LIMIT 1",
+            (scope,),
+        ).fetchone()
         return row["task_id"] if row else None
 
-    def clear_active(self, scope: str = "global") -> None:
+    def active_stack(self, scope: str = "global") -> list[str]:
+        """The full stack for scope, top first."""
+        rows = self.conn.execute(
+            "SELECT task_id FROM active_task_stack WHERE scope=? ORDER BY id DESC",
+            (scope,),
+        )
+        return [r["task_id"] for r in rows]
+
+    def pop_active(self, scope: str = "global") -> str | None:
+        """Pop the top of the stack for scope. Returns the task now on top, if any.
+
+        Deletes by max(id) rather than renumbering positions -- id is already
+        an ordering, so popping is one DELETE with no reindex.
+        """
         with transaction(self.conn):
-            self.conn.execute("DELETE FROM active_task WHERE scope=?", (scope,))
-        log.info("active cleared scope=%s", scope)
+            row = self.conn.execute(
+                "SELECT id FROM active_task_stack WHERE scope=? ORDER BY id DESC LIMIT 1",
+                (scope,),
+            ).fetchone()
+            if row is not None:
+                self.conn.execute("DELETE FROM active_task_stack WHERE id=?", (row["id"],))
+        log.info("active pop scope=%s", scope)
+        return self.get_active(scope)

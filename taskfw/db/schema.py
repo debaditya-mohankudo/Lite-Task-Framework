@@ -110,13 +110,23 @@ TASK_COMMITS = Table(
     ),
 )
 
-ACTIVE_TASK = Table(
-    name="active_task",
+# Superseded by ACTIVE_TASK_STACK (task:f302eb2b) — one row per scope cannot
+# express a LIFO detour stack. Dropped from TABLES rather than the table
+# itself: migrate() never drops a table, so any pre-existing active_task rows
+# are simply left in place, orphaned.
+#
+# ACTIVE_TASK_STACK is an append-only push/pop log rather than an ordered
+# list column: id is an AUTOINCREMENT surrogate, so "top of stack" is always
+# "highest id for this scope, still present" — no position renumbering is
+# ever needed on pop, which is what keeps pop a single DELETE.
+ACTIVE_TASK_STACK = Table(
+    name="active_task_stack",
     columns=(
+        Column("id", "INTEGER PRIMARY KEY AUTOINCREMENT"),
         # Usually a workspace path; 'global' when the caller has no workspace.
-        Column("scope", "TEXT PRIMARY KEY"),
+        Column("scope", "TEXT NOT NULL"),
         Column("task_id", "TEXT NOT NULL"),
-        Column("updated_at", "TEXT NOT NULL DEFAULT (datetime('now'))"),
+        Column("pushed_at", "TEXT NOT NULL DEFAULT (datetime('now'))"),
     ),
 )
 
@@ -171,7 +181,7 @@ LOGS = Table(
     ),
 )
 
-TABLES: tuple[Table, ...] = (TASKS, TASK_EVENTS, TASK_EDGES, TASK_COMMITS, ACTIVE_TASK,
+TABLES: tuple[Table, ...] = (TASKS, TASK_EVENTS, TASK_EDGES, TASK_COMMITS, ACTIVE_TASK_STACK,
                              MEMORIES, MEMORY_LINKS, LOGS)
 
 INDEXES: tuple[str, ...] = (
@@ -182,6 +192,7 @@ INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_memory_links_slug ON memory_links(slug)",
     "CREATE INDEX IF NOT EXISTS idx_memory_links_task ON memory_links(task_id)",
     "CREATE INDEX IF NOT EXISTS idx_logs_logger ON logs(logger)",
+    "CREATE INDEX IF NOT EXISTS idx_active_stack_scope ON active_task_stack(scope, id)",
 )
 
 

@@ -129,11 +129,18 @@ class TestUpdate:
     def test_unknown_task(self):
         assert "error" in m.tasks__update("nope", title="x")
 
-    def test_finish_reminder_fires_when_resolution_replaced_all_done(self):
+    def test_finish_reminder_fires_when_resolution_replaced_all_done(self, store):
+        # task:f302eb2b: tasks__check_item now auto-finishes a task the
+        # moment its last item is checked, so an "all done but still open"
+        # task can no longer be reached through check_item — only by editing
+        # the store directly (e.g. data from before auto-finish existed).
+        # finish_reminder_nudge still needs to catch that state via update.
         t = create()
         r = m.tasks__update(t["id"], resolution=["a"])
         assert "finish_reminder_nudge" not in r  # replacement items default to not-done
-        m.tasks__check_item(t["id"], 0)
+        task = store.get(t["id"])
+        task.resolution[0].done = True
+        store.save(task)
         r = m.tasks__update(t["id"], title="still working on it")
         assert "finish_reminder_nudge" in r
 
@@ -161,11 +168,15 @@ class TestChecklist:
         t = create(resolution=["a"])
         assert "error" in m.tasks__check_item(t["id"], 5)
 
-    def test_finish_reminder_fires_on_completing_the_last_item(self):
+    def test_completing_the_last_item_auto_finishes_instead_of_reminding(self):
+        """task:f302eb2b: checking off the last item now finishes the task
+        outright, so finish_reminder_nudge (which only fires while still
+        open) never gets a chance to — there is nothing left to remind about."""
         t = create(resolution=["a", "b"])
         m.tasks__check_item(t["id"], 0)
         r = m.tasks__check_item(t["id"], 1)
-        assert "finish_reminder_nudge" in r and t["id"] in r["finish_reminder_nudge"]
+        assert "finish_reminder_nudge" not in r
+        assert r["status"] == "done"
 
     def test_no_finish_reminder_on_partial_completion(self):
         t = create(resolution=["a", "b"])
@@ -191,10 +202,20 @@ class TestChecklist:
         assert "ungroomed_progress_nudge" not in r
 
     def test_checking_first_item_activates_the_task_when_nothing_else_is_active(self):
-        t = create(resolution=["a"])
+        t = create(resolution=["a", "b"])
         assert m.tasks__active()["active"] is None
         m.tasks__check_item(t["id"], 0)
         assert m.tasks__active()["active"] == t["id"]
+
+    def test_checking_the_only_item_finishes_without_ever_activating(self):
+        """task:f302eb2b: a single-item checklist skips activation entirely
+        and goes straight to auto-finish — there's no intermediate 'in
+        progress' state to push onto the stack for."""
+        t = create(resolution=["a"])
+        assert m.tasks__active()["active"] is None
+        r = m.tasks__check_item(t["id"], 0)
+        assert r["status"] == "done"
+        assert m.tasks__active()["active"] is None
 
     def test_checking_an_item_on_the_already_active_task_is_a_silent_no_op(self):
         t = create(resolution=["a", "b"])
@@ -203,13 +224,15 @@ class TestChecklist:
         assert "active_task_notice" not in r
         assert m.tasks__active()["active"] == t["id"]
 
-    def test_checking_an_item_on_a_different_task_does_not_silently_switch(self):
+    def test_checking_an_item_on_a_different_task_pushes_it_onto_the_stack(self):
+        """A detour: task:f302eb2b. Checking off an item on a non-top task is
+        the mid-run dependency case, so it is pushed rather than refused."""
         a = create(resolution=["a"])
-        b = create(resolution=["b"])
+        b = create(resolution=["b", "c"])
         m.tasks__set_active(a["id"])
-        r = m.tasks__check_item(b["id"], 0)
-        assert m.tasks__active()["active"] == a["id"]
-        assert "active_task_notice" in r and b["id"] in r["active_task_notice"] and a["id"] in r["active_task_notice"]
+        m.tasks__check_item(b["id"], 0)
+        assert m.tasks__active()["active"] == b["id"]
+        assert m.tasks__active()["stack"] == [b["id"], a["id"]]
 
     def test_unchecking_an_item_does_not_activate_the_task(self):
         t = create(resolution=["a"])
@@ -350,30 +373,29 @@ class TestActiveTask:
     def test_set_active_rejects_unknown_task(self):
         assert "error" in m.tasks__set_active("nosuch")
 
-    def test_set_active_refuses_a_genuine_switch_without_confirm(self):
+    def test_set_active_pushes_rather_than_refuses_a_switch(self):
+        """task:f302eb2b: switching used to require confirm=True; now it
+        pushes non-destructively, so nothing is lost and nothing to confirm."""
         a, b = create(title="a"), create(title="b")
         m.tasks__set_active(a["id"])
         result = m.tasks__set_active(b["id"])
-        assert result["error"] and result["rule"] == "active_switch"
-        assert m.tasks__active()["active"] == a["id"]
-
-    def test_set_active_allows_a_genuine_switch_with_confirm(self):
-        a, b = create(title="a"), create(title="b")
-        m.tasks__set_active(a["id"])
-        result = m.tasks__set_active(b["id"], confirm=True)
         assert result["ok"]
         assert m.tasks__active()["active"] == b["id"]
+        assert m.tasks__active()["stack"] == [b["id"], a["id"]]
 
-    def test_set_active_does_not_require_confirm_on_first_activation_or_reset(self):
+    def test_set_active_already_on_top_is_a_no_op(self):
         t = create()
         assert m.tasks__set_active(t["id"])["ok"]
         assert m.tasks__set_active(t["id"])["ok"]
+        assert m.tasks__active()["stack"] == [t["id"]]
 
-    def test_finish_clears_the_active_task_it_finished(self):
+    def test_finish_pops_the_active_task_it_finished_and_restores_the_one_beneath(self):
         t = create()
+        under = create(title="under")
+        m.tasks__set_active(under["id"])
         m.tasks__set_active(t["id"])
         m.tasks__finish(t["id"])
-        assert m.tasks__active()["active"] is None
+        assert m.tasks__active()["active"] == under["id"]
 
     def test_finish_leaves_a_different_active_task_untouched(self):
         t = create()
@@ -381,6 +403,15 @@ class TestActiveTask:
         m.tasks__set_active(t["id"])
         m.tasks__finish(other["id"])
         assert m.tasks__active()["active"] == t["id"]
+
+    def test_clear_active_pops_one_level_and_restores_the_one_beneath(self):
+        under = create(title="under")
+        top = create(title="top")
+        m.tasks__set_active(under["id"])
+        m.tasks__set_active(top["id"])
+        result = m.tasks__clear_active()
+        assert result["active"] == under["id"]
+        assert m.tasks__active()["active"] == under["id"]
 
     def test_context_falls_back_to_the_active_task(self):
         t = create(title="the active one")

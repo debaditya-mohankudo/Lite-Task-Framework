@@ -429,7 +429,7 @@ def tasks__update(
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 
-def _auto_activate_on_checklist_progress(task_id: str, task_title: str, result: dict[str, Any]) -> None:
+def _auto_activate_on_checklist_progress(task_id: str, task_title: str) -> None:
     """Checking off a checklist item is unambiguous evidence of implementation
     starting on task_id -- so this removes the "forgot to call set_active"
     failure mode at its source instead of relying on the caller to remember a
@@ -438,64 +438,45 @@ def _auto_activate_on_checklist_progress(task_id: str, task_title: str, result: 
     being called, so taskfw's PostToolUse drift-reflection nudge stayed silent
     for the whole implementation).
 
-    Reuses lifecycle.check_active_switch's existing rule rather than a new
-    one: activating for the first time or re-confirming the same task always
-    succeeds silently; switching away from a *different* active task is never
-    done silently here either, matching tasks__set_active's own confirm=True
-    guard -- an item checked off for task_id while a different task is active
-    is surfaced as a notice on the result, not a silent override, since a
-    different active task is deliberate state, not an oversight.
+    Pushes task_id onto the active-task stack (task:f302eb2b) rather than
+    requiring the caller to already be on top: checking off an item on a
+    task that is not the current top of stack is exactly the mid-run
+    dependency-detour case the stack exists for, so it is pushed silently,
+    not refused with a notice. push_active is itself a no-op when task_id is
+    already on top, so this call is safe every time an item is checked.
     """
     scope = _scope()
-    previous = store().get_active(scope)
-    decision = lifecycle.check_active_switch(previous, task_id, confirm=False)
-    if decision:
-        if previous != task_id:
-            store().set_active(task_id, scope)
-            _push_active_task(scope, task_id, task_title)
-        return
-    result["active_task_notice"] = (
-        f"task:{previous} is active for this scope, not task:{task_id} — its checklist "
-        f"progress won't switch focus automatically. Call tasks__set_active(task_id="
-        f"'{task_id}', confirm=True) if you're actually implementing this one now."
-    )
+    store().push_active(task_id, scope)
+    _push_active_task(scope, task_id, task_title)
 
 
-@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
-def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
-    """Tick or untick one resolution checklist item by its zero-based index.
+def _pop_and_broadcast(scope: str) -> str | None:
+    """Pop the active-task stack for scope and tell claude-hooks what's now on top.
 
-    Ticking an item on (done=True) also activates task_id for this scope if
-    nothing else is active, or leaves a notice if a different task already is
-    — see _auto_activate_on_checklist_progress.
+    Shared by _finish_task and tasks__clear_active — both need "pop, then
+    push whatever's newly on top (or empty) to claude-hooks" and nothing more.
     """
-    task = store().get(task_id)
-    if task is None:
-        return {"error": f"No task {task_id!r}"}
-    if not 0 <= index < len(task.resolution):
-        return {"error": f"No item {index} — task has {len(task.resolution)}."}
-    task.resolution[index].done = done
-    store().save(task)
-    d, total = task.progress
-    result: dict[str, Any] = {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
-    if done:
-        _auto_activate_on_checklist_progress(task_id, task.title, result)
-    return result
+    new_top = store().pop_active(scope)
+    _push_active_task(scope, new_top or "")
+    return new_top
 
 
-@_tool(hook=_finish_hook)
-def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
-    """Mark a task done.
+def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
+    """Mark a task done and pop it off the active-task stack if it's on top.
+
+    Shared by tasks__finish and the auto-finish-on-last-item path in
+    tasks__check_item (task:f302eb2b) so there is exactly one implementation
+    of "what finishing a task does."
 
     Idempotent: finishing an already-done task succeeds rather than erroring,
     which follows from the same-status rule and makes retries safe. Finishing
     an abandoned task IS refused — abandoned is terminal and is not the state
     the caller asked for.
 
-    See taskfw.dispatcher: when the task closes with no introspection report
-    yet, the response carries a non-blocking `introspection_nudge` — the
-    host-agnostic equivalent of a hook reminding you to run
-    /task-introspection while the context is fresh.
+    If task_id is not on top of the active-task stack, the stack is left
+    untouched — the task still finishes, but there is nothing to pop that
+    reflects it (a buried task finishing does not disturb whatever detour is
+    stacked above it).
     """
     task = store().get(task_id)
     if task is None:
@@ -509,8 +490,51 @@ def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
         store().add_event(task_id, reason, kind="status")
     scope = _scope()
     if store().get_active(scope) == task_id:
-        store().clear_active(scope)
+        _pop_and_broadcast(scope)
     return {"ok": True, "id": task_id, "status": "done"}
+
+
+@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
+def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
+    """Tick or untick one resolution checklist item by its zero-based index.
+
+    Ticking an item on (done=True) also pushes task_id onto the active-task
+    stack for this scope — see _auto_activate_on_checklist_progress. Ticking
+    the last open item finishes the task the same way tasks__finish would
+    (task:f302eb2b) — see _finish_task. Unticking never triggers either.
+    """
+    task = store().get(task_id)
+    if task is None:
+        return {"error": f"No task {task_id!r}"}
+    if not 0 <= index < len(task.resolution):
+        return {"error": f"No item {index} — task has {len(task.resolution)}."}
+    task.resolution[index].done = done
+    store().save(task)
+    d, total = task.progress
+    result: dict[str, Any] = {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
+    if not done:
+        return result
+    if total > 0 and d == total:
+        finish_result = _finish_task(task_id, reason="last checklist item checked off")
+        if "error" in finish_result:
+            result["finish_notice"] = finish_result["error"]
+        else:
+            result["status"] = finish_result["status"]
+        return result
+    _auto_activate_on_checklist_progress(task_id, task.title)
+    return result
+
+
+@_tool(hook=_finish_hook)
+def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
+    """Mark a task done.
+
+    See taskfw.dispatcher: when the task closes with no introspection report
+    yet, the response carries a non-blocking `introspection_nudge` — the
+    host-agnostic equivalent of a hook reminding you to run
+    /task-introspection while the context is fresh.
+    """
+    return _finish_task(task_id, reason)
 
 
 @_tool(hook=_introspection_hook)
@@ -644,40 +668,43 @@ def _push_active_task(workspace: str, task_id: str, title: str = "") -> None:
 
 
 @_tool()
-def tasks__set_active(task_id: str, confirm: bool = False) -> dict[str, Any]:
-    """Set the active task for this workspace. Persisted, so it survives a restart.
+def tasks__set_active(task_id: str) -> dict[str, Any]:
+    """Push task_id onto the active-task stack for this workspace. Persisted,
+    so it survives a restart.
 
-    Switching away from a different active task is refused unless confirm=True
-    — see lifecycle.check_active_switch. Activating for the first time, or
-    re-setting the task that's already active, never requires confirm.
+    A LIFO stack (task:f302eb2b), not a single pointer: pushing while a
+    different task is already active does not lose it — it is left
+    underneath, and comes back automatically on tasks__finish or
+    tasks__clear_active. Nothing here is destructive, so there is no confirm
+    to pass. Re-setting the task already on top is a no-op.
     """
     task = store().get(task_id)
     if task is None:
         return {"error": f"No task {task_id!r}"}
     scope = _scope()
-    previous = store().get_active(scope)
-    decision = lifecycle.check_active_switch(previous, task_id, confirm)
-    if not decision:
-        return _denied(decision)
-    store().set_active(task_id, scope)
+    store().push_active(task_id, scope)
     _push_active_task(scope, task_id, task.title)
-    return {"ok": True, "active": task_id, "scope": scope}
+    return {"ok": True, "active": task_id, "scope": scope, "stack_depth": len(store().active_stack(scope))}
 
 
 @_tool()
 def tasks__active() -> dict[str, Any]:
-    """The active task for this workspace, if any."""
-    task_id = store().get_active(_scope())
-    return {"active": task_id, "scope": _scope()}
+    """The active task for this workspace, if any, and the full detour stack beneath it (top first)."""
+    scope = _scope()
+    return {"active": store().get_active(scope), "stack": store().active_stack(scope), "scope": scope}
 
 
 @_tool()
 def tasks__clear_active() -> dict[str, Any]:
-    """Clear the active task for this workspace."""
+    """Pop the top of the active-task stack for this workspace.
+
+    Restores whatever was pushed underneath (task:f302eb2b) rather than
+    wiping the whole stack — clearing a detour returns you to what you were
+    doing before it, the same as finishing it would.
+    """
     scope = _scope()
-    store().clear_active(scope)
-    _push_active_task(scope, "")
-    return {"ok": True, "scope": scope}
+    new_top = _pop_and_broadcast(scope)
+    return {"ok": True, "active": new_top, "scope": scope}
 
 
 # ---------------------------------------------------------------------------
