@@ -44,8 +44,8 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "1dd6602d8edbf18670f1c1430053f5bfe510945a";
-        derivedAt = "2026-08-15";
+        derivedFromCommit = "5a1284d94e82c9c5bffae0f87324f04264c16d64";
+        derivedAt = "2026-08-17";
         modelledPaths = (
             "taskfw/store.py",
             "taskfw/models.py",
@@ -53,7 +53,8 @@ package TaskFrameworkSystem {
             "taskfw/mcp_server.py",
             "taskfw/context.py",
             "taskfw/backfill.py",
-            "taskfw/dispatcher.py"
+            "taskfw/dispatcher.py",
+            "taskfw/drift_hook.py"
         );
     }
 
@@ -94,9 +95,24 @@ package TaskFrameworkSystem {
              * ever made.
              *
              * taskfw/dispatcher.py adds advisory, non-blocking annotations to a
-             * few tools' results (a reminder to introspect, a drift check-in,
-             * a nudge to promote a lesson to loop memory) — deliberately NOT a
-             * fifth part. A nudge never refuses a write and never changes what
+             * few tools' results — deliberately NOT a fifth part:
+             *   - introspection_nudge (tasks__add_introspection): an
+             *     introspection report cites a lesson but the task has never
+             *     promoted one to loop memory.
+             *   - drift_reflection_nudge (every PostToolUse call, via
+             *     taskfw/drift_hook.py, throttled to every Nth call): puts the
+             *     active task's label and next item back in front of the
+             *     caller as a stateless awareness check-in, not a detector.
+             *   - finish_nudge (tasks__finish): a task closed with no
+             *     introspection report yet.
+             *   - finish_reminder_nudge (tasks__check_item / tasks__update):
+             *     the resolution checklist is 100% done but the task is still
+             *     open.
+             *   - stale_memory_nudge (task_memory__link): the memory being
+             *     linked is 'disputed' or 'contradicted'.
+             *   - ungroomed_progress_nudge (tasks__check_item / tasks__update):
+             *     checklist progress exists but task.grooming is still empty.
+             * A nudge never refuses a write and never changes what
              * is stored, so it carries none of the properties that earned
              * LifecycleRules or TaskStore their own part: it enforces nothing
              * and guarantees nothing observable from outside a tool's result.
