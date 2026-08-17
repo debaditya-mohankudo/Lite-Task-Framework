@@ -149,6 +149,28 @@ Failing open is only acceptable when it does not mean losing data quietly.
 
 The last one is the one that actually happens.
 
+## Two things worth knowing exist
+
+`models/*.sysml` holds structural claims — state machines, requirements,
+calc defs — transcribed by hand from the code they describe, not generated
+from it or bound to it at runtime. A doc comment saying "this is computed
+on read, never stored" is a claim someone has to trust; the same claim as a
+`calc def`, checked against the real source by a paired test in
+`tests/test_models.py`, is a claim that can be caught drifting. It exists
+for the same reason the loop exists: an assertion nobody checks decays into
+theatre.
+
+`concept_store/concepts.json` is architectural memory that survives across
+tasks — what a module is for, its contracts and invariants, discovered once
+and then reusable instead of re-derived from scratch by the next task that
+touches it. It grows the same way loop memory does: a task either updates a
+concept that turned out wrong, or writes one for a module nobody had
+understood well enough to describe yet.
+
+Neither is instructions for using it — the introspection methodology and
+the tool schemas cover that. What is worth knowing here is only that they
+exist and why: both are ways of not re-deriving the same fact twice.
+
 ## Memory
 
 Cross-session memory lives in `~/.claude/MEMORY.sqlite`, shared across projects. Use the `mcp__claude-hooks__memory__*` tools to read/write it — `memory__add` / `memory__add_batch` to save, `memory__search` to recall. Tag entries with domain `task-framework` for this project.
