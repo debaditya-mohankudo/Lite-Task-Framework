@@ -19,7 +19,8 @@ import pytest
 
 MODELS = Path(__file__).parent.parent / "models"
 EXPECTED = {"foundation.sysml", "requirements.sysml",
-            "task_framework_system.sysml", "task_lifecycle.sysml"}
+            "task_framework_system.sysml", "task_lifecycle.sysml",
+            "derived_values.sysml"}
 
 REQUIREMENT_DEF = re.compile(r"requirement\s+def\s+(\w+)")
 SATISFY = re.compile(r"satisfy\s+requirement\s+(\w+)\s+by\s+([\w.]+)\s*;")
@@ -133,3 +134,49 @@ class TestLifecycleMatchesCode:
                 assert name in text, f"transition {current}->{target} missing from the model"
         for terminal in TERMINAL:
             assert f"transition {terminal}To" not in text, f"{terminal} must have no transitions"
+
+
+class TestDerivedValuesMatchCode:
+    """Same construction as TestLifecycleMatchesCode: the calc def bodies in
+    derived_values.sysml are not executed, so they are kept honest by
+    importing the real Python source of truth and asserting the model's
+    identifiers match it."""
+
+    @pytest.fixture
+    def text(self):
+        return (MODELS / "derived_values.sysml").read_text()
+
+    def test_progress_is_computed_not_stored(self, text):
+        import inspect
+
+        from taskfw.models import Task
+
+        assert "calc def Progress" in text
+        assert "return done" in text
+        assert "return total" in text
+        # progress must be a read-only property — a setter would mean the
+        # value can be assigned independently of the resolution list it
+        # derives from, which is exactly what the requirement forbids.
+        assert isinstance(Task.progress, property)
+        assert Task.progress.fset is None
+        src = inspect.getsource(Task.progress.fget)
+        assert "resolution" in src
+
+    def test_memory_standing_values_match_the_implementation(self, text):
+        import inspect
+
+        from taskfw.memory import _standing
+
+        assert "calc def MemoryStanding" in text
+        src = inspect.getsource(_standing)
+        returned = re.findall(r'return "(\w+)"', src)
+        assert returned, "no return literals found in _standing — source may have changed shape"
+        for standing in returned:
+            assert standing in text, f"{standing} missing from MemoryStandingValue"
+
+    def test_grooming_accuracy_grades_match_the_implementation(self, text):
+        from taskfw.accuracy import GRADES
+
+        assert "calc def GroomingAccuracyTally" in text
+        for grade in GRADES:
+            assert grade in text, f"{grade} missing from GroomingAccuracyTally"
