@@ -213,6 +213,15 @@ concept__upsert(repo="<abs repo path>", concept={
 
 Skip where the change was test-only or doc-only with no new behaviour to capture. Skip silently if the repo has no store.
 
+**Sanctity check — evidence citations for files this task touched or deleted.** If the repo has a `symbol_resolver.py` (task:85e6001f / task:ba5d5aed's `file:symbol` convention), a task that deletes or renames a symbol can silently leave another concept's evidence pointing at code that no longer exists — that concept was not necessarily this task's own, so it will not surface via `concept__uncovered`. For every file this task deleted, moved, or renamed a top-level symbol in, grep `concepts.json` for citations into that file and re-resolve them:
+
+```python
+# for citations, parse_citation() the string, then resolve_symbol(repo_root, file, symbol)
+# a bare file citation only needs Path(file).exists()
+```
+
+A citation that no longer resolves means either the citation is stale (fix or drop it via `concept__upsert`) or the whole concept describes code that's gone (flag it to the user — **never delete a concept unilaterally**, per the rule above). This is cheap only because it's scoped to files the task actually touched; a full-repo sweep belongs to a dedicated task, not every introspection pass.
+
 ## Step 9 — Output
 
 ```python
