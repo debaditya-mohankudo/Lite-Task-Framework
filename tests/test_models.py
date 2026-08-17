@@ -20,7 +20,7 @@ import pytest
 MODELS = Path(__file__).parent.parent / "models"
 EXPECTED = {"foundation.sysml", "requirements.sysml",
             "task_framework_system.sysml", "task_lifecycle.sysml",
-            "derived_values.sysml"}
+            "derived_values.sysml", "mcp_interface.sysml"}
 
 REQUIREMENT_DEF = re.compile(r"requirement\s+def\s+(\w+)")
 SATISFY = re.compile(r"satisfy\s+requirement\s+(\w+)\s+by\s+([\w.]+)\s*;")
@@ -180,3 +180,47 @@ class TestDerivedValuesMatchCode:
         assert "calc def GroomingAccuracyTally" in text
         for grade in GRADES:
             assert grade in text, f"{grade} missing from GroomingAccuracyTally"
+
+
+class TestMcpInterfaceMatchesCode:
+    """mcp_interface.sysml's port items are not executed, so they are kept
+    honest by enumerating the LIVE tool registry — the same
+    m.mcp.list_tools() call test_mcp_tools.py::TestRegistration uses — rather
+    than trusting a hand-copied name list, which would be a second
+    unenforced restatement of the registry."""
+
+    @pytest.fixture
+    def text(self):
+        return (MODELS / "mcp_interface.sysml").read_text()
+
+    @pytest.fixture
+    def live_tool_names(self):
+        import asyncio
+
+        from taskfw import mcp_server as m
+
+        return {t.name for t in asyncio.run(m.mcp.list_tools())}
+
+    def test_every_registered_tool_appears_in_some_port(self, text, live_tool_names):
+        for name in live_tool_names:
+            assert f"item {name};" in text, f"{name} missing from mcp_interface.sysml"
+
+    def test_every_port_item_is_a_real_registered_tool(self, text, live_tool_names):
+        items = re.findall(r"item\s+(\w+);", text)
+        assert items, "no port items found in mcp_interface.sysml"
+        for name in items:
+            assert name in live_tool_names, f"{name} in mcp_interface.sysml is not a registered tool"
+
+    def test_tools_family_matches_their_port(self, text, live_tool_names):
+        tasks_block = text.split("port def TasksPort")[1].split("port def")[0]
+        concept_block = text.split("port def ConceptPort")[1].split("port def")[0]
+        memory_block = text.split("port def TaskMemoryPort")[1].split("port def")[0]
+        for name in live_tool_names:
+            if name.startswith("tasks__"):
+                assert f"item {name};" in tasks_block, f"{name} missing from TasksPort"
+            elif name.startswith("concept__"):
+                assert f"item {name};" in concept_block, f"{name} missing from ConceptPort"
+            elif name.startswith("task_memory__"):
+                assert f"item {name};" in memory_block, f"{name} missing from TaskMemoryPort"
+            else:
+                pytest.fail(f"{name} matches none of the three known tool-name prefixes")

@@ -432,24 +432,19 @@
     "sysml-doc-only-model-enforcement": {
       "confidence": 0.8,
       "contracts": [
-        "Every doc-only structural construct (state def, calc def) that asserts a claim about code behavior must ship with a corresponding TestXMatchesCode pytest class asserting the model text contains the identifiers/values the code actually produces.",
-        "Enum-like outputs are checked by importing the source constant (e.g. a tuple of literal grades) and asserting each member appears in the model text.",
-        "Conditional string-literal returns (no backing constant) are checked via inspect.getsource(fn) + regex extraction of return \"literal\" statements, then asserting each literal appears in the model text.",
-        "Read-only derived values (e.g. Task.progress) are additionally checked for having no setter, proving the value cannot be assigned independently of its source."
+        "A port def enumerating an RPC/tool surface (e.g. mcp_interface.sysml's TasksPort/ConceptPort/TaskMemoryPort) is checked by enumerating the LIVE registry at test time (e.g. asyncio.run(m.mcp.list_tools())) rather than importing a static name list, since the registry itself is the source of truth for what is currently registered, not a constant a human could also hand-copy."
       ],
       "created_at": "2026-08-17T13:45:53.662411+00:00",
-      "description": "SysML v2 structural models in this repo (state defs, calc defs) are transcribed by hand from Python source rather than parsed/bound to it. They are kept honest not by execution but by a paired pytest class that imports the real Python source of truth and string-matches its identifiers/literals against the .sysml file text.",
+      "description": "SysML v2 structural models in this repo (state defs, calc defs, interface defs/port defs) are transcribed by hand from Python source rather than parsed/bound to it. They are kept honest not by execution but by a paired pytest class that imports the real Python source of truth and string-matches its identifiers/literals against the .sysml file text.",
       "evidence": [
-        "models/task_lifecycle.sysml",
-        "models/derived_values.sysml",
-        "tests/test_models.py:TestLifecycleMatchesCode",
-        "tests/test_models.py:TestDerivedValuesMatchCode"
+        "models/mcp_interface.sysml",
+        "tests/test_models.py:TestMcpInterfaceMatchesCode"
       ],
       "invariants": [
         "A calc def or state def with no matching TestXMatchesCode test is an unenforced restatement of the same claim the prose already made — not acceptable per this task's motivation.",
         "Test risk text and grading must stay byte-identical to grooming's `risks` entries for tasks__grooming_accuracy recurrence tracking to work."
       ],
-      "last_validated": "2026-08-17T13:45:53.662437+00:00",
+      "last_validated": "2026-08-17T14:02:54.919350+00:00",
       "module": "models/task_lifecycle.sysml",
       "name": "sysml-doc-only-model-enforcement"
     },
@@ -550,6 +545,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-17T13:45:53.662519+00:00"
+    "updated_at": "2026-08-17T14:02:54.919407+00:00"
   }
 }
