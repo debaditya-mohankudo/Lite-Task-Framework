@@ -44,7 +44,7 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "5a1284d94e82c9c5bffae0f87324f04264c16d64";
+        derivedFromCommit = "4b4e89d9c084736f2198743cbcc4036552065b15";
         derivedAt = "2026-08-17";
         modelledPaths = (
             "taskfw/store.py",
@@ -101,8 +101,9 @@ package TaskFrameworkSystem {
              *     promoted one to loop memory.
              *   - drift_reflection_nudge (every PostToolUse call, via
              *     taskfw/drift_hook.py, throttled to every Nth call): puts the
-             *     active task's label and next item back in front of the
-             *     caller as a stateless awareness check-in, not a detector.
+             *     active task's label, completed checklist items, and next
+             *     item back in front of the caller as a stateless awareness
+             *     check-in, not a detector.
              *   - finish_nudge (tasks__finish): a task closed with no
              *     introspection report yet.
              *   - finish_reminder_nudge (tasks__check_item / tasks__update):
