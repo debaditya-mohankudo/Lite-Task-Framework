@@ -35,7 +35,7 @@ DOCS = ROOT / "docs" / "methodology"
 #: never invent an id, report the test result as a number — are exactly the ones
 #: that rot quietly. It shares 04-implementation.md rather than claiming a
 #: document of its own, since the reasoning it applies is implementation's.
-EXPECTED = {"commit", "discover-sysml-req", "task-create", "task-framework",
+EXPECTED = {"commit", "task-create", "task-framework",
             "task-grooming", "task-implementation", "task-introspection", "task-skills-audit"}
 
 #: Frontmatter every skill carries. `doc` is this repo's own convention: it
