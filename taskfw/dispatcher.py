@@ -96,12 +96,23 @@ def next_open_item(task) -> str | None:
     return None
 
 
+def completed_items(task) -> list[str]:
+    """Text of every checked resolution item, in checklist order.
+
+    Same derivation as next_open_item: recomputed from task.resolution on
+    every call rather than tracked separately, so it can never disagree with
+    the checklist itself.
+    """
+    return [item.text for item in task.resolution if item.done]
+
+
 _DRIFT_NUDGE_INTERVAL = 3
 
 
 def drift_reflection_nudge(
     active_task_id: str, active_task_title: str = "", active_task_phase: str = "",
     active_task_next_item: str = "", call_count: int | None = None,
+    active_task_completed_items: list[str] | None = None,
 ) -> str | None:
     """Stateless awareness nudge for the active task, or None when there isn't one.
 
@@ -148,6 +159,9 @@ def drift_reflection_nudge(
     label = f"task:{active_task_id}" + (f" ({active_task_title})" if active_task_title else "")
     if active_task_phase:
         label += f" [{active_task_phase}]"
+    if active_task_completed_items:
+        done_list = "; ".join(active_task_completed_items)
+        label += f" — done: {done_list}"
     if active_task_next_item:
         label += f' — next: "{active_task_next_item}"'
     return (

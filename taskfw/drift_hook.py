@@ -34,7 +34,7 @@ import os
 import sys
 
 from taskfw import dispatcher
-from taskfw.dispatcher import next_open_item, phase_label, task_phase
+from taskfw.dispatcher import completed_items, next_open_item, phase_label, task_phase
 from taskfw.log import get_logger
 from taskfw.store import TaskStore
 
@@ -58,6 +58,7 @@ def build_nudge(store: TaskStore, scope: str, call_count: int | None) -> str | N
     nudge = dispatcher.drift_reflection_nudge(
         active_task_id, active_task.title, phase_label(task_phase(active_task)),
         next_open_item(active_task) or "", call_count,
+        completed_items(active_task),
     )
     # info, not debug: get_logger() (taskfw/log.py) pins the root "taskfw"
     # logger at config.LOG_LEVEL, INFO by default, so a debug call here would

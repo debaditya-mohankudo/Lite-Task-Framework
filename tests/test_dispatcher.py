@@ -13,6 +13,7 @@ import pytest
 
 from taskfw.dispatcher import (
     combine,
+    completed_items,
     drift_reflection_nudge,
     finish_nudge,
     finish_reminder_nudge,
@@ -296,6 +297,36 @@ class TestDriftReflectionNudge:
         result = drift_reflection_nudge("t1", "Some task")
         assert result is not None
         assert "next:" not in result
+
+    def test_includes_completed_items_when_given(self):
+        result = drift_reflection_nudge(
+            "t1", "Some task", "implementation", "Write the thing",
+            active_task_completed_items=["Groom it", "Design it"],
+        )
+        assert result is not None
+        assert "done: Groom it; Design it" in result
+
+    def test_completed_items_is_optional(self):
+        result = drift_reflection_nudge("t1", "Some task")
+        assert result is not None
+        assert "done:" not in result
+
+
+class TestCompletedItems:
+    def test_empty_when_no_resolution(self):
+        task = Task(id="t1", type="task", title="x")
+        assert completed_items(task) == []
+
+    def test_only_done_items_in_order(self):
+        task = Task(
+            id="t1", type="task", title="x",
+            resolution=[
+                ResolutionItem(text="a", done=True),
+                ResolutionItem(text="b", done=False),
+                ResolutionItem(text="c", done=True),
+            ],
+        )
+        assert completed_items(task) == ["a", "c"]
 
 
 class TestNextOpenItem:
