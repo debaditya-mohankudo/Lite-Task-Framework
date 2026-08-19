@@ -106,7 +106,7 @@ def completed_items(task) -> list[str]:
     return [item.text for item in task.resolution if item.done]
 
 
-_DRIFT_NUDGE_INTERVAL = 3
+_DRIFT_NUDGE_INTERVAL = 4
 
 
 def drift_reflection_nudge(

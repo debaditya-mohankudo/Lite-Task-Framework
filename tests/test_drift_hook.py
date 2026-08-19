@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import json
 
+from taskfw import dispatcher
 from taskfw.drift_hook import build_nudge, main
 from taskfw.models import Task
 from taskfw.store import TaskStore
@@ -30,8 +31,9 @@ class TestBuildNudge:
 
     def test_passes_call_count_through_to_gating(self, tmp_path):
         store = _store_with_active(tmp_path)
-        assert build_nudge(store, "scope", 1) is None
-        assert build_nudge(store, "scope", 3) is not None
+        interval = dispatcher._DRIFT_NUDGE_INTERVAL
+        assert build_nudge(store, "scope", interval - 1) is None
+        assert build_nudge(store, "scope", interval) is not None
 
     def test_none_call_count_fires(self, tmp_path):
         store = _store_with_active(tmp_path)

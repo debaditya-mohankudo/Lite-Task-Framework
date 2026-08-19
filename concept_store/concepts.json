@@ -6,7 +6,7 @@
         "introspection_nudge(report, task_id, conn) returns None or a string; never raises, never mutates the report or the task",
         "Fires only when the report has an unpromoted lesson AND the task has never cited any memory",
         "finish_nudge(task) returns None or a string; fires only when task.introspection is empty",
-        "drift_reflection_nudge(active_task_id, active_task_title='', active_task_phase='', active_task_next_item='', call_count=None, active_task_completed_items=None) returns None or a string; fires every _DRIFT_NUDGE_INTERVAL (3) calls when call_count is supplied, else every call. No `scope` param — the caller (taskfw/drift_hook.py) resolves scope itself via TaskStore before calling. active_task_next_item (next_open_item(task)) and active_task_completed_items (completed_items(task), added task:1d23eb67) are both derived fresh from task.resolution by the caller each time, never stored. Label shape: 'task:<id> (<title>) [<phase>] — done: <item>; <item> — next: \"<item>\"', each segment appended only when its input is non-empty.",
+        "drift_reflection_nudge(active_task_id, active_task_title='', active_task_phase='', active_task_next_item='', call_count=None, active_task_completed_items=None) returns None or a string; fires every _DRIFT_NUDGE_INTERVAL calls (the constant's current value, not repeated here, is the source of truth) when call_count is supplied, else every call. No `scope` param — the caller (taskfw/drift_hook.py) resolves scope itself via TaskStore before calling. active_task_next_item (next_open_item(task)) and active_task_completed_items (completed_items(task), added task:1d23eb67) are both derived fresh from task.resolution by the caller each time, never stored. Label shape: 'task:<id> (<title>) [<phase>] — done: <item>; <item> — next: \"<item>\"', each segment appended only when its input is non-empty.",
         "completed_items(task) -> list[str] returns every checked resolution item's text in checklist order, derived from task.resolution on every call (task:1d23eb67) — same non-stored-derivation pattern as next_open_item and is_implemented.",
         "phase_label(phase: dict[str,bool]) -> str collapses task_phase's three independent booleans into a single word — 'grooming' | 'implementation' | 'introspection' | 'done' — by returning the first stage not yet reached in that order. Lives next to task_phase, takes task_phase's dict output rather than a Task, so a caller composes the two rather than task_phase growing a mode flag (task:afd462e3).",
         "is_implemented(task) -> bool is the pure predicate (task.progress total>0 and done==total), status-independent — extracted from finish_reminder_nudge's inline check (task:bf95ced8)",
@@ -59,7 +59,7 @@
         "ungroomed_progress_nudge is the first nudge built as a thin wrapper deriving its condition the same way task_phase() derives 'groomed' (bool(task.grooming)), rather than re-deriving its own independent condition from raw task fields — still fits the plain Callable[[dict], None] shape with no new mechanism.",
         "phase_label never throws on a real Task's task_phase() output: grooming/introspection are dataclass fields with default_factory (never None) and progress is a derived property, so the dict it reads is always well-formed (task:afd462e3)."
       ],
-      "last_validated": "2026-08-19T06:20:18.032726+00:00",
+      "last_validated": "2026-08-19T07:00:00.000000+00:00",
       "module": "taskfw/dispatcher.py",
       "name": "advisory-nudge-dispatcher"
     },
