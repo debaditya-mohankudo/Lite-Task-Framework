@@ -110,15 +110,13 @@ TASK_COMMITS = Table(
     ),
 )
 
-# Superseded by ACTIVE_TASK_STACK (task:f302eb2b) — one row per scope cannot
-# express a LIFO detour stack. Dropped from TABLES rather than the table
-# itself: migrate() never drops a table, so any pre-existing active_task rows
-# are simply left in place, orphaned.
-#
-# ACTIVE_TASK_STACK is an append-only push/pop log rather than an ordered
-# list column: id is an AUTOINCREMENT surrogate, so "top of stack" is always
-# "highest id for this scope, still present" — no position renumbering is
-# ever needed on pop, which is what keeps pop a single DELETE.
+# Superseded by an in-memory dict on TaskStore (task:f5ace343) — active
+# status is ephemeral (relevant only while a task is being groomed,
+# implemented, or introspected), not something worth persisting or a LIFO
+# detour stack. Dropped from TABLES rather than the table itself: migrate()
+# never drops a table, so any pre-existing active_task_stack rows are simply
+# left in place, orphaned — same convention this table itself was dropped
+# under when it superseded the older single-row ACTIVE_TASK design.
 ACTIVE_TASK_STACK = Table(
     name="active_task_stack",
     columns=(
@@ -181,7 +179,7 @@ LOGS = Table(
     ),
 )
 
-TABLES: tuple[Table, ...] = (TASKS, TASK_EVENTS, TASK_EDGES, TASK_COMMITS, ACTIVE_TASK_STACK,
+TABLES: tuple[Table, ...] = (TASKS, TASK_EVENTS, TASK_EDGES, TASK_COMMITS,
                              MEMORIES, MEMORY_LINKS, LOGS)
 
 INDEXES: tuple[str, ...] = (
@@ -192,7 +190,6 @@ INDEXES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_memory_links_slug ON memory_links(slug)",
     "CREATE INDEX IF NOT EXISTS idx_memory_links_task ON memory_links(task_id)",
     "CREATE INDEX IF NOT EXISTS idx_logs_logger ON logs(logger)",
-    "CREATE INDEX IF NOT EXISTS idx_active_stack_scope ON active_task_stack(scope, id)",
 )
 
 

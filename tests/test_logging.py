@@ -109,8 +109,8 @@ class TestStoreLogging:
     def test_active_task_changes_are_logged(self, store, caplog):
         t = store.save(Task(title="t"))
         with caplog.at_level(logging.INFO, logger="taskfw"):
-            store.push_active(t.id, scope="/w")
-            store.pop_active(scope="/w")
+            store.set_active(t.id, scope="/w")
+            store.clear_active(scope="/w")
         assert "active" in caplog.text and "/w" in caplog.text
 
 

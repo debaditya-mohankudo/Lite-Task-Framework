@@ -359,6 +359,11 @@ def tasks__create(
     The response's related_candidates is advisory only — titles that share
     words with an existing task, surfaced for a human to review. Nothing here
     ever creates a tasks__link edge; that stays a deliberate, separate call.
+
+    Clears whatever task was active for this scope, if any (task:74bf3542):
+    starting a new task is a clean break from what came before, so the new
+    task is not auto-activated and the old one is not left dangling as
+    active either. Calling this repeatedly is harmless.
     """
     task = Task(
         title=title, type=type, parent=parent or None, motivation=motivation,
@@ -372,6 +377,9 @@ def tasks__create(
     if not decision:
         return _denied(decision)
     store().save(task)
+    scope = _scope()
+    if store().get_active(scope):
+        _clear_and_broadcast(scope)
     result: dict[str, Any] = {"ok": True, "id": task.id, "type": task.type, "status": task.status}
     candidates = related_candidates(store(), task)
     if candidates:
@@ -429,7 +437,7 @@ def tasks__update(
     if updated.status in lifecycle.TERMINAL and current.status not in lifecycle.TERMINAL:
         scope = _scope()
         if store().get_active(scope) == task_id:
-            _pop_and_broadcast(scope)
+            _clear_and_broadcast(scope)
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 
@@ -442,31 +450,38 @@ def _auto_activate_on_checklist_progress(task_id: str, task_title: str) -> None:
     being called, so taskfw's PostToolUse drift-reflection nudge stayed silent
     for the whole implementation).
 
-    Pushes task_id onto the active-task stack (task:f302eb2b) rather than
-    requiring the caller to already be on top: checking off an item on a
-    task that is not the current top of stack is exactly the mid-run
-    dependency-detour case the stack exists for, so it is pushed silently,
-    not refused with a notice. push_active is itself a no-op when task_id is
-    already on top, so this call is safe every time an item is checked.
+    Sets task_id as the active task (task:f5ace343) unconditionally -- active
+    status is a single ephemeral pointer, not a stack, so checking an item on
+    a task other than the current active one simply replaces it. set_active
+    is itself a no-op when task_id is already active, so this call is safe
+    every time an item is checked.
     """
-    scope = _scope()
-    store().push_active(task_id, scope)
+    _set_and_broadcast(task_id, task_title, _scope())
+
+
+def _set_and_broadcast(task_id: str, task_title: str, scope: str) -> None:
+    """Set the active task for scope and tell claude-hooks about it.
+
+    Shared by _auto_activate_on_checklist_progress and tasks__set_active —
+    both need "set, then tell claude-hooks what's active" and nothing more.
+    """
+    store().set_active(task_id, scope)
     _push_active_task(scope, task_id, task_title)
 
 
-def _pop_and_broadcast(scope: str) -> str | None:
-    """Pop the active-task stack for scope and tell claude-hooks what's now on top.
+def _clear_and_broadcast(scope: str) -> None:
+    """Clear the active task for scope and tell claude-hooks it's gone.
 
-    Shared by _finish_task and tasks__clear_active — both need "pop, then
-    push whatever's newly on top (or empty) to claude-hooks" and nothing more.
+    Shared by _finish_task, tasks__create, tasks__update, and
+    tasks__clear_active — all need "clear, then tell claude-hooks there is no
+    active task" and nothing more.
     """
-    new_top = store().pop_active(scope)
-    _push_active_task(scope, new_top or "")
-    return new_top
+    store().clear_active(scope)
+    _push_active_task(scope, "")
 
 
 def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
-    """Mark a task done and pop it off the active-task stack if it's on top.
+    """Mark a task done and clear it as the active task if it is active.
 
     Shared by tasks__finish and the auto-finish-on-last-item path in
     tasks__check_item (task:f302eb2b) so there is exactly one implementation
@@ -477,10 +492,7 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
     an abandoned task IS refused — abandoned is terminal and is not the state
     the caller asked for.
 
-    If task_id is not on top of the active-task stack, the stack is left
-    untouched — the task still finishes, but there is nothing to pop that
-    reflects it (a buried task finishing does not disturb whatever detour is
-    stacked above it).
+    If task_id is not the active task, active status is left untouched.
     """
     task = store().get(task_id)
     if task is None:
@@ -494,7 +506,7 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
         store().add_event(task_id, reason, kind="status")
     scope = _scope()
     if store().get_active(scope) == task_id:
-        _pop_and_broadcast(scope)
+        _clear_and_broadcast(scope)
     return {"ok": True, "id": task_id, "status": "done"}
 
 
@@ -502,9 +514,9 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
 def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
     """Tick or untick one resolution checklist item by its zero-based index.
 
-    Ticking an item on (done=True) also pushes task_id onto the active-task
-    stack for this scope — see _auto_activate_on_checklist_progress. Ticking
-    the last open item finishes the task the same way tasks__finish would
+    Ticking an item on (done=True) also sets task_id as the active task for
+    this scope — see _auto_activate_on_checklist_progress. Ticking the last
+    open item finishes the task the same way tasks__finish would
     (task:f302eb2b) — see _finish_task. Unticking never triggers either.
     """
     task = store().get(task_id)
@@ -673,42 +685,36 @@ def _push_active_task(workspace: str, task_id: str, title: str = "") -> None:
 
 @_tool()
 def tasks__set_active(task_id: str) -> dict[str, Any]:
-    """Push task_id onto the active-task stack for this workspace. Persisted,
-    so it survives a restart.
+    """Set task_id as the active task for this workspace. In-memory only —
+    not persisted, does not survive a restart (task:f5ace343).
 
-    A LIFO stack (task:f302eb2b), not a single pointer: pushing while a
-    different task is already active does not lose it — it is left
-    underneath, and comes back automatically on tasks__finish or
-    tasks__clear_active. Nothing here is destructive, so there is no confirm
-    to pass. Re-setting the task already on top is a no-op.
+    A single ephemeral pointer, not a stack: active status matters only
+    while a task is being groomed, implemented, or introspected, so setting
+    a different task simply replaces whichever one was active. Nothing here
+    is destructive, so there is no confirm to pass. Re-setting the task
+    already active is a no-op.
     """
     task = store().get(task_id)
     if task is None:
         return {"error": f"No task {task_id!r}"}
     scope = _scope()
-    store().push_active(task_id, scope)
-    _push_active_task(scope, task_id, task.title)
-    return {"ok": True, "active": task_id, "scope": scope, "stack_depth": len(store().active_stack(scope))}
+    _set_and_broadcast(task_id, task.title, scope)
+    return {"ok": True, "active": task_id, "scope": scope}
 
 
 @_tool()
 def tasks__active() -> dict[str, Any]:
-    """The active task for this workspace, if any, and the full detour stack beneath it (top first)."""
+    """The active task for this workspace, if any. In-memory only (task:f5ace343)."""
     scope = _scope()
-    return {"active": store().get_active(scope), "stack": store().active_stack(scope), "scope": scope}
+    return {"active": store().get_active(scope), "scope": scope}
 
 
 @_tool()
 def tasks__clear_active() -> dict[str, Any]:
-    """Pop the top of the active-task stack for this workspace.
-
-    Restores whatever was pushed underneath (task:f302eb2b) rather than
-    wiping the whole stack — clearing a detour returns you to what you were
-    doing before it, the same as finishing it would.
-    """
+    """Clear the active task for this workspace, if any."""
     scope = _scope()
-    new_top = _pop_and_broadcast(scope)
-    return {"ok": True, "active": new_top, "scope": scope}
+    _clear_and_broadcast(scope)
+    return {"ok": True, "active": None, "scope": scope}
 
 
 # ---------------------------------------------------------------------------

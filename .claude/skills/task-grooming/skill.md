@@ -27,13 +27,14 @@ Grooming is done when the answer is yes — not when every field has been filled
 | `/task-grooming epic:<id>` | Groom the open children — `tasks__list(parent="<epic id>")` |
 | `/task-grooming task:<a> task:<b>` | Groom the explicit list |
 
-## Step 0 — Log the invocation
+## Step 0 — Log the invocation and activate
 
 ```python
 tasks__log_skill_invocation(skill="task-grooming/step-0-log-invocation", task_id=task_id)
+tasks__set_active(task_id)
 ```
 
-One call, before Step 1. If grooming a batch, log once per task_id in the loop.
+One call each, before Step 1. Active status is ephemeral and in-memory (task:f5ace343) — it marks "this is the task currently being worked on," which is true for the duration of a grooming pass. If grooming a batch, log and activate once per task_id in the loop; the next task's activation simply replaces the previous one.
 
 ## Step 1 — Pull the context
 
@@ -113,10 +114,11 @@ Introspection grades every risk, so a risk that cannot be graded is noise.
 
 The first can be graded `materialized`, `avoided`, or `wrong`. The second cannot be graded at all, and so teaches nothing. `tasks__grooming_accuracy` counts the ungradeable ones against you.
 
-## Step 5 — Report
+## Step 5 — Report and deactivate
 
 ```python
 tasks__log_skill_invocation(skill="task-grooming/step-5-report", task_id=task_id)
+tasks__clear_active()
 ```
 
 ```
@@ -127,10 +129,12 @@ tasks__log_skill_invocation(skill="task-grooming/step-5-report", task_id=task_id
 N tasks groomed — M ready, K need updates.
 ```
 
+Clear active status once the batch is done, not after each task in a loop — the next task's `tasks__set_active` already replaces it, so clearing mid-loop only matters after the last one.
+
 ## Rules
 
 - **`tasks__context` is mandatory.** There is no activation that fetches it for you.
-- **Grooming is not starting.** A groomed task is not an active one. Do not leave it half-implemented because grooming went well. There is no status to reset — grooming never changed it.
+- **Grooming is not starting.** A groomed task is not necessarily an active *implementation*. Active status here just marks "being groomed right now," and is cleared at the end of the pass — do not leave the task half-implemented because grooming went well. There is no task *status* to reset — grooming never changed it.
 - **Revise the prior grooming; do not overwrite it blind.**
 - **Every risk must be falsifiable.**
 - **Do not abandon a task unilaterally.** If it looks like a duplicate or orphan worth abandoning, surface it to the user first.

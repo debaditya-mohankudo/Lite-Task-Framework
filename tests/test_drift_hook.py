@@ -20,7 +20,7 @@ from taskfw.store import TaskStore
 def _store_with_active(tmp_path, active_id="t1"):
     store = TaskStore(tmp_path / "t.db")
     store.save(Task(id=active_id, type="task", title="Some task"))
-    store.push_active(active_id, scope="scope")
+    store.set_active(active_id, scope="scope")
     return store
 
 

@@ -224,15 +224,14 @@ class TestChecklist:
         assert "active_task_notice" not in r
         assert m.tasks__active()["active"] == t["id"]
 
-    def test_checking_an_item_on_a_different_task_pushes_it_onto_the_stack(self):
-        """A detour: task:f302eb2b. Checking off an item on a non-top task is
-        the mid-run dependency case, so it is pushed rather than refused."""
+    def test_checking_an_item_on_a_different_task_replaces_the_active_task(self):
+        """task:f5ace343: checking off an item on a non-active task simply
+        replaces the active task rather than being refused."""
         a = create(resolution=["a"])
         b = create(resolution=["b", "c"])
         m.tasks__set_active(a["id"])
         m.tasks__check_item(b["id"], 0)
         assert m.tasks__active()["active"] == b["id"]
-        assert m.tasks__active()["stack"] == [b["id"], a["id"]]
 
     def test_unchecking_an_item_does_not_activate_the_task(self):
         t = create(resolution=["a"])
@@ -362,6 +361,19 @@ class TestFormatCommitMessage:
 
 
 class TestActiveTask:
+    def test_creating_a_task_clears_the_active_one(self):
+        """task:74bf3542: a fresh task is a clean break — it does not inherit
+        whatever was active, and the old active task is not left dangling."""
+        t = create()
+        m.tasks__set_active(t["id"])
+        create(title="a new task")
+        assert m.tasks__active()["active"] is None
+
+    def test_creating_a_task_with_none_active_is_a_no_op(self):
+        assert m.tasks__active()["active"] is None
+        create()
+        assert m.tasks__active()["active"] is None
+
     def test_set_get_clear(self):
         t = create()
         assert m.tasks__active()["active"] is None
@@ -373,29 +385,27 @@ class TestActiveTask:
     def test_set_active_rejects_unknown_task(self):
         assert "error" in m.tasks__set_active("nosuch")
 
-    def test_set_active_pushes_rather_than_refuses_a_switch(self):
-        """task:f302eb2b: switching used to require confirm=True; now it
-        pushes non-destructively, so nothing is lost and nothing to confirm."""
+    def test_set_active_replaces_rather_than_refuses_a_switch(self):
+        """task:f5ace343: switching used to require confirm=True; now active
+        status is a single ephemeral pointer, so switching just replaces it,
+        non-destructively, with nothing to confirm."""
         a, b = create(title="a"), create(title="b")
         m.tasks__set_active(a["id"])
         result = m.tasks__set_active(b["id"])
         assert result["ok"]
         assert m.tasks__active()["active"] == b["id"]
-        assert m.tasks__active()["stack"] == [b["id"], a["id"]]
 
-    def test_set_active_already_on_top_is_a_no_op(self):
+    def test_set_active_already_active_is_a_no_op(self):
         t = create()
         assert m.tasks__set_active(t["id"])["ok"]
         assert m.tasks__set_active(t["id"])["ok"]
-        assert m.tasks__active()["stack"] == [t["id"]]
+        assert m.tasks__active()["active"] == t["id"]
 
-    def test_finish_pops_the_active_task_it_finished_and_restores_the_one_beneath(self):
+    def test_finish_clears_the_active_task_it_finished(self):
         t = create()
-        under = create(title="under")
-        m.tasks__set_active(under["id"])
         m.tasks__set_active(t["id"])
         m.tasks__finish(t["id"])
-        assert m.tasks__active()["active"] == under["id"]
+        assert m.tasks__active()["active"] is None
 
     def test_finish_leaves_a_different_active_task_untouched(self):
         t = create()
@@ -404,13 +414,11 @@ class TestActiveTask:
         m.tasks__finish(other["id"])
         assert m.tasks__active()["active"] == t["id"]
 
-    def test_update_to_done_pops_the_active_task_and_restores_the_one_beneath(self):
+    def test_update_to_done_clears_the_active_task(self):
         t = create()
-        under = create(title="under")
-        m.tasks__set_active(under["id"])
         m.tasks__set_active(t["id"])
         m.tasks__update(t["id"], status="done")
-        assert m.tasks__active()["active"] == under["id"]
+        assert m.tasks__active()["active"] is None
 
     def test_update_to_abandoned_pops_the_active_task(self):
         t = create()
@@ -431,14 +439,12 @@ class TestActiveTask:
         m.tasks__update(t["id"], title="renamed while active")
         assert m.tasks__active()["active"] == t["id"]
 
-    def test_clear_active_pops_one_level_and_restores_the_one_beneath(self):
-        under = create(title="under")
-        top = create(title="top")
-        m.tasks__set_active(under["id"])
-        m.tasks__set_active(top["id"])
+    def test_clear_active_clears_it(self):
+        t = create()
+        m.tasks__set_active(t["id"])
         result = m.tasks__clear_active()
-        assert result["active"] == under["id"]
-        assert m.tasks__active()["active"] == under["id"]
+        assert result["active"] is None
+        assert m.tasks__active()["active"] is None
 
     def test_context_falls_back_to_the_active_task(self):
         t = create(title="the active one")
