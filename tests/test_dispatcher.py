@@ -269,10 +269,11 @@ class TestDriftReflectionNudge:
         results = [drift_reflection_nudge("t1", "Some task") for _ in range(5)]
         assert all(r is not None for r in results)
 
-    def test_throttles_to_every_fourth_call_with_a_counter(self):
-        results = [drift_reflection_nudge("t1", "Some task", call_count=n) for n in range(1, 9)]
+    def test_throttles_to_every_eighth_call_with_a_counter(self):
+        results = [drift_reflection_nudge("t1", "Some task", call_count=n) for n in range(1, 17)]
         assert [r is not None for r in results] == [
-            False, False, False, True, False, False, False, True,
+            False, False, False, False, False, False, False, True,
+            False, False, False, False, False, False, False, True,
         ]
 
     def test_title_is_optional(self):
