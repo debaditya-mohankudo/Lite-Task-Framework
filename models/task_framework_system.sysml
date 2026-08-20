@@ -44,8 +44,8 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "548daccf41a5ec12e1b79461d10749cf23642264";
-        derivedAt = "2026-08-17";
+        derivedFromCommit = "3b7d7902ca483e1b57f0fb58323fa0dde96848dd";
+        derivedAt = "2026-08-20";
         modelledPaths = (
             "taskfw/store.py",
             "taskfw/models.py",
@@ -123,23 +123,24 @@ package TaskFrameworkSystem {
              * own.
              *
              * ONE TOOL IS THE EXCEPTION TO "dispatcher never changes what is
-             * stored": tasks__check_item(done=True) also pushes its task onto
-             * the active-task stack for the current scope as a direct side
+             * stored": tasks__check_item(done=True) also sets its task as
+             * the active task for the current scope as a direct side
              * effect — a checked-off item is unambiguous evidence
              * implementation started, so it removes the "forgot to call
              * set_active" failure mode instead of merely nudging about it.
              * Checking off a checklist's LAST open item goes further and
              * finishes the task outright, through the same path
-             * tasks__finish uses. Neither push nor finish needs a gate to
-             * mirror: the active-task pointer used to be a single slot
-             * guarded by LifecycleRules.check_active_switch (confirm=True
-             * required to overwrite it), but it is now a per-scope LIFO
-             * stack — pushing is non-destructive, so there is nothing left
-             * to protect against losing. tasks__finish and
-             * tasks__clear_active pop the stack, restoring whatever task was
-             * pushed underneath. This mutation lives in mcp_server.py
-             * itself, not dispatcher.py — it is a tool's own write, gated by
-             * LifecycleRules like any other, not an advisory annotation. */
+             * tasks__finish uses. Neither set nor finish needs a gate to
+             * mirror: the active-task pointer is a single in-memory dict
+             * entry per scope (task:f5ace343) — not persisted, not a stack —
+             * so setting a different task simply overwrites whatever was
+             * active; there is nothing to protect against losing, and
+             * nothing survives a server restart. tasks__finish and
+             * tasks__clear_active just clear the pointer — there is no
+             * underlying task to restore. This mutation lives in
+             * mcp_server.py itself, not dispatcher.py — it is a tool's own
+             * write, gated by LifecycleRules like any other, not an
+             * advisory annotation. */
         part foundation : Foundation;
         part rules : LifecycleRules;
         part store : TaskStore;
