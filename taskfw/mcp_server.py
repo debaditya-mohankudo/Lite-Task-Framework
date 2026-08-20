@@ -426,6 +426,10 @@ def tasks__update(
     if not decision:
         return _denied(decision)
     store().save(updated)
+    if updated.status in lifecycle.TERMINAL and current.status not in lifecycle.TERMINAL:
+        scope = _scope()
+        if store().get_active(scope) == task_id:
+            _pop_and_broadcast(scope)
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 

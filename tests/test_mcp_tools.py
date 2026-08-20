@@ -404,6 +404,33 @@ class TestActiveTask:
         m.tasks__finish(other["id"])
         assert m.tasks__active()["active"] == t["id"]
 
+    def test_update_to_done_pops_the_active_task_and_restores_the_one_beneath(self):
+        t = create()
+        under = create(title="under")
+        m.tasks__set_active(under["id"])
+        m.tasks__set_active(t["id"])
+        m.tasks__update(t["id"], status="done")
+        assert m.tasks__active()["active"] == under["id"]
+
+    def test_update_to_abandoned_pops_the_active_task(self):
+        t = create()
+        m.tasks__set_active(t["id"])
+        m.tasks__update(t["id"], status="abandoned")
+        assert m.tasks__active()["active"] is None
+
+    def test_update_to_done_leaves_a_different_active_task_untouched(self):
+        t = create()
+        other = create(title="other")
+        m.tasks__set_active(t["id"])
+        m.tasks__update(other["id"], status="done")
+        assert m.tasks__active()["active"] == t["id"]
+
+    def test_update_with_non_status_fields_does_not_touch_the_active_stack(self):
+        t = create()
+        m.tasks__set_active(t["id"])
+        m.tasks__update(t["id"], title="renamed while active")
+        assert m.tasks__active()["active"] == t["id"]
+
     def test_clear_active_pops_one_level_and_restores_the_one_beneath(self):
         under = create(title="under")
         top = create(title="top")
