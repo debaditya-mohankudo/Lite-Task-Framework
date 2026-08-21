@@ -518,6 +518,12 @@ def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, 
     this scope — see _auto_activate_on_checklist_progress. Ticking the last
     open item finishes the task the same way tasks__finish would
     (task:f302eb2b) — see _finish_task. Unticking never triggers either.
+
+    Logs the item's text alongside its index: the generic `tool=tasks__check_item
+    OK` line from tool_called (dispatcher.py) says a call happened but not which
+    item, so intermediate items (not the last one, which gets its own `add_event`
+    via _finish_task) would otherwise be indistinguishable from each other in
+    tasks__logs.
     """
     task = store().get(task_id)
     if task is None:
@@ -526,6 +532,7 @@ def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, 
         return {"error": f"No item {index} — task has {len(task.resolution)}."}
     task.resolution[index].done = done
     store().save(task)
+    log.info("check_item task=%s index=%s done=%s text=%r", task_id, index, done, task.resolution[index].text)
     d, total = task.progress
     result: dict[str, Any] = {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
     if not done:
