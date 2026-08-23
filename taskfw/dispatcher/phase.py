@@ -9,6 +9,28 @@ out of sync with the checklist or grooming/introspection history it reads.
 from __future__ import annotations
 
 
+def is_groomed(task) -> bool:
+    """Whether task has been through a grooming pass.
+
+    A task is groomed exactly when its grooming findings are non-empty —
+    there is no separate groomed_at flag, matching task-grooming/skill.md's
+    own definition. The single predicate task_phase and every caller that
+    needs this specific signal (e.g. ungroomed_progress_nudge) share, so a
+    future change to what "groomed" means only has to change here.
+    """
+    return bool(task.grooming)
+
+
+def is_introspected(task) -> bool:
+    """Whether task has at least one introspection report.
+
+    The single predicate task_phase and every caller that needs this
+    specific signal (e.g. finish_nudge) share, so a future change to what
+    "introspected" means only has to change here.
+    """
+    return bool(task.introspection)
+
+
 def is_implemented(task) -> bool:
     """Whether task's resolution checklist is complete — status-independent.
 
@@ -55,16 +77,14 @@ def task_phase(task) -> dict[str, bool]:
     status. Folding this into a new column or into active_task (a scope ->
     task_id pointer, not a per-task field) would duplicate a rule this
     module and lifecycle.py already own; see task:bf95ced8's grooming for
-    why that was rejected. A task is "groomed" when its grooming findings
-    are non-empty (there is no separate groomed_at flag — same reasoning as
-    task-grooming/skill.md's "a task is groomed when its grooming is
-    non-empty"), "implemented" per is_implemented above, and "introspected"
-    when at least one introspection report has been appended.
+    why that was rejected. Composed from the three single-source predicates
+    above rather than re-testing the underlying fields itself, so a change
+    to what any one of them means changes this dict too, automatically.
     """
     return {
-        "groomed": bool(task.grooming),
+        "groomed": is_groomed(task),
         "implemented": is_implemented(task),
-        "introspected": bool(task.introspection),
+        "introspected": is_introspected(task),
     }
 
 

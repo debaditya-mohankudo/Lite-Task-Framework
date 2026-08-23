@@ -40,7 +40,9 @@ from taskfw.dispatcher.nudges import (
 )
 from taskfw.dispatcher.phase import (
     completed_items,
+    is_groomed,
     is_implemented,
+    is_introspected,
     next_open_item,
     phase_label,
     task_phase,
@@ -59,7 +61,9 @@ __all__ = [
     "task_debt_nudge",
     "ungroomed_progress_nudge",
     "completed_items",
+    "is_groomed",
     "is_implemented",
+    "is_introspected",
     "next_open_item",
     "phase_label",
     "task_phase",

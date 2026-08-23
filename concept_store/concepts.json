@@ -46,11 +46,11 @@
         "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires AFTER tasks__finish when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called (task:a6fb9f45 sat open at 4/4 until an unrelated review pass caught it).",
         "stale_memory_nudge never calls supersede()/forget() itself — advisory only, consistent with task-introspection's 'never unilaterally delete stale memories' rule.",
         "finish_reminder_nudge, stale_memory_nudge, and ungroomed_progress_nudge are all stateless by design (unlike drift_reflection_nudge's throttled counter): each checks current state on every qualifying call rather than firing once and remembering it fired, because check_item/update/link are infrequent enough that re-firing costs little.",
-        "ungroomed_progress_nudge matches task_phase()'s own bool(task.grooming) definition of 'groomed' (see [[task-phase-derivation]]), so the two can never disagree.",
+        "ungroomed_progress_nudge and finish_nudge call task-phase-derivation's is_groomed/is_introspected (task:5a5fde0d) rather than testing task.grooming/task.introspection directly, so they and task_phase() (see [[task-phase-derivation]]) can never disagree about what those words mean.",
         "drift_reflection_nudge is an awareness nudge, not a detection mechanism: it has no view into what happened during the call it's attached to, so it cannot tell drift from on-task work — it only puts the task label back in front of the caller on every qualifying call. The %N==0 throttle decision lives here in taskfw (call_count is supplied data from claude-hooks' own per-session counter via drift_hook.py's stdin payload); claude-hooks supplies data, not policy.",
-        "nudges.py imports is_implemented from phase.py (one-directional) and imports nothing from chassis.py — every nudge here is a plain function returning str | None, wiring onto tool_called/apply_nudge happens only at the mcp_server.py call site, not inside this module."
+        "nudges.py imports is_groomed, is_implemented, and is_introspected from phase.py (one-directional, task:5a5fde0d) and imports nothing from chassis.py — every nudge here is a plain function returning str | None, wiring onto tool_called/apply_nudge happens only at the mcp_server.py call site, not inside this module."
       ],
-      "last_validated": "2026-08-23T10:14:44.522200+00:00",
+      "last_validated": "2026-08-23T13:13:11.419146+00:00",
       "module": "taskfw/dispatcher/nudges.py",
       "name": "advisory-nudge-policies",
       "related": [
@@ -361,9 +361,10 @@
         "related_candidates in tasks__create's response is computed inline in the tool body, NOT via the dispatcher hook/nudge mechanism -- every existing nudge is str | None, a candidate list is list[dict], a structurally different shape (task:78853657)",
         "_push_active_task reads CLAUDE_HOOKS_URL from os.environ on every call rather than caching it at import time, specifically so tests can redirect it via monkeypatch.setenv without needing to reload the module -- a module-level constant computed once at import would not observe a later monkeypatch.setenv (task:6906557f).",
         "There is no drift-reflection hook left in this module (task:8be768df removed _drift_reflection_hook entirely) -- drift-reflection awareness now lives solely in taskfw/drift_hook.py, a standalone PostToolUse hook Claude Code invokes directly on every tool call in the session, independent of any MCP tool call. tasks__check_item's auto-activation (see contracts) is unrelated to that removal -- it is a store mutation, not a nudge, and lives in mcp_server.py precisely because dispatcher.py's hooks never mutate stored state (see task_framework_system.sysml's TaskMCPTools doc).",
-        "Active status is now exactly as long-lived as the pass that sets it (task:f5ace343) -- task-grooming and task-introspection skills activate/deactivate at their own pass boundaries rather than relying on any persistence layer."
+        "Active status is now exactly as long-lived as the pass that sets it (task:f5ace343) -- task-grooming and task-introspection skills activate/deactivate at their own pass boundaries rather than relying on any persistence layer.",
+        "_introspection_hook checks dispatcher.is_introspected(task) rather than the raw task.introspection truthy test it used before (task:f6be04bf's audit) -- consolidating on task-phase-derivation's single-source predicate rather than re-testing the field, matching finish_nudge/ungroomed_progress_nudge's own consolidation in nudges.py."
       ],
-      "last_validated": "2026-08-20T06:08:22.271963+00:00",
+      "last_validated": "2026-08-23T13:15:11.952292+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface",
       "related": [
@@ -584,7 +585,8 @@
         "phase_label(phase: dict[str,bool]) -> str collapses task_phase's three independent booleans into a single word — 'grooming' | 'implementation' | 'introspection' | 'done' — by returning the first stage not yet reached in that order.",
         "is_implemented(task) -> bool is the pure predicate (task.progress total>0 and done==total), status-independent — extracted so finish_reminder_nudge and task_phase share one place computing '100% done' instead of two copies that could drift.",
         "next_open_item(task) -> str | None returns the text of the first unchecked resolution item, recomputed from task.resolution on every call.",
-        "completed_items(task) -> list[str] returns every checked resolution item's text in checklist order, same non-stored-derivation pattern as next_open_item and is_implemented."
+        "completed_items(task) -> list[str] returns every checked resolution item's text in checklist order, same non-stored-derivation pattern as next_open_item and is_implemented.",
+        "is_groomed(task) -> bool and is_introspected(task) -> bool (task:5a5fde0d) are single-source predicates for task_phase's 'groomed'/'introspected' keys, matching is_implemented's existing precedent — task_phase composes all three rather than re-testing task.grooming/task.introspection inline."
       ],
       "created_at": "2026-08-23T10:14:25.394994+00:00",
       "description": "Pure, fully-derived task-state helpers shared by [[advisory-nudge-policies]] and mcp_server.py's tasks__phase tool, so neither can disagree about where a task stands in the grooming -> implementation -> introspection loop. Extracted from the flat taskfw/dispatcher.py into taskfw/dispatcher/phase.py; re-exported unchanged from taskfw/dispatcher/__init__.py.",
@@ -596,7 +598,9 @@
         "taskfw/dispatcher/phase.py:completed_items",
         "taskfw/mcp_server.py:tasks__phase",
         "tests/test_dispatcher.py::TestPhaseLabel",
-        "tests/test_dispatcher.py::TestCompletedItems"
+        "tests/test_dispatcher.py::TestCompletedItems",
+        "taskfw/dispatcher/phase.py:is_groomed",
+        "taskfw/dispatcher/phase.py:is_introspected"
       ],
       "invariants": [
         "task_phase's 'groomed' has no separate groomed_at flag — a task is groomed exactly when task.grooming is non-empty, matching task-grooming/skill.md's own definition, so this and ungroomed_progress_nudge can never disagree about what counts as groomed.",
@@ -604,9 +608,10 @@
         "phase_label makes an ordering call the three booleans themselves don't (a task can be re-groomed after being implemented, introspected without every checklist item done, etc.) — only a caller wanting a single display label (drift_reflection_nudge) needs this; tasks__phase keeps returning the raw booleans so it never disagrees with task_phase itself.",
         "phase_label never throws on a real Task's task_phase() output: grooming/introspection are dataclass fields with default_factory (never None) and progress is a derived property, so the dict it reads is always well-formed (task:afd462e3).",
         "A stored 'current item' pointer could disagree with the checklist the moment an item gets checked off elsewhere; a value recomputed from task.resolution itself cannot, which is why next_open_item and completed_items are never cached.",
-        "phase.py has zero imports from chassis.py or nudges.py — it operates only on a Task's own fields, which is what makes it safe for nudges.py to import from without any risk of a cycle."
+        "phase.py has zero imports from chassis.py or nudges.py — it operates only on a Task's own fields, which is what makes it safe for nudges.py to import from without any risk of a cycle.",
+        "nudges.py's finish_nudge and ungroomed_progress_nudge call is_introspected(task)/is_groomed(task) rather than testing task.introspection/task.grooming directly (task:5a5fde0d) — every phase-boolean check is coupled to these single predicates, so a future redefinition of what 'groomed' or 'introspected' means changes one function in phase.py instead of requiring every call site to be found and updated independently."
       ],
-      "last_validated": "2026-08-23T10:14:25.395005+00:00",
+      "last_validated": "2026-08-23T13:12:28.870999+00:00",
       "module": "taskfw/dispatcher/phase.py",
       "name": "task-phase-derivation",
       "related": [
@@ -732,6 +737,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-23T10:14:44.522245+00:00"
+    "updated_at": "2026-08-23T13:12:28.871916+00:00"
   }
 }

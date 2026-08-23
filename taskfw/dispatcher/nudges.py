@@ -18,7 +18,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Any
 
-from taskfw.dispatcher.phase import is_implemented
+from taskfw.dispatcher.phase import is_groomed, is_implemented, is_introspected
 
 _DRIFT_NUDGE_INTERVAL = 8
 
@@ -138,7 +138,7 @@ def finish_nudge(task) -> str | None:
     inside taskfw itself, so it holds regardless of host or whether that
     separate hook process happens to be running.
     """
-    if task.introspection:
+    if is_introspected(task):
         return None
     return f"task:{task.id} closed with no introspection report yet. Consider running /task-introspection."
 
@@ -198,14 +198,13 @@ def ungroomed_progress_nudge(task) -> str | None:
     later save costs nothing extra.
 
     Deliberately silent once task.grooming is non-empty, even if the actual
-    grooming pass happened after implementation started — the field being
-    non-empty is the same signal task_phase()'s "groomed" already treats as
-    authoritative (task-grooming/skill.md: "a task is groomed when its
-    grooming is non-empty"), so this nudge and task_phase can never disagree
-    about what counts as groomed.
+    grooming pass happened after implementation started — checked via
+    is_groomed, the same predicate task_phase()'s "groomed" is built from,
+    so this nudge and task_phase can never disagree about what counts as
+    groomed.
     """
     done, _total = task.progress
-    if done == 0 or task.grooming:
+    if done == 0 or is_groomed(task):
         return None
     return (
         f"task:{task.id} has checklist progress but was never groomed. "

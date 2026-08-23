@@ -228,7 +228,7 @@ def _introspection_hook(result: dict[str, Any]) -> None:
     saved, rather than threading the argument through result just for this.
     """
     task = _refetch(result)
-    if task and task.introspection:
+    if task and dispatcher.is_introspected(task):
         dispatcher.apply_nudge(
             result, "memory_nudge",
             dispatcher.introspection_nudge(task.introspection[-1], result["id"], store().conn),
