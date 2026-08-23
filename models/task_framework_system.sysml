@@ -44,7 +44,7 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "0add71cd465071f8ac95a9cec4f65a7317cd863d";
+        derivedFromCommit = "59754fa098d947451136b84179f804717cf8266e";
         derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/store.py",
@@ -113,6 +113,15 @@ package TaskFrameworkSystem {
              *     linked is 'disputed' or 'contradicted'.
              *   - ungroomed_progress_nudge (tasks__check_item / tasks__update):
              *     checklist progress exists but task.grooming is still empty.
+             *   - loop_debt_nudge / task_debt_nudge (tasks__set_active): the
+             *     earlier of the two calls every documented workflow makes at
+             *     the start of work, not tasks__context or tasks__create —
+             *     surfaces, respectively, how many recent finished tasks
+             *     graded no risks at all, and whether the task just made
+             *     active carries ungraded risks of its own. Both derive from
+             *     taskfw/accuracy.py:_task_grading, the same per-task
+             *     classification tasks__grooming_accuracy uses, so neither
+             *     nudge can disagree with what that tool reports (task:07f9270c).
              * A nudge never refuses a write and never changes what
              * is stored, so it carries none of the properties that earned
              * LifecycleRules or TaskStore their own part: it enforces nothing
