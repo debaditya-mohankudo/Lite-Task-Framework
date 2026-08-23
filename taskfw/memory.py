@@ -30,8 +30,17 @@ on request; `forget` exists for entries that were simply wrong, which is a
 different thing from outdated.
 
 PULLED, NEVER PUSHED. Nothing here is injected. A memory reaches an agent only
-because it called `task_memory__recall`, which is the same bargain the rest of
-the framework makes.
+because it asked — either by calling `task_memory__recall`, or by pulling a
+full `tasks__context` bundle, whose `lessons` section is built from this store
+(taskfw/context.py:lessons_for). Both are pulls, which is the same bargain the
+rest of the framework makes.
+
+That second path exists because the first one alone made this a diary. Doc 05
+says to read lessons back when grooming, but if the only way to do it is a tool
+the agent has to independently remember, then a lesson is optional reading and
+the confirmed_by/contradicted_by edge rarely fires — a memory nobody recalls is
+a memory nobody ever tests. Note the asymmetry it introduces: recall counts a
+hit, the context bundle does not. See recall's `count_hit`.
 """
 from __future__ import annotations
 
@@ -199,11 +208,20 @@ class MemoryStore:
         return memory
 
     def recall(self, query: str = "", kind: str = "", limit: int = DEFAULT_RECALL_LIMIT,
-               include_superseded: bool = False) -> list[dict]:
+               include_superseded: bool = False, count_hit: bool = True) -> list[dict]:
         """Search memories. Superseded ones are excluded unless asked for.
 
         Excluding by default is the point of superseding: stale knowledge that
         keeps surfacing is worse than none, because it reads as current.
+
+        `count_hit` exists because this method has a write side effect, and one
+        caller must not have it. hit_count/last_hit are meant to answer "which
+        lessons does anyone actually reach for" — a question about deliberate
+        recall. tasks__context calls recall while assembling a bundle nobody
+        asked lessons for specifically, so counting those would make the
+        counters measure bundle assembly instead, and there would be no way
+        afterwards to separate the two. Passing False deletes that failure
+        mode rather than leaving a contaminated number to be reconciled later.
         """
         slugs = self._matching_slugs(query, limit) if query.strip() else None
         sql = "SELECT * FROM memories"
@@ -231,7 +249,7 @@ class MemoryStore:
             # re-sort by it here rather than falling back to recency.
             rank = {slug: i for i, slug in enumerate(slugs)}
             rows.sort(key=lambda m: rank.get(m["slug"], len(slugs)))
-        if rows:
+        if rows and count_hit:
             hit_at = utcnow()
             with transaction(self.conn):
                 self.conn.executemany(
@@ -242,8 +260,8 @@ class MemoryStore:
                 m["hit_count"] += 1
                 m["last_hit"] = hit_at
         log.info(
-            "memory recall query=%r kind=%r fetched=%d slugs=%s",
-            query, kind, len(rows), [r["slug"] for r in rows],
+            "memory recall query=%r kind=%r fetched=%d counted=%s slugs=%s",
+            query, kind, len(rows), count_hit, [r["slug"] for r in rows],
         )
         return rows
 

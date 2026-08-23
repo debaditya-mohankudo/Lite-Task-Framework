@@ -214,16 +214,24 @@ def _introspection_hook(result: dict[str, Any]) -> None:
 
 @_tool()
 def tasks__context(task_id: str = "", verbosity: str = "full") -> dict[str, Any]:
-    """The whole working bundle for a task: object, decisions, grooming, graph, commits, related.
+    """The whole bundle for a task: object, decisions, grooming, graph, commits, related, lessons.
 
     This is the main entry point — with no prompt injection, it is how an agent
     picks up a task's context. Omit task_id to use the active task.
     verbosity: "full" to start work, "summary" for identity and open items only.
+
+    `related` and `lessons` are the two approximate sections and the first two
+    trimmed; everything else is an exact lookup. `lessons` are loop memories
+    matching this task, each carrying its derived standing — treat one marked
+    `disputed` or `contradicted` as a claim to check, not as settled fact.
     """
     task_id = task_id or store().get_active(_scope()) or ""
     if not task_id:
         return {"error": "No task_id given and no active task set."}
-    return build_context(store(), task_id, verbosity)
+    # Pass the shared memory store rather than letting build_context open its
+    # own: MemoryStore.__init__ commits a CREATE VIRTUAL TABLE IF NOT EXISTS,
+    # which has no business running on every context read.
+    return build_context(store(), task_id, verbosity, memory=memory())
 
 
 @_tool()

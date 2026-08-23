@@ -14,11 +14,29 @@ top-down should hit the most decision-relevant material first:
   3. grooming   findings from the last grooming pass.
   4. graph      parent, children, and edges — deterministic traversal.
   5. commits    what has actually landed, an exact per-task lookup.
-  6. related    full-text neighbours. The only approximate section.
+  6. related    full-text neighbours. Approximate.
+  7. lessons    loop memories matching this task. Approximate.
+
+The last two are the approximate sections; everything above them is an exact
+lookup, where a wrong answer would be misleading rather than merely unhelpful.
+
+WHY LESSONS IS HERE AT ALL. Introspection records constraints and techniques
+into loop memory, and doc 05 says plainly to read them back when grooming.
+Until this section existed there was no guaranteed read path: a lesson
+surfaced only if an agent independently remembered to call
+`task_memory__recall`, which made the whole subsystem a diary — a write path
+with no reader. That also starved the confirmed_by/contradicted_by grading
+edge, because a memory nobody recalls is a memory nobody ever tests.
+
+This is still a pull, not a push. Nothing arrives unasked; the agent called
+tasks__context, and the lessons come back inside the bundle it asked for.
 
 TRIM ORDER, applied in reverse of usefulness until the bundle fits CHAR_BUDGET:
-related -> commits -> graph -> grooming -> decisions. The task itself is never
-trimmed; a bundle without its task is useless rather than merely large.
+related -> lessons -> commits -> graph -> grooming -> decisions. The task
+itself is never trimmed; a bundle without its task is useless rather than
+merely large. Lessons sits second because it is approximate like related, but
+ahead of it in value: a weak related task is a bad pointer, while a lesson
+that survived grading is knowledge that cost a whole task to learn.
 Anything dropped is reported in `truncated`, so a caller can tell the
 difference between "no commits" and "commits omitted for space".
 
@@ -36,6 +54,7 @@ work.
 from __future__ import annotations
 
 from taskfw.log import get_logger
+from taskfw.memory import MemoryStore
 from taskfw.models import Task
 from taskfw.store import TaskStore
 
@@ -51,8 +70,26 @@ MAX_COMMITS = 5
 MAX_RELATED = 5
 MAX_EDGES = 5  # per direction
 
+#: Lower than MAX_RELATED on purpose. Neither section has a relevance floor —
+#: both fill up to their cap with the best available matches however weak — but
+#: the consequences differ. A weak related task reads as a pointer the agent can
+#: ignore; a weak lesson reads as advice, and advice that does not apply is
+#: worse than none. Fewer slots is the cheapest available brake.
+MAX_LESSONS = 3
+
 #: Least useful first. Reversing this is how you decide what survives.
-TRIM_ORDER = ("related", "commits", "graph", "grooming", "decisions")
+TRIM_ORDER = ("related", "lessons", "commits", "graph", "grooming", "decisions")
+
+
+def _query_terms(task: Task) -> str:
+    """The words that describe a task, for any full-text lookup about it.
+
+    One definition, because both approximate sections of the bundle
+    (related_candidates, lessons_for) search on it. Two copies would drift the
+    moment either one learned a new term, and the divergence would only ever
+    surface as an inconsistent bundle.
+    """
+    return " ".join([task.title, *task.tags]).strip()
 
 
 def _task_summary(task: Task) -> dict:
@@ -68,8 +105,16 @@ def _task_summary(task: Task) -> dict:
     }
 
 
-def build_context(store: TaskStore, task_id: str, verbosity: str = "full") -> dict:
-    """Assemble the bundle. Returns {"error": ...} for an unknown task."""
+def build_context(store: TaskStore, task_id: str, verbosity: str = "full",
+                  memory: MemoryStore | None = None) -> dict:
+    """Assemble the bundle. Returns {"error": ...} for an unknown task.
+
+    `memory` is optional because memories live in the same database as tasks,
+    so one can always be opened from store.conn. Callers that already hold the
+    shared instance should pass it: MemoryStore.__init__ runs a CREATE VIRTUAL
+    TABLE IF NOT EXISTS and commits, and doing that on every context call would
+    put a write on a pure read path.
+    """
     task = store.get(task_id)
     if task is None:
         log.info("context task=%s NOT FOUND", task_id)
@@ -101,6 +146,7 @@ def build_context(store: TaskStore, task_id: str, verbosity: str = "full") -> di
         "graph": graph,
         "commits": store.commits(task_id)[:MAX_COMMITS],
         "related": related_candidates(store, task),
+        "lessons": lessons_for(store, task, memory),
     }
     if edges_dropped:
         bundle["edges_truncated"] = edges_dropped
@@ -148,7 +194,7 @@ def related_candidates(store: TaskStore, task: Task) -> list[dict]:
     text, so leaving them out of the query meant two tasks sharing only tags
     (no title overlap) could never surface as related to each other.
     """
-    query = " ".join([task.title, *task.tags]).strip()
+    query = _query_terms(task)
     if not query:
         return []
     # store.search() builds its own OR-of-terms query internally — passing
@@ -156,6 +202,40 @@ def related_candidates(store: TaskStore, task: Task) -> list[dict]:
     # work instead of requiring an exact phrase.
     hits = store.search(query, limit=MAX_RELATED + 1)
     return [_task_summary(t) for t in hits if t.id != task.id][:MAX_RELATED]
+
+
+def lessons_for(store: TaskStore, task: Task,
+                memory: MemoryStore | None = None) -> list[dict]:
+    """Loop memories matching this task, best match first.
+
+    The bundle's second approximate section, and the read path that makes loop
+    memory load-bearing rather than write-only.
+
+    QUERY SHAPE comes from _query_terms, shared with related_candidates so the
+    notion of "what is this task about" has one definition. The justification does not
+    transfer intact, though, and pretending otherwise would be the kind of
+    unexamined premise this project treats as the hazard: related_candidates
+    leans on store.search() weighting tag overlap 3:1 over body text, whereas
+    memories_fts indexes only `slug text` — it has no tags column — and ranks by
+    plain bm25. So tags are a weighted, hand-curated signal on the related side
+    and merely extra OR-ed words here. They are kept because a task tagged
+    `memory` should still reach a lesson about memory, not because the ranking
+    behaves the same way.
+
+    COUNTING IS OFF. recall(count_hit=False) because hit_count and last_hit
+    answer "which lessons does anyone deliberately reach for", and bundle
+    assembly is not a deliberate reach. See MemoryStore.recall.
+
+    Superseded memories are already excluded by recall's default, and each row
+    arrives carrying its derived `standing`, so a disputed lesson is handed
+    over marked disputed rather than as settled fact. Nothing is recomputed
+    here — standing is derived in the memory store and has one home.
+    """
+    query = _query_terms(task)
+    if not query:
+        return []
+    store_ = memory if memory is not None else MemoryStore(conn=store.conn)
+    return store_.recall(query, limit=MAX_LESSONS, count_hit=False)
 
 
 def _size(bundle: dict) -> int:
