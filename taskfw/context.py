@@ -369,15 +369,6 @@ def _enforce_budget(bundle: dict) -> list[str]:
             if not bundle["grooming"]:
                 bundle.pop("grooming_truncated", None)
                 dropped.append("grooming")
-                continue
-            if _size(bundle) > CHAR_BUDGET:
-                # Trimming every known field still left the bundle over budget —
-                # an unlisted grooming key (future schema, direct API write, or
-                # older data) survived GROOMING_TRIM_ORDER untouched. Fall back
-                # to dropping the section whole so the budget contract holds.
-                bundle["grooming"] = {}
-                bundle.pop("grooming_truncated", None)
-                dropped.append("grooming")
             continue
         bundle[section] = [] if isinstance(bundle[section], list) else {}
         dropped.append(section)
@@ -402,12 +393,24 @@ def _trim_grooming(bundle: dict) -> list[str]:
     same dict object came straight from `task.grooming`, and mutating it in
     place would corrupt the task's stored grooming for a caller elsewhere
     holding the same Task instance.
+
+    Iterates every field actually present in the grooming dict, not just the
+    ones named in GROOMING_TRIM_ORDER — a field outside that list (future
+    schema, direct API write, older data) is dropped first, ahead of any
+    named field, since it has no recorded priority to honour. This guarantees
+    the loop empties the dict by the time it runs out of fields, so a bundle
+    that is still over budget after every field is gone reads as "no
+    grooming" through the same `if not bundle["grooming"]` check the caller
+    already uses for every other outcome — no separate whole-section fallback
+    needed here or in the caller.
     """
     grooming = dict(bundle.get("grooming") or {})
     bundle["grooming"] = grooming  # same object grooming mutates below, so
                                     # _size(bundle) reflects each drop as it happens
+    known = [f for f in GROOMING_TRIM_ORDER if f in grooming]
+    unknown = [f for f in grooming if f not in GROOMING_TRIM_ORDER]
     dropped: list[str] = []
-    for field in GROOMING_TRIM_ORDER:
+    for field in unknown + known:
         if _size(bundle) <= CHAR_BUDGET:
             break
         if grooming.get(field):
