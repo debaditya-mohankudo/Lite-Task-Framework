@@ -22,11 +22,31 @@ need the same amount of digging.
 ## Read first
 
 ```python
-tasks__context(task_id)      # task, decisions, prior grooming, graph, commits, related
+tasks__context(task_id)      # task, decisions, prior grooming, graph, commits,
+                             # related, lessons
 ```
 
 Nothing is injected. Reading the task body alone is not grooming — the graph
 and the neighbours are most of the signal.
+
+**The `lessons` section is loop memory, and it is here to be used.** Doc 05
+tells introspection to record a constraint or a technique the moment it is
+learned, and to read them back when grooming; this is that read. They arrive
+matched approximately against the task's title and tags, so treat them the way
+you treat `related` — as candidates, not as findings.
+
+Each carries a derived `standing`. A lesson marked `confirmed` has held up on
+later tasks; one marked `disputed` or `contradicted` is a claim to check, not a
+fact to build on. If a lesson bears on this task, grade it rather than merely
+reading it — that grading edge is the only thing that keeps a memory honest:
+
+```python
+task_memory__link(slug="...", task_id="<id>", relation="confirmed_by")
+```
+
+An empty `lessons` list means nothing matched. If the word `lessons` appears in
+`truncated`, matches were dropped for space — pull them with
+`task_memory__recall` rather than assuming there were none.
 
 **Treat existing `grooming` as a draft to revise, not a blank page.** Carry
 forward what still holds, revise what changed, drop what is resolved, and add

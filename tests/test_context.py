@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from taskfw.context import CHAR_BUDGET, MAX_EDGES, TRIM_ORDER, build_context
+from taskfw.context import CHAR_BUDGET, MAX_EDGES, MAX_LESSONS, TRIM_ORDER, build_context
+from taskfw.memory import MemoryStore
 from taskfw.models import ResolutionItem, Task
 from taskfw.store import TaskStore
 
@@ -177,3 +178,97 @@ class TestEdgesCap:
         c = build_context(store, big.id)
         if "graph" in c.get("truncated", []):
             assert "edges_truncated" not in c
+
+
+class TestLessons:
+    """The read path that makes loop memory load-bearing instead of write-only.
+
+    Doc 05 tells introspection to read lessons back when grooming, but nothing
+    guaranteed that read until this section existed. These pin the guarantee.
+    """
+
+    @pytest.fixture
+    def memory(self, store):
+        return MemoryStore(conn=store.conn)
+
+    def test_matching_memory_comes_back_in_the_bundle(self, store, memory):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory.record("migrations-are-additive", task_id=t.id, kind="constraint",
+                      text="Sqlite migration steps must be additive; a rewrite loses rows.")
+        c = build_context(store, t.id, memory=memory)
+        assert [m["slug"] for m in c["lessons"]] == ["migrations-are-additive"]
+
+    def test_no_match_returns_an_empty_section_not_a_missing_one(self, store, memory):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory.record("unrelated-lesson", task_id=t.id, kind="technique",
+                      text="Espresso extraction favours a coarser burr grind setting.")
+        c = build_context(store, t.id, memory=memory)
+        assert c["lessons"] == []
+        assert "lessons" in c, "an empty section must still be present"
+
+    def test_a_disputed_lesson_arrives_marked_disputed(self, store, memory):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory.record("migrations-are-additive", task_id=t.id, kind="constraint",
+                      text="Sqlite migration steps must be additive; a rewrite loses rows.")
+        memory.link("migrations-are-additive", store.save(Task(title="a")).id, "confirmed_by")
+        memory.link("migrations-are-additive", store.save(Task(title="b")).id, "contradicted_by")
+        c = build_context(store, t.id, memory=memory)
+        assert c["lessons"][0]["standing"] == "disputed"
+
+    def test_superseded_lessons_stay_out(self, store, memory):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory.record("old-migration-rule", task_id=t.id,
+                      text="Sqlite migration steps must be additive; a rewrite loses rows.")
+        memory.record("new-migration-rule", task_id=t.id,
+                      text="Sqlite migration steps are additive and versioned per table.")
+        memory.supersede("old-migration-rule", "new-migration-rule")
+        slugs = [m["slug"] for m in build_context(store, t.id, memory=memory)["lessons"]]
+        assert "old-migration-rule" not in slugs
+
+    def test_capped_at_max_lessons(self, store, memory):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        for i in range(MAX_LESSONS + 3):
+            memory.record(f"migration-lesson-{i}", task_id=t.id,
+                          text=f"Sqlite migration rule number {i}; additive steps only always.")
+        c = build_context(store, t.id, memory=memory)
+        assert len(c["lessons"]) == MAX_LESSONS
+
+    def test_assembling_a_bundle_does_not_bump_hit_count(self, store, memory):
+        """hit_count answers 'what does anyone reach for deliberately'.
+
+        Bundle assembly is not a deliberate reach, so counting it here would
+        leave the counter measuring context calls with no way to separate the
+        two afterwards.
+        """
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory.record("migrations-are-additive", task_id=t.id,
+                      text="Sqlite migration steps must be additive; a rewrite loses rows.")
+        build_context(store, t.id, memory=memory)
+        build_context(store, t.id, memory=memory)
+        assert memory.get("migrations-are-additive")["hit_count"] == 0
+        # ...while a deliberate recall still counts.
+        memory.recall("sqlite migration")
+        assert memory.get("migrations-are-additive")["hit_count"] == 1
+
+    def test_summary_verbosity_carries_no_lessons(self, store, memory):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory.record("migrations-are-additive", task_id=t.id,
+                      text="Sqlite migration steps must be additive; a rewrite loses rows.")
+        assert "lessons" not in build_context(store, t.id, "summary", memory=memory)
+
+    def test_lessons_is_trimmed_after_related_and_before_commits(self):
+        i = TRIM_ORDER.index("lessons")
+        assert TRIM_ORDER[i - 1] == "related"
+        assert TRIM_ORDER[i + 1] == "commits"
+
+    def test_dropped_lessons_are_named_in_truncated(self, store, memory):
+        """An omitted lessons section must not read as an absent one."""
+        big = store.save(Task(title="Fix the sqlite migration path",
+                              motivation="x" * (CHAR_BUDGET // 2)))
+        memory.record("migrations-are-additive", task_id=big.id,
+                      text="Sqlite migration steps must be additive; a rewrite loses rows.")
+        for i in range(40):
+            store.add_event(big.id, f"decision {i} " + "y" * 400, kind="decision")
+        c = build_context(store, big.id, memory=memory)
+        assert "lessons" in c["truncated"]
+        assert c["lessons"] == []
