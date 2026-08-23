@@ -79,7 +79,12 @@
       ],
       "last_validated": "2026-08-01T06:05:35.208983+00:00",
       "module": "taskfw/backfill.py",
-      "name": "commit-backfill-recovery"
+      "name": "commit-backfill-recovery",
+      "related": [
+        "taskstore-data-access-only",
+        "typed-task-object",
+        "mcp-portable-interface"
+      ]
     },
     "concept-store-name-keyed-map": {
       "confidence": 0.93,
@@ -113,7 +118,10 @@
       ],
       "last_validated": "2026-08-23T06:26:41.289815+00:00",
       "module": "taskfw/concepts.py",
-      "name": "concept-store-name-keyed-map"
+      "name": "concept-store-name-keyed-map",
+      "related": [
+        "mcp-portable-interface"
+      ]
     },
     "connection-pragmas-single-point": {
       "confidence": 0.93,
@@ -134,7 +142,12 @@
       ],
       "last_validated": "2026-08-01T00:00:00+00:00",
       "module": "taskfw/db/connect.py",
-      "name": "connection-pragmas-single-point"
+      "name": "connection-pragmas-single-point",
+      "related": [
+        "schema-single-source-additive-migration",
+        "taskstore-data-access-only",
+        "stderr-only-logging"
+      ]
     },
     "drift-hook-posttooluse-entrypoint": {
       "confidence": 0.8,
@@ -160,7 +173,12 @@
       ],
       "last_validated": "2026-08-19T06:20:30.223951+00:00",
       "module": "taskfw/drift_hook.py",
-      "name": "drift-hook-posttooluse-entrypoint"
+      "name": "drift-hook-posttooluse-entrypoint",
+      "related": [
+        "advisory-nudge-policies",
+        "task-phase-derivation",
+        "taskstore-data-access-only"
+      ]
     },
     "grooming-accuracy-aggregate": {
       "confidence": 0.92,
@@ -200,7 +218,12 @@
       ],
       "last_validated": "2026-08-23T06:25:56.739322+00:00",
       "module": "taskfw/accuracy.py",
-      "name": "grooming-accuracy-aggregate"
+      "name": "grooming-accuracy-aggregate",
+      "related": [
+        "mcp-portable-interface",
+        "advisory-nudge-policies",
+        "typed-task-object"
+      ]
     },
     "lifecycle-single-rule-implementation": {
       "confidence": 0.96,
@@ -232,7 +255,12 @@
       ],
       "last_validated": "2026-08-15T17:19:39.616655+00:00",
       "module": "taskfw/lifecycle.py",
-      "name": "lifecycle-single-rule-implementation"
+      "name": "lifecycle-single-rule-implementation",
+      "related": [
+        "mcp-portable-interface",
+        "taskstore-data-access-only",
+        "typed-task-object"
+      ]
     },
     "loop-memory-derived-standing": {
       "confidence": 0.9,
@@ -279,7 +307,12 @@
       ],
       "last_validated": "2026-08-23T04:34:37.417466+00:00",
       "module": "taskfw/memory.py",
-      "name": "loop-memory-derived-standing"
+      "name": "loop-memory-derived-standing",
+      "related": [
+        "pull-context-bundle",
+        "mcp-portable-interface",
+        "advisory-nudge-policies"
+      ]
     },
     "mcp-portable-interface": {
       "confidence": 0.93,
@@ -332,7 +365,12 @@
       ],
       "last_validated": "2026-08-20T06:08:22.271963+00:00",
       "module": "taskfw/mcp_server.py",
-      "name": "mcp-portable-interface"
+      "name": "mcp-portable-interface",
+      "related": [
+        "lifecycle-single-rule-implementation",
+        "advisory-nudge-policies",
+        "nudge-dispatch-chassis"
+      ]
     },
     "migration-writes-through-the-store": {
       "confidence": 0.8,
@@ -353,7 +391,12 @@
       ],
       "last_validated": "2026-08-01T02:51:02.589879+00:00",
       "module": "taskfw/migrate_hooks.py",
-      "name": "migration-writes-through-the-store"
+      "name": "migration-writes-through-the-store",
+      "related": [
+        "taskstore-data-access-only",
+        "schema-single-source-additive-migration",
+        "typed-task-object"
+      ]
     },
     "nudge-dispatch-chassis": {
       "confidence": 0.8,
@@ -441,7 +484,12 @@
       ],
       "last_validated": "2026-08-23T05:24:54.152128+00:00",
       "module": "taskfw/context.py",
-      "name": "pull-context-bundle"
+      "name": "pull-context-bundle",
+      "related": [
+        "loop-memory-derived-standing",
+        "taskstore-data-access-only",
+        "mcp-portable-interface"
+      ]
     },
     "schema-single-source-additive-migration": {
       "confidence": 0.95,
@@ -464,7 +512,12 @@
       ],
       "last_validated": "2026-08-01T00:00:00+00:00",
       "module": "taskfw/db/schema.py",
-      "name": "schema-single-source-additive-migration"
+      "name": "schema-single-source-additive-migration",
+      "related": [
+        "connection-pragmas-single-point",
+        "tasks-table-projection-contract",
+        "taskstore-data-access-only"
+      ]
     },
     "stderr-only-logging": {
       "confidence": 0.92,
@@ -494,7 +547,12 @@
       ],
       "last_validated": "2026-08-04T11:49:46.303497+00:00",
       "module": "taskfw/log.py",
-      "name": "stderr-only-logging"
+      "name": "stderr-only-logging",
+      "related": [
+        "mcp-portable-interface",
+        "nudge-dispatch-chassis",
+        "connection-pragmas-single-point"
+      ]
     },
     "sysml-doc-only-model-enforcement": {
       "confidence": 0.8,
@@ -513,7 +571,11 @@
       ],
       "last_validated": "2026-08-17T14:02:54.919350+00:00",
       "module": "models/task_lifecycle.sysml",
-      "name": "sysml-doc-only-model-enforcement"
+      "name": "sysml-doc-only-model-enforcement",
+      "related": [
+        "mcp-portable-interface",
+        "grooming-accuracy-aggregate"
+      ]
     },
     "task-phase-derivation": {
       "confidence": 0.8,
@@ -579,7 +641,12 @@
       ],
       "last_validated": "2026-08-08T05:41:07.507641+00:00",
       "module": "taskfw/store.py",
-      "name": "tasks-table-projection-contract"
+      "name": "tasks-table-projection-contract",
+      "related": [
+        "taskstore-data-access-only",
+        "typed-task-object",
+        "schema-single-source-additive-migration"
+      ]
     },
     "taskstore-data-access-only": {
       "confidence": 0.94,
@@ -614,7 +681,12 @@
       ],
       "last_validated": "2026-08-20T06:06:54.058538+00:00",
       "module": "taskfw/store.py",
-      "name": "taskstore-data-access-only"
+      "name": "taskstore-data-access-only",
+      "related": [
+        "lifecycle-single-rule-implementation",
+        "tasks-table-projection-contract",
+        "typed-task-object"
+      ]
     },
     "typed-task-object": {
       "confidence": 0.95,
@@ -648,7 +720,12 @@
       ],
       "last_validated": "2026-08-23T06:25:34.224502+00:00",
       "module": "taskfw/models.py",
-      "name": "typed-task-object"
+      "name": "typed-task-object",
+      "related": [
+        "taskstore-data-access-only",
+        "lifecycle-single-rule-implementation",
+        "tasks-table-projection-contract"
+      ]
     }
   },
   "meta": {
