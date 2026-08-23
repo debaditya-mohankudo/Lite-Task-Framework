@@ -40,6 +40,18 @@ that survived grading is knowledge that cost a whole task to learn.
 Anything dropped is reported in `truncated`, so a caller can tell the
 difference between "no commits" and "commits omitted for space".
 
+GROOMING IS THE ONE EXCEPTION to whole-section dropping. Every other trimmed
+section is a list, where "drop the whole thing" and "keep only the best
+entries" cost about the same in wasted budget. Grooming is a dict, and it is
+typically the largest section by far — dropping it whole to save a few
+thousand characters routinely left most of CHAR_BUDGET unspent (see
+task:1c31a060). So grooming is trimmed field-by-field instead, least useful
+first (GROOMING_TRIM_ORDER), until the bundle fits or grooming has nothing
+left to give. Fields actually dropped are reported in `grooming_truncated` —
+distinct from `truncated`, which still means the whole section is gone. Only
+if grooming empties out entirely does it fall through to a normal whole-section
+drop and get named in `truncated` like everything else.
+
 Edges within `graph` are additionally capped at MAX_EDGES per direction,
 independent of CHAR_BUDGET — a task can accumulate far more edges than are
 useful to read at once. When that cap drops edges, the counts are reported in
@@ -79,6 +91,16 @@ MAX_LESSONS = 3
 
 #: Least useful first. Reversing this is how you decide what survives.
 TRIM_ORDER = ("related", "lessons", "commits", "graph", "grooming", "decisions")
+
+#: grooming's own field-drop order, least useful first — see "GROOMING IS THE
+#: ONE EXCEPTION" above. clarifications last: they are verified facts, the
+#: highest-value content grooming produces. open_questions next-to-last: an
+#: unresolved blocking question is exactly what a caller starting work needs
+#: to see. The rest are supplementary context, safe to shed first.
+GROOMING_TRIM_ORDER = (
+    "suggested_improvements", "prior_art", "hidden_assumptions",
+    "risks", "open_questions", "clarifications",
+)
 
 
 def _query_terms(task: Task) -> str:
@@ -248,15 +270,57 @@ def _enforce_budget(bundle: dict) -> list[str]:
     """Drop whole sections, least useful first, until the bundle fits.
 
     Whole sections rather than partial truncation: a half-listed set of commits
-    reads as complete and is worse than an absent one that says so.
+    reads as complete and is worse than an absent one that says so. Grooming is
+    the deliberate exception — see _trim_grooming and the module docstring's
+    "GROOMING IS THE ONE EXCEPTION" section.
     """
     dropped: list[str] = []
     for section in TRIM_ORDER:
         if _size(bundle) <= CHAR_BUDGET:
             break
-        if bundle.get(section):
-            bundle[section] = [] if isinstance(bundle[section], list) else {}
-            dropped.append(section)
-            if section == "graph":
-                bundle.pop("edges_truncated", None)
+        if not bundle.get(section):
+            continue
+        if section == "grooming":
+            grooming_dropped = _trim_grooming(bundle)
+            if grooming_dropped:
+                bundle["grooming_truncated"] = grooming_dropped
+            if not bundle["grooming"]:
+                bundle.pop("grooming_truncated", None)
+                dropped.append("grooming")
+            continue
+        bundle[section] = [] if isinstance(bundle[section], list) else {}
+        dropped.append(section)
+        if section == "graph":
+            bundle.pop("edges_truncated", None)
+    return dropped
+
+
+def _trim_grooming(bundle: dict) -> list[str]:
+    """Shrink bundle["grooming"] field-by-field until the bundle fits.
+
+    Grooming is a dict, not a list, so it can't reuse list-slicing the way
+    related/lessons/commits do. Dropping it whole either keeps it complete or
+    discards it entirely — exactly the waste this exists to avoid: a bundle
+    whose only over-budget section is grooming would come back with grooming
+    gone and thousands of characters of budget unspent. This drops one field
+    at a time, least useful first (GROOMING_TRIM_ORDER), and stops the moment
+    the bundle fits — so a task that is only slightly over budget loses only
+    its least valuable grooming field, not the whole section.
+
+    Operates on a shallow copy of the grooming dict, never the original: the
+    same dict object came straight from `task.grooming`, and mutating it in
+    place would corrupt the task's stored grooming for a caller elsewhere
+    holding the same Task instance.
+    """
+    grooming = dict(bundle.get("grooming") or {})
+    bundle["grooming"] = grooming  # same object grooming mutates below, so
+                                    # _size(bundle) reflects each drop as it happens
+    dropped: list[str] = []
+    for field in GROOMING_TRIM_ORDER:
+        if _size(bundle) <= CHAR_BUDGET:
+            break
+        if grooming.get(field):
+            grooming[field] = [] if isinstance(grooming[field], list) else None
+            dropped.append(field)
+    bundle["grooming"] = {k: v for k, v in grooming.items() if v}
     return dropped

@@ -350,7 +350,7 @@
       "name": "migration-writes-through-the-store"
     },
     "pull-context-bundle": {
-      "confidence": 0.94,
+      "confidence": 0.95,
       "contracts": [
         "build_context(store, task_id, verbosity, memory=None) -> bundle, or {'error': ...} for an unknown task. `memory` is an optional MemoryStore; when omitted, build_context opens one from store.conn, since memories share the task database. mcp_server.tasks__context passes the shared singleton on purpose — MemoryStore.__init__ runs CREATE VIRTUAL TABLE IF NOT EXISTS and commits, so constructing one per call would put a write on a pure read path. NOTE the parameter is optional rather than required for call-site compatibility (task:60ebca8e decision), so the write-on-read failure mode is mitigated at the one production call site, not deleted; a second production caller should make it required.",
         "Sections in fixed order: task, decisions, grooming, graph, commits, related, lessons",
@@ -369,7 +369,9 @@
         "taskfw/context.py:related_candidates",
         "taskfw/context.py:lessons_for",
         "taskfw/context.py:_enforce_budget",
+        "taskfw/context.py:_trim_grooming",
         "taskfw/context.py:TRIM_ORDER",
+        "taskfw/context.py:GROOMING_TRIM_ORDER",
         "taskfw/context.py:MAX_EDGES",
         "taskfw/context.py:MAX_LESSONS",
         "taskfw/memory.py:MemoryStore.recall",
@@ -380,21 +382,22 @@
         "tests/test_context.py:TestBudget",
         "tests/test_context.py:TestEdgesCap",
         "tests/test_context.py:TestLessons",
+        "tests/test_context.py:TestGroomingTrim",
         "tests/test_context.py::test_related_matches_on_partial_word_overlap"
       ],
       "invariants": [
         "The task section is NEVER trimmed — a bundle without its task is useless rather than merely large",
-        "CHAR_BUDGET-driven trimming (_enforce_budget) drops whole sections, never parts of one: a half-listed set reads as complete and is more misleading than an absent section that says so. Anything it drops is named in `truncated`.",
-        "Whole-section trimming has a measured cost that falls hardest on well-groomed tasks (observed live, task:60ebca8e). grooming is typically the single largest section — 8371 chars there against task=4087 and decisions=1890 — so once the bundle exceeds CHAR_BUDGET (12000), the loop walks TRIM_ORDER past the small approximate sections and drops grooming whole, landing at 6155 chars with 5845 of budget unspent. The perverse consequence: the more thoroughly a task was groomed, the more certainly its grooming is absent from the main entry point, and introspection — whose job is grading those predictions — must fall back to tasks__get. `truncated` is what keeps this survivable rather than silent; it is load-bearing here, not decoration.",
+        "CHAR_BUDGET-driven trimming (_enforce_budget) drops whole sections, never parts of one, for every section EXCEPT grooming: a half-listed set of commits/related/lessons/graph/decisions reads as complete and is more misleading than an absent section that says so. Anything dropped whole is named in `truncated`.",
+        "grooming is the one section trimmed field-by-field instead of whole (task:1c31a060, fixing a measured cost on task:60ebca8e: grooming was 8371 chars against task=4087/decisions=1890, so whole-section dropping evicted it entirely and landed the bundle at 6155 chars with 5845 unspent — the more thoroughly a task was groomed, the more certainly its grooming vanished from the main entry point, breaking introspection's ability to grade its own predictions). _trim_grooming now drops grooming's own fields least-useful-first per GROOMING_TRIM_ORDER (suggested_improvements, prior_art, hidden_assumptions, risks, open_questions, clarifications — clarifications last, being verified facts, the highest-value content grooming produces) until the bundle fits or grooming has nothing left. Fields actually dropped are named in `grooming_truncated`, a field distinct from `truncated` for the same reason `edges_truncated` is: a caller reading only the response can tell partial grooming from complete grooming, and knows not to round-trip a partial dict through tasks__update's wholesale-replace. Only if grooming trims down to {} does it fall through to a normal whole-section drop and get named in `truncated` like every other section.",
         "Separately, MAX_DECISIONS/MAX_COMMITS/MAX_RELATED/MAX_LESSONS apply a fixed pre-slice cap regardless of CHAR_BUDGET, and do so SILENTLY — none of them appear in `truncated` when the fixed cap (not the budget) is what cut the list. This is a known asymmetry, not yet resolved for the other four.",
-        "MAX_EDGES is the one fixed cap that reports its own truncation, via `edges_truncated` — a field distinct from `truncated` on purpose: `truncated` means CHAR_BUDGET dropped a whole section, `edges_truncated` means the section is present but its edges list was capped",
+        "MAX_EDGES is the one fixed cap on a non-grooming section that reports its own truncation, via `edges_truncated` — a field distinct from `truncated` on purpose: `truncated` means CHAR_BUDGET dropped a whole section, `edges_truncated` means the section is present but its edges list was capped",
         "If CHAR_BUDGET forces `graph` to drop entirely, `edges_truncated` is cleared too, so a truncation count can never outlive the section it describes",
-        "related and lessons are the TWO approximate sections and the first two trimmed, in that order (TRIM_ORDER = related, lessons, commits, graph, grooming, decisions). Every other section is an exact lookup. This supersedes the pre-task:60ebca8e invariant that related was the only approximate section. Approximate means 'fuzzy OR-term match with no relevance floor; may include weak or partial overlaps' — but the two are approximate over DIFFERENT indexes with different ranking: related runs over the tasks FTS via store.search() with tag overlap weighted 3:1, while lessons runs over memories_fts, which has no tags column at all and ranks by plain bm25. The shared 'title + tags' query therefore does not behave identically on both sides; tags are a weighted curated signal for related and merely extra OR-ed words for lessons. Task:60ebca8e's introspection found this asymmetry has no OBSERVABLE consequence today — both sections are weak for the same reason (no floor over a long generic query), so do not reach for the index difference to explain lesson noise.",
-        "The 'title + tags' query is a description of what a task IS about, not of what it needs to KNOW, and fails in both directions (task:60ebca8e). Besides admitting weak matches, it EXCLUDES strong ones whose vocabulary the title and tags happen not to contain: the memory fts-relevance-needs-a-floor-not-just-a-cap describes exactly that task's problem and was never returned, while the grooming pass found it by hand.",
-        "lessons is always a list, never a dict — so that _enforce_budget's isinstance branch resets it to [] and an omitted lessons section stays distinguishable from a task that simply has no matching memories",
+        "related and lessons are the TWO approximate sections and the first two trimmed, in that order (TRIM_ORDER = related, lessons, commits, graph, grooming, decisions). Every other section is an exact lookup — grooming included, despite now being trimmed like an approximate one; its position in TRIM_ORDER and its exactness are unrelated to whether it can be partially rendered.",
+        "The 'title + tags' query is a description of what a task IS about, not of what it needs to KNOW, and fails in both directions (task:60ebca8e). Besides admitting weak matches, it EXCLUDES strong ones whose vocabulary the title and tags happen not to contain.",
+        "lessons is always a list, never a dict — so that _enforce_budget's isinstance branch resets it to [] and an omitted lessons section stays distinguishable from a task that simply has no matching memories. grooming is the one section that is a dict, which is exactly why it needed its own trim path (_trim_grooming) rather than reusing the list-based isinstance branch.",
         "Building a bundle has NO write side effect on loop memory: hit_count and last_hit are untouched by tasks__context, so they keep measuring deliberate task_memory__recall only (pinned by tests/test_context.py::TestLessons::test_assembling_a_bundle_does_not_bump_hit_count)"
       ],
-      "last_validated": "2026-08-23T04:46:48.266321+00:00",
+      "last_validated": "2026-08-23T05:17:43.351210+00:00",
       "module": "taskfw/context.py",
       "name": "pull-context-bundle"
     },
@@ -567,6 +570,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-23T04:46:48.266526+00:00"
+    "updated_at": "2026-08-23T05:17:43.351356+00:00"
   }
 }

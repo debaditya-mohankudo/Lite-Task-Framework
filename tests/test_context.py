@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from taskfw.context import CHAR_BUDGET, MAX_EDGES, MAX_LESSONS, TRIM_ORDER, build_context
+from taskfw.context import CHAR_BUDGET, MAX_EDGES, MAX_LESSONS, TRIM_ORDER, _size, build_context
 from taskfw.memory import MemoryStore
 from taskfw.models import ResolutionItem, Task
 from taskfw.store import TaskStore
@@ -147,6 +147,65 @@ class TestBudget:
         c = build_context(populated["store"], populated["task"].id)
         assert c["commits"], "fixture has a commit"
         assert "truncated" not in c
+
+
+class TestGroomingTrim:
+    """Grooming is a dict, not a list — it can't be whole-section-dropped
+    without wasting the budget it would take to keep only its least useful
+    fields. See task:1c31a060.
+    """
+
+    def _oversized_grooming_task(self, store):
+        # Sized so the bundle is only slightly over CHAR_BUDGET and dropping
+        # the least-useful field or two brings it back under — mirroring
+        # task:1c31a060's reproduction case (grooming=8371, total bundle
+        # over budget only once other sections are added in).
+        epic = store.save(Task(title="epic", type="epic"))
+        return store.save(Task(
+            title="huge grooming", parent=epic.id,
+            grooming={
+                "clarifications": ["c" * 1500 for _ in range(3)],
+                "open_questions": [{"question": "q" * 2500, "blocking": True}],
+                "risks": ["r" * 2000 for _ in range(2)],
+                "hidden_assumptions": ["h" * 1500],
+                "prior_art": ["p" * 800],
+                "suggested_improvements": ["s" * 2000],
+            },
+        ))
+
+    def test_grooming_only_over_budget_keeps_grooming_not_dropped_whole(self, store):
+        t = self._oversized_grooming_task(store)
+        c = build_context(store, t.id)
+        assert c["grooming"], "grooming should survive trimmed, not empty"
+        assert "grooming" not in c.get("truncated", [])
+        assert "grooming_truncated" in c
+
+    def test_least_useful_grooming_fields_drop_first(self, store):
+        t = self._oversized_grooming_task(store)
+        c = build_context(store, t.id)
+        assert "suggested_improvements" in c["grooming_truncated"]
+        # clarifications are the highest-value field; kept if anything is.
+        if "clarifications" not in c["grooming_truncated"]:
+            assert "clarifications" in c["grooming"]
+
+    def test_grooming_bundle_no_longer_leaves_budget_unspent(self, store):
+        t = self._oversized_grooming_task(store)
+        c = build_context(store, t.id)
+        # Whole-section dropping would have zeroed ~8000+ chars of grooming
+        # to save a few hundred over budget. Field trimming should land much
+        # closer to the ceiling instead of far under it.
+        assert _size(c) > CHAR_BUDGET * 0.7, "budget still going largely unspent"
+
+    def test_grooming_that_cannot_shrink_enough_falls_back_to_whole_drop(self, store):
+        epic = store.save(Task(title="epic", type="epic"))
+        t = store.save(Task(
+            title="unshrinkable", parent=epic.id,
+            grooming={"clarifications": ["c" * (CHAR_BUDGET * 3)]},
+        ))
+        c = build_context(store, t.id)
+        assert c["grooming"] == {}
+        assert "grooming" in c["truncated"]
+        assert "grooming_truncated" not in c
 
 
 class TestEdgesCap:
