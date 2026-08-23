@@ -140,6 +140,25 @@ class TestUpsert:
         with pytest.raises(ValueError, match="missing required"):
             ConceptStore(repo).upsert({"name": "x", "module": "y"})
 
+    def test_related_merges_like_other_list_fields(self, repo):
+        store = ConceptStore(repo)
+        store.upsert(concept(related=["b-concept"]))
+        store.upsert(concept(related=["c-concept"]))
+        assert ConceptStore(repo).get("a-concept")["related"] == ["b-concept", "c-concept"]
+
+    def test_related_is_capped_at_three(self, repo):
+        with pytest.raises(ValueError, match="max is 3"):
+            ConceptStore(repo).upsert(concept(related=["b", "c", "d", "e"]))
+
+    def test_related_cap_applies_across_merges_not_just_one_payload(self, repo):
+        """A payload that looks fine alone must still be rejected if the union overflows."""
+        store = ConceptStore(repo)
+        store.upsert(concept(related=["b", "c"]))
+        with pytest.raises(ValueError, match="max is 3"):
+            store.upsert(concept(related=["d", "e"]))
+        assert ConceptStore(repo).get("a-concept")["related"] == ["b", "c"], \
+            "rejected merge must not partially land"
+
 
 class TestQueries:
     @pytest.fixture

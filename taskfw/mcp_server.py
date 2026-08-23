@@ -889,6 +889,8 @@ def concept__upsert(repo: str, concept: dict) -> dict[str, Any]:
 
     Merges rather than overwrites, so updating one field cannot silently drop
     invariants the caller did not mention. Requires name, module, description.
+    `related` (other concept slugs) is capped at 3 entries — a merge that
+    would overflow it is rejected rather than silently truncated.
     """
     try:
         merged = ConceptStore(repo).upsert(concept)
