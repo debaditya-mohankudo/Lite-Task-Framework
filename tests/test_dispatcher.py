@@ -507,3 +507,30 @@ class TestCombine:
         calls = []
         combine(calls.append)({"ok": True})
         assert calls == [{"ok": True}]
+
+
+class TestReexportCompleteness:
+    """Guards the risk task:d4732365's split flagged: a name added to
+    chassis/phase/nudges but forgotten from __init__.py's __all__ would be
+    reachable via the submodule but not via `taskfw.dispatcher`, a silent
+    two-tier API. Public here means "not prefixed with _" — the same
+    convention __init__.py's own re-export list already follows."""
+
+    def test_every_public_submodule_name_is_reexported(self):
+        import inspect
+
+        from taskfw.dispatcher import chassis, nudges, phase, __all__ as reexported
+
+        public = set()
+        for module in (chassis, phase, nudges):
+            for name, obj in vars(module).items():
+                if name.startswith("_"):
+                    continue
+                if inspect.getmodule(obj) is not module:
+                    continue
+                public.add(name)
+
+        assert public <= set(reexported), (
+            f"names defined in chassis/phase/nudges but missing from "
+            f"taskfw.dispatcher.__all__: {public - set(reexported)}"
+        )
