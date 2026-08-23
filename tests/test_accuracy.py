@@ -17,6 +17,7 @@ from taskfw.accuracy import (
     MIN_SAMPLE,
     RECURRENCE,
     grooming_accuracy,
+    loop_debt,
 )
 from taskfw.models import Task
 from taskfw.store import TaskStore
@@ -270,3 +271,26 @@ class TestLimit:
         for i in range(5):
             finished(store, f"t{i}", [{"text": "a", "graded": "wrong"}])
         assert grooming_accuracy(store, limit=2)["tasks_examined"] == 2
+
+
+class TestLoopDebt:
+    """task:07f9270c — the cheap window tasks__set_active reads on every call."""
+
+    def test_agrees_with_grooming_accuracy_on_the_same_tasks(self, store):
+        finished(store, "skipped", [{"text": "a", "graded": None}])
+        finished(store, "graded", [{"text": "b", "graded": "avoided"}])
+        full = grooming_accuracy(store)
+        debt = loop_debt(store)
+        assert debt["skipped_introspection"] == len(full["skipped_introspection"])
+        assert debt["ungraded_risks"] == full["risks"]["ungraded"]
+
+    def test_clean_loop_reports_zero(self, store):
+        finished(store, "t", [{"text": "a", "graded": "avoided"}])
+        debt = loop_debt(store)
+        assert debt["skipped_introspection"] == 0
+        assert debt["ungraded_risks"] == 0
+
+    def test_limit_bounds_the_window(self, store):
+        for i in range(5):
+            finished(store, f"t{i}", [{"text": "a", "graded": None}])
+        assert loop_debt(store, limit=2)["tasks_examined"] == 2

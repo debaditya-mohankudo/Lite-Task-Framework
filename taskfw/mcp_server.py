@@ -20,7 +20,7 @@ from typing import Any, Callable
 from mcp.server import MCPServer
 
 from taskfw import dispatcher, lifecycle
-from taskfw.accuracy import _normalise, grooming_accuracy
+from taskfw.accuracy import _normalise, _task_grading, grooming_accuracy, loop_debt
 from taskfw.concepts import ConceptStore
 from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.context import build_context, related_candidates
@@ -190,6 +190,33 @@ def _stale_memory_hook(result: dict[str, Any]) -> None:
     memory = result.get("memory")
     if memory:
         dispatcher.apply_nudge(result, "stale_memory_nudge", dispatcher.stale_memory_nudge(memory))
+
+
+#: Recent-finished-tasks window loop_debt walks on tasks__set_active — smaller
+#: than tasks__grooming_accuracy's default 25 because set_active is called
+#: far more often per session (task:07f9270c's grooming).
+_LOOP_DEBT_LIMIT = 10
+
+
+def _loop_debt_hook(result: dict[str, Any]) -> None:
+    """loop_debt_nudge / task_debt_nudge, for tasks__set_active — task:07f9270c.
+
+    Two independent nudges under two keys: one about recent finished tasks
+    across the store, one about the specific task just made active. Both
+    derive from taskfw.accuracy's _task_grading/loop_debt, the same
+    classification tasks__grooming_accuracy uses, so none of the three can
+    disagree about what counts as ungraded.
+    """
+    task = store().get(result.get("active", ""))
+    if task is None:
+        return
+    debt = loop_debt(store(), limit=_LOOP_DEBT_LIMIT)
+    dispatcher.apply_nudge(
+        result, "loop_debt_nudge",
+        dispatcher.loop_debt_nudge(debt["skipped_introspection"], debt["tasks_examined"]),
+    )
+    _, task_ungraded, _ = _task_grading(task)
+    dispatcher.apply_nudge(result, "task_debt_nudge", dispatcher.task_debt_nudge(task.id, task_ungraded))
 
 
 def _introspection_hook(result: dict[str, Any]) -> None:
@@ -776,7 +803,7 @@ def _push_active_task(workspace: str, task_id: str, title: str = "") -> None:
         log.debug("push to claude-hooks /set-active-taskid failed (non-fatal): %s", exc)
 
 
-@_tool()
+@_tool(hook=_loop_debt_hook)
 def tasks__set_active(task_id: str) -> dict[str, Any]:
     """Set task_id as the active task for this workspace. In-memory only —
     not persisted, does not survive a restart (task:f5ace343).

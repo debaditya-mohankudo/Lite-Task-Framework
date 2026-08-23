@@ -271,6 +271,40 @@ def ungroomed_progress_nudge(task) -> str | None:
     )
 
 
+def loop_debt_nudge(skipped: int, tasks_examined: int) -> str | None:
+    """Advisory nudge for tasks__set_active, or None when there's no debt — task:07f9270c.
+
+    Stateless and unthrottled, matching finish_reminder_nudge's precedent: the
+    debt is recomputed from taskfw.accuracy.loop_debt on every call rather
+    than tracked separately, so it can never disagree with what
+    tasks__grooming_accuracy reports about the same tasks. Fires only when
+    skipped > 0 — a clean loop produces silence, not a zero report, same as
+    every other nudge here.
+    """
+    if not skipped:
+        return None
+    return (
+        f"{skipped} of the last {tasks_examined} finished task(s) had predicted "
+        "risks that were never graded. Consider running /task-introspection on them."
+    )
+
+
+def task_debt_nudge(task_id: str, ungraded: int) -> str | None:
+    """Advisory nudge for tasks__set_active, or None when the task has no debt of its own.
+
+    Companion to loop_debt_nudge: that one is about the loop across recent
+    finished tasks, this one is about the specific task just made active,
+    whatever its status — a task can carry ungraded risks from a prior
+    grooming pass whether or not it has been finished yet.
+    """
+    if not ungraded:
+        return None
+    return (
+        f"task:{task_id} has {ungraded} risk(s) from a prior grooming pass "
+        "that were never graded. Grade them (task-introspection) before this task closes."
+    )
+
+
 def task_phase(task) -> dict[str, bool]:
     """Where a task stands in the grooming -> implementation -> introspection loop.
 

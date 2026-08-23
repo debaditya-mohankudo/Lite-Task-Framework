@@ -111,6 +111,47 @@ def _recurrence_key(risk: dict) -> tuple[str, str] | None:
     return ("text", key) if key else None
 
 
+def _task_grading(task: Task) -> tuple[list[dict], int, bool]:
+    """A task's risks, how many are ungraded, and whether any are graded.
+
+    The single classification both `grooming_accuracy` (which finished tasks
+    skipped introspection entirely) and `loop_debt` (task:07f9270c, read from
+    `tasks__set_active`) key off, so the two can never disagree about what
+    counts as graded.
+    """
+    risks = _risks(task)
+    ungraded = sum(1 for r in risks if not r["graded"])
+    any_graded = any(r["graded"] for r in risks)
+    return risks, ungraded, any_graded
+
+
+def loop_debt(store: TaskStore, limit: int = 10) -> dict[str, int]:
+    """A cheap window onto the same debt `grooming_accuracy` reports in full.
+
+    task:07f9270c — surfaced from `tasks__set_active`, which is called far
+    more often per session than anyone runs `tasks__grooming_accuracy`
+    voluntarily, so this walks a smaller, more recent window (`limit=10`
+    against the aggregate's default 25) rather than the full aggregate.
+    Uses `_task_grading`, the same classification `grooming_accuracy` uses,
+    so the two can never disagree about what counts as skipped or ungraded.
+    """
+    tasks = store.list(status=("done",), limit=limit)
+    skipped = 0
+    ungraded = 0
+    for task in tasks:
+        risks, task_ungraded, any_graded = _task_grading(task)
+        if not risks:
+            continue
+        ungraded += task_ungraded
+        if not any_graded:
+            skipped += 1
+    return {
+        "tasks_examined": len(tasks),
+        "skipped_introspection": skipped,
+        "ungraded_risks": ungraded,
+    }
+
+
 def _reported_totals(task: Task) -> dict[str, int]:
     """Sum the self-reported tallies across a task's introspection reports."""
     totals: Counter[str] = Counter()
@@ -162,14 +203,13 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
     seen: dict[str, dict[str, Any]] = {}
 
     for task in tasks:
-        risks = _risks(task)
+        risks, task_ungraded, any_graded = _task_grading(task)
         if not risks:
             continue
         with_grooming += 1
         missed += _missed(task)
 
         graded_here: Counter[str] = Counter()
-        any_graded = False
         for risk in risks:
             risks_seen += 1
             grade = risk["graded"]
@@ -183,9 +223,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
                     entry["tasks"].append(task.id)
                 entry["grades"].append(grade)
             if grade is None or grade == "":
-                ungraded += 1
                 continue
-            any_graded = True
             if grade in GRADES:
                 tallies[grade] += 1
                 graded_here[grade] += 1
@@ -194,6 +232,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
                 # omission indistinguishable from an absence.
                 unrecognised[str(grade)] += 1
 
+        ungraded += task_ungraded
         if not any_graded:
             # Finished, predicted risks, never graded any of them.
             skipped.append(task.id)

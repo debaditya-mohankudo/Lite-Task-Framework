@@ -19,9 +19,11 @@ from taskfw.dispatcher import (
     finish_reminder_nudge,
     introspection_nudge,
     is_implemented,
+    loop_debt_nudge,
     next_open_item,
     phase_label,
     stale_memory_nudge,
+    task_debt_nudge,
     task_phase,
     tool_called,
     ungroomed_progress_nudge,
@@ -158,6 +160,24 @@ class TestUngroomedProgressNudge:
         tasks.save(t)
         assert ungroomed_progress_nudge(t) is not None
         assert ungroomed_progress_nudge(t) is not None
+
+
+class TestLoopDebtNudge:
+    def test_none_when_nothing_skipped(self):
+        assert loop_debt_nudge(0, 10) is None
+
+    def test_fires_with_the_counts_when_something_skipped(self):
+        nudge = loop_debt_nudge(2, 10)
+        assert nudge is not None and "2" in nudge and "10" in nudge
+
+
+class TestTaskDebtNudge:
+    def test_none_when_nothing_ungraded(self):
+        assert task_debt_nudge("abc123", 0) is None
+
+    def test_fires_with_the_task_id_and_count(self):
+        nudge = task_debt_nudge("abc123", 3)
+        assert nudge is not None and "abc123" in nudge and "3" in nudge
 
 
 class TestStaleMemoryNudge:
