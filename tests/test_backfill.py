@@ -12,7 +12,7 @@ import subprocess
 import pytest
 
 from taskfw.backfill import backfill, extract_task_ids, git_log
-from taskfw.models import Task
+from taskfw.task import Task
 from taskfw.store import TaskStore
 
 

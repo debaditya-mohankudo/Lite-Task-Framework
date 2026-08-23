@@ -13,7 +13,7 @@ import json
 
 from taskfw import dispatcher
 from taskfw.drift_hook import build_nudge, main
-from taskfw.models import Task
+from taskfw.task import Task
 from taskfw.store import TaskStore
 
 

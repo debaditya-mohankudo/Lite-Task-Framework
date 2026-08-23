@@ -42,7 +42,7 @@ from pathlib import Path
 
 from taskfw.db import connect
 from taskfw.log import get_logger
-from taskfw.models import STATUSES, ResolutionItem, Task
+from taskfw.task import STATUSES, ResolutionItem, Task
 from taskfw.store import TaskStore
 
 log = get_logger(__name__)

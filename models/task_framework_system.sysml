@@ -48,7 +48,7 @@ package TaskFrameworkSystem {
         derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/store.py",
-            "taskfw/models.py",
+            "taskfw/task.py",
             "taskfw/lifecycle.py",
             "taskfw/mcp_server.py",
             "taskfw/context.py",
@@ -59,7 +59,7 @@ package TaskFrameworkSystem {
     }
 
     part def TaskStore {
-        doc /* taskfw/store.py, taskfw/models.py. A task is ONE typed object
+        doc /* taskfw/store.py, taskfw/task.py. A task is ONE typed object
              * serialised to JSON. Data access only — no rule enforcement, so
              * LifecycleRules keeps a single allocation. A store method rejects
              * only what it structurally cannot do, never a policy violation. */

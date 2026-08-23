@@ -1,6 +1,6 @@
 package DerivedValues {
     doc /* calc def models for values this framework computes on read and
-         * never stores — transcribed from taskfw/models.py, taskfw/memory.py,
+         * never stores — transcribed from taskfw/task.py, taskfw/memory.py,
          * and taskfw/accuracy.py. Each backs one of DerivedProgressRequirement,
          * LoopMemoryEvidenceRequirement, and GroomingFeedbackEdgeRequirement
          * in requirements.sysml, turning the prose claim "computed on read,
@@ -19,14 +19,14 @@ package DerivedValues {
         derivedFromCommit = "59754fa098d947451136b84179f804717cf8266e";
         derivedAt = "2026-08-23";
         modelledPaths = (
-            "taskfw/models.py",
+            "taskfw/task.py",
             "taskfw/memory.py",
             "taskfw/accuracy.py"
         );
     }
 
     calc def Progress {
-        doc /* Transcribed from taskfw/models.py:Task.progress. (done, total)
+        doc /* Transcribed from taskfw/task.py:Task.progress. (done, total)
              * counted from the resolution list on every read; never stored,
              * so it cannot drift from the list it counts. */
         in resolutionCount : Integer;

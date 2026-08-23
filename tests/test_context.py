@@ -11,7 +11,7 @@ import pytest
 
 from taskfw.context import CHAR_BUDGET, MAX_EDGES, MAX_LESSONS, TRIM_ORDER, _size, build_context
 from taskfw.memory import MemoryStore
-from taskfw.models import ResolutionItem, Task
+from taskfw.task import ResolutionItem, Task
 from taskfw.store import TaskStore
 
 

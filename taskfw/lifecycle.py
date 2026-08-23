@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from taskfw.log import get_logger
-from taskfw.models import STATUSES, TASK_EDGE_RELATIONS, TASK_TYPES, Task
+from taskfw.task import STATUSES, TASK_EDGE_RELATIONS, TASK_TYPES, Task
 
 log = get_logger(__name__)
 

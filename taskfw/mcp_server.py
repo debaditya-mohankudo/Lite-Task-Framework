@@ -27,7 +27,7 @@ from taskfw.context import build_context, related_candidates
 from taskfw.db.connect import connect
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
-from taskfw.models import ResolutionItem, Task, new_id
+from taskfw.task import ResolutionItem, Task, new_id
 from taskfw.store import TaskStore
 
 log = get_logger(__name__)

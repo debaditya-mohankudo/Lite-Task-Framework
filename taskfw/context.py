@@ -69,7 +69,7 @@ import re
 
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore
-from taskfw.models import Task
+from taskfw.task import Task
 from taskfw.store import TaskStore
 
 log = get_logger(__name__)

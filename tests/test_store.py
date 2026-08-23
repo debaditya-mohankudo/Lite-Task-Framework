@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from taskfw.models import ResolutionItem, Task
+from taskfw.task import ResolutionItem, Task
 from taskfw.store import TaskStore
 
 

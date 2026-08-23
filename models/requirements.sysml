@@ -50,7 +50,7 @@ package Requirements {
             "taskfw/db/connect.py",
             "taskfw/log.py",
             "taskfw/lifecycle.py",
-            "taskfw/models.py",
+            "taskfw/task.py",
             "taskfw/store.py",
             "taskfw/memory.py",
             "taskfw/context.py",
@@ -124,7 +124,7 @@ package Requirements {
     satisfy requirement ParentRuleRequirement by system.rules;
 
     requirement def SchemaValidationReplacesBodyGateRequirement {
-        doc /* Source: taskfw/models.py. A task is a typed object, so
+        doc /* Source: taskfw/task.py. A task is a typed object, so
              * "required sections are present" is schema validation and
              * "resolution must be a checklist" is unrepresentable — resolution
              * IS a list.
@@ -138,7 +138,7 @@ package Requirements {
     satisfy requirement SchemaValidationReplacesBodyGateRequirement by system.store;
 
     requirement def DerivedProgressRequirement {
-        doc /* Source: taskfw/models.py:Task.progress. Progress is computed from
+        doc /* Source: taskfw/task.py:Task.progress. Progress is computed from
              * the resolution list on every read, never stored, so it cannot
              * drift from the list it counts and needs no reconciliation. */
     }

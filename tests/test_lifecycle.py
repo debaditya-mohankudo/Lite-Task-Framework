@@ -19,8 +19,8 @@ from taskfw.lifecycle import (
     check_transition,
     check_type,
 )
-from taskfw.models import TASK_EDGE_RELATIONS
-from taskfw.models import STATUSES, Task
+from taskfw.task import TASK_EDGE_RELATIONS
+from taskfw.task import STATUSES, Task
 
 
 class TestDecision:

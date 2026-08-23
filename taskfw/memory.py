@@ -52,7 +52,7 @@ from pathlib import Path
 from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.db.connect import connect, transaction
 from taskfw.log import get_logger
-from taskfw.models import utcnow
+from taskfw.task import utcnow
 
 log = get_logger(__name__)
 

@@ -36,7 +36,7 @@ from collections import Counter
 from typing import Any
 
 from taskfw.log import get_logger
-from taskfw.models import Task
+from taskfw.task import Task
 from taskfw.store import TaskStore
 
 log = get_logger(__name__)

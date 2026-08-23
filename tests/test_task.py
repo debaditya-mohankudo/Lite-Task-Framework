@@ -118,7 +118,7 @@ class TestParts:
 
 class TestLifecycleMatchesCode:
     def test_modelled_states_match_the_implementation(self):
-        from taskfw.models import STATUSES
+        from taskfw.task import STATUSES
 
         text = (MODELS / "task_lifecycle.sysml").read_text()
         for status in STATUSES:
@@ -149,7 +149,7 @@ class TestDerivedValuesMatchCode:
     def test_progress_is_computed_not_stored(self, text):
         import inspect
 
-        from taskfw.models import Task
+        from taskfw.task import Task
 
         assert "calc def Progress" in text
         assert "return done" in text

@@ -29,7 +29,7 @@ from taskfw.dispatcher import (
     ungroomed_progress_nudge,
 )
 from taskfw.memory import MemoryStore
-from taskfw.models import ResolutionItem, Task
+from taskfw.task import ResolutionItem, Task
 from taskfw.store import TaskStore
 
 

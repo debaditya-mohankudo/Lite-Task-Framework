@@ -94,7 +94,7 @@ tasks__link(from_id, to_id, rel="depends_on")   # idempotent
 tasks__unlink(from_id, to_id, rel="depends_on") # rel optional — omit to remove all
 ```
 
-Enforced vocabulary (`taskfw.models.TASK_EDGE_RELATIONS`, checked by
+Enforced vocabulary (`taskfw.task.TASK_EDGE_RELATIONS`, checked by
 `lifecycle.check_link_rel` on `tasks__link` — not on `tasks__unlink`, which
 must always be able to remove any existing edge): `depends_on`, `blocks`,
 `relates_to`, `duplicates`, `removes`, `implements`, `supersedes`, `reverts`,

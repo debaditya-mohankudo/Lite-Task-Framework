@@ -16,7 +16,7 @@ from __future__ import annotations
 import pytest
 
 from taskfw.memory import KINDS, MIN_TEXT, MemoryStore, Rejected
-from taskfw.models import Task
+from taskfw.task import Task
 from taskfw.store import TaskStore
 
 LESSON = "FTS5 is a compile-time option, so search must degrade to LIKE rather than fail."

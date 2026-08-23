@@ -16,7 +16,7 @@ from pathlib import Path
 
 from taskfw.db.connect import connect, transaction
 from taskfw.log import get_logger
-from taskfw.models import Task, utcnow
+from taskfw.task import Task, utcnow
 
 log = get_logger(__name__)
 

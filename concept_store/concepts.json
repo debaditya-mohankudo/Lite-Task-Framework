@@ -564,7 +564,7 @@
       "description": "SysML v2 structural models in this repo (state defs, calc defs, interface defs/port defs) are transcribed by hand from Python source rather than parsed/bound to it. They are kept honest not by execution but by a paired pytest class that imports the real Python source of truth and string-matches its identifiers/literals against the .sysml file text.",
       "evidence": [
         "models/mcp_interface.sysml",
-        "tests/test_models.py:TestMcpInterfaceMatchesCode"
+        "tests/test_task.py:TestMcpInterfaceMatchesCode"
       ],
       "invariants": [
         "A calc def or state def with no matching TestXMatchesCode test is an unenforced restatement of the same claim the prose already made — not acceptable per this task's motivation.",
@@ -632,7 +632,7 @@
       "description": "The tasks table has two kinds of columns that must stay in lockstep: five indexable scalars (id, type, status, parent, title) that mirror fields on Task, and one `data` column holding the full Task as JSON, which is authoritative for every field not promoted to a scalar. There is exactly one writer of both — TaskStore.save() — which is what prevents the projection from drifting. Anything that reads a scalar (tasks__list's status/type/parent filters, the idx_tasks_status/idx_tasks_parent indexes) is reading a value that also exists inside `data`; anything that reads `data` (Task.from_json, every other field) never touches the scalars at all.",
       "evidence": [
         "taskfw/db/schema.py:TASKS",
-        "taskfw/models.py:Task",
+        "taskfw/task.py:Task",
         "taskfw/store.py:TaskStore.save",
         "taskfw/store.py:TaskStore.list",
         "taskfw/store.py:TaskStore.children",
@@ -707,9 +707,9 @@
         "taskfw/mcp_server.py:_merge_grooming_risks",
         "taskfw/mcp_server.py:tasks__update",
         "tests/test_mcp_tools.py:TestGroomingRiskMerge",
-        "taskfw/models.py:Task",
-        "taskfw/models.py:Task.progress",
-        "taskfw/models.py:TASK_EDGE_RELATIONS",
+        "taskfw/task.py:Task",
+        "taskfw/task.py:Task.progress",
+        "taskfw/task.py:TASK_EDGE_RELATIONS",
         "tests/test_store.py:TestRoundTrip",
         "tests/test_lifecycle.py:TestCheckLinkRel"
       ],
@@ -724,7 +724,7 @@
         "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck"
       ],
       "last_validated": "2026-08-23T06:25:34.224502+00:00",
-      "module": "taskfw/models.py",
+      "module": "taskfw/task.py",
       "name": "typed-task-object",
       "related": [
         "taskstore-data-access-only",

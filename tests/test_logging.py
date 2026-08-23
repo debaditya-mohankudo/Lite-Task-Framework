@@ -12,7 +12,7 @@ import logging
 import pytest
 
 from taskfw.lifecycle import check_save, check_transition
-from taskfw.models import ResolutionItem, Task
+from taskfw.task import ResolutionItem, Task
 from taskfw.store import TaskStore
 
 

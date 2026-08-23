@@ -19,7 +19,7 @@ from taskfw.accuracy import (
     grooming_accuracy,
     loop_debt,
 )
-from taskfw.models import Task
+from taskfw.task import Task
 from taskfw.store import TaskStore
 
 
