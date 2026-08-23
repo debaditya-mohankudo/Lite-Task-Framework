@@ -12,7 +12,7 @@ package McpInterface {
          *
          * Kept honest the same way task_lifecycle.sysml and
          * derived_values.sysml are: not by executing anything here, but by
-         * TestMcpInterfaceMatchesCode in tests/test_models.py, which
+         * TestMcpInterfaceMatchesCode in tests/test_sysml.py, which
          * enumerates the LIVE tool registry via m.mcp.list_tools() — the
          * same call test_mcp_tools.py::TestRegistration already uses — and
          * asserts the port items here match it exactly. A hand-copied name
@@ -32,7 +32,7 @@ package McpInterface {
          *     already the source of truth in mcp_server.py; duplicating it
          *     here would be exactly the kind of second home for a rule this
          *     framework's CLAUDE.md warns against.
-         *   - Nudges/hooks (dispatcher.py). Advisory response annotations
+         *   - Nudges/hooks (taskfw/dispatcher/). Advisory response annotations
          *     riding on a subset of tool results are a behaviour of specific
          *     tools, not a structural feature of the ports those tools sit
          *     on. */
@@ -40,7 +40,7 @@ package McpInterface {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "59754fa098d947451136b84179f804717cf8266e";
+        derivedFromCommit = "a92e0956a6a00838f6f35997c290c43bcecfde8f";
         derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/mcp_server.py"

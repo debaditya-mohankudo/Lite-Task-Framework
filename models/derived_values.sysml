@@ -8,7 +8,7 @@ package DerivedValues {
          *
          * Kept honest the same way TaskLifecycle is: not by executing these
          * calc bodies, but by TestDerivedValuesMatchCode in
-         * tests/test_models.py, which imports the real Python source of
+         * tests/test_sysml.py, which imports the real Python source of
          * truth and asserts the identifiers here match it. A calc def with
          * no such test would be a second unenforced restatement of the same
          * claim — the failure mode this file exists to avoid, not repeat. */
@@ -16,7 +16,7 @@ package DerivedValues {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "59754fa098d947451136b84179f804717cf8266e";
+        derivedFromCommit = "a92e0956a6a00838f6f35997c290c43bcecfde8f";
         derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/task.py",

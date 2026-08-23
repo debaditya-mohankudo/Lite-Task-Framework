@@ -9,7 +9,7 @@ package Requirements {
          * to route around. A requirement split across two parts cannot be
          * satisfied by taking either one, so neither part is independently
          * useful and the pair has to move together forever.
-         * tests/test_models.py enforces this mechanically, because an
+         * tests/test_sysml.py enforces this mechanically, because an
          * acceptance criterion nobody runs is just a comment.
          *
          * SOURCING: each requirement cites the code that implements it. None is
@@ -43,7 +43,7 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "59754fa098d947451136b84179f804717cf8266e";
+        derivedFromCommit = "9bb2adfc7e86db5db4dcd326a85edd79f7c57f98";
         derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/db/schema.py",
@@ -57,7 +57,10 @@ package Requirements {
             "taskfw/accuracy.py",
             "taskfw/mcp_server.py",
             "taskfw/backfill.py",
-            "taskfw/dispatcher.py",
+            "taskfw/dispatcher/__init__.py",
+            "taskfw/dispatcher/chassis.py",
+            "taskfw/dispatcher/phase.py",
+            "taskfw/dispatcher/nudges.py",
             ".claude/skills/commit/skill.md"
         );
     }

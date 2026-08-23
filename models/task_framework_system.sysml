@@ -7,7 +7,7 @@ package TaskFrameworkSystem {
          * layer, the data in the store — and the store can no longer be lifted
          * out on its own, because taking it means leaving the rules behind.
          * Every requirement here therefore has exactly one satisfying part, and
-         * tests/test_models.py fails the build if a second appears.
+         * tests/test_sysml.py fails the build if a second appears.
          *
          * BEFORE DESIGNING A FIX FOR A COUPLING, CHECK WHETHER THE COUPLED
          * THING NEEDS TO EXIST. This decomposition began with three such split
@@ -44,7 +44,7 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "59754fa098d947451136b84179f804717cf8266e";
+        derivedFromCommit = "9bb2adfc7e86db5db4dcd326a85edd79f7c57f98";
         derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/store.py",
@@ -53,7 +53,10 @@ package TaskFrameworkSystem {
             "taskfw/mcp_server.py",
             "taskfw/context.py",
             "taskfw/backfill.py",
-            "taskfw/dispatcher.py",
+            "taskfw/dispatcher/__init__.py",
+            "taskfw/dispatcher/chassis.py",
+            "taskfw/dispatcher/phase.py",
+            "taskfw/dispatcher/nudges.py",
             "taskfw/drift_hook.py"
         );
     }
@@ -80,7 +83,7 @@ package TaskFrameworkSystem {
     }
 
     part def TaskMCPTools {
-        doc /* taskfw/mcp_server.py, taskfw/context.py, taskfw/dispatcher.py.
+        doc /* taskfw/mcp_server.py, taskfw/context.py, taskfw/dispatcher/.
              * The ONLY interface: MCP is the portability layer, so any MCP
              * host reaches the whole framework here with no host-specific
              * adapter on top of it.
@@ -94,7 +97,9 @@ package TaskFrameworkSystem {
              * commit links from git history regardless of whether the call was
              * ever made.
              *
-             * taskfw/dispatcher.py adds advisory, non-blocking annotations to a
+             * taskfw/dispatcher/ (chassis.py, phase.py, nudges.py — split for
+             * organisation only, everything re-exported unchanged from the
+             * package __init__.py) adds advisory, non-blocking annotations to a
              * few tools' results — deliberately NOT a fifth part:
              *   - introspection_nudge (tasks__add_introspection): an
              *     introspection report cites a lesson but the task has never
@@ -149,7 +154,7 @@ package TaskFrameworkSystem {
              * nothing survives a server restart. tasks__finish and
              * tasks__clear_active just clear the pointer — there is no
              * underlying task to restore. This mutation lives in
-             * mcp_server.py itself, not dispatcher.py — it is a tool's own
+             * mcp_server.py itself, not taskfw/dispatcher/ — it is a tool's own
              * write, gated by LifecycleRules like any other, not an
              * advisory annotation. */
         part foundation : Foundation;
