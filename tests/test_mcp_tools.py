@@ -199,6 +199,22 @@ class TestGroomingRiskMerge:
         assert risks[0]["text"] == "a, reworded"
         assert risks[0]["graded"] == "avoided"
 
+    def test_omitting_graded_on_an_id_matched_reword_keeps_the_existing_grade(self):
+        """A caller rewording a risk's text but not re-sending `graded` (an
+        ordinary partial edit, not an intentional re-grade) must not reset the
+        grade to None just because the field was left out of the payload —
+        the same protection re-groom omission already gets for the whole risk."""
+        t = create()
+        m.tasks__update(t["id"], grooming={"risks": [{"text": "a", "graded": "avoided"}]})
+        rid = m.tasks__get(t["id"])["grooming"]["risks"][0]["id"]
+        m.tasks__update(t["id"], grooming={
+            "risks": [{"id": rid, "text": "a, reworded"}]
+        })
+        risks = m.tasks__get(t["id"])["grooming"]["risks"]
+        assert len(risks) == 1
+        assert risks[0]["text"] == "a, reworded"
+        assert risks[0]["graded"] == "avoided"
+
     def test_legacy_id_less_risk_matched_by_text_gains_an_id_without_duplicating(self):
         t = create()
         store_obj = m.store()
@@ -661,6 +677,22 @@ class TestGroomingAccuracy:
         r = m.tasks__grooming_accuracy()
         assert r["risks"]["materialized"] == 1 and r["risks"]["wrong"] == 1
         assert r["predictive_value"] == 0.5
+
+    def test_matching_risk_text_across_two_independently_groomed_tasks_recurs(self, store):
+        """End-to-end: each task is groomed through tasks__update the way the
+        grooming skill actually does it — an id-less risk — so each gets its
+        own framework-assigned id (task:f24be6e4). Recurrence must still see
+        these as the same predicted risk; keying purely by id would key two
+        distinct fresh ids apart and never surface the pattern."""
+        one = create(title="one")["id"]
+        two = create(title="two")["id"]
+        m.tasks__update(one, grooming={"risks": [{"text": "migration could lock the table", "graded": "wrong"}]})
+        m.tasks__update(two, grooming={"risks": [{"text": "migration could lock the table", "graded": "wrong"}]})
+        m.tasks__finish(one)
+        m.tasks__finish(two)
+        recurring = m.tasks__grooming_accuracy()["recurring_risks"]
+        assert len(recurring) == 1
+        assert set(recurring[0]["tasks"]) == {one, two}
 
     def test_flags_a_finished_task_that_graded_nothing(self, store):
         tid = create(title="Ungraded")["id"]
