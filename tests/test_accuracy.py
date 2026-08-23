@@ -216,6 +216,20 @@ class TestRecurring:
         recurring = grooming_accuracy(store)["recurring_risks"]
         assert len(recurring) == 1
         assert set(recurring[0]["tasks"]) == {a.id, b.id}
+        assert recurring[0]["keyed_by"] == "text"
+
+    def test_a_risk_with_the_same_id_in_two_tasks_recurs_keyed_by_id(self, store):
+        a = finished(store, "one", [{"id": "r1", "text": "flaky test", "graded": "wrong"}])
+        b = finished(store, "two", [{"id": "r1", "text": "reworded flaky test", "graded": "wrong"}])
+        recurring = grooming_accuracy(store)["recurring_risks"]
+        assert len(recurring) == 1
+        assert set(recurring[0]["tasks"]) == {a.id, b.id}
+        assert recurring[0]["keyed_by"] == "id"
+
+    def test_an_id_less_and_id_bearing_risk_do_not_merge_across_tasks(self, store):
+        finished(store, "one", [{"text": "shared", "graded": "wrong"}])
+        finished(store, "two", [{"id": "r1", "text": "shared", "graded": "wrong"}])
+        assert grooming_accuracy(store)["recurring_risks"] == []
 
     def test_a_repeat_within_one_task_is_not_a_pattern(self, store):
         finished(store, "one", [{"text": "same", "graded": "wrong"},

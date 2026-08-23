@@ -158,6 +158,66 @@ class TestUpdate:
         assert "ungroomed_progress_nudge" not in r
 
 
+class TestGroomingRiskMerge:
+    """task:f24be6e4 — a risk gets a stable id, and re-grooming can't drop a grade."""
+
+    def test_a_new_risk_gets_a_framework_assigned_id(self):
+        t = create()
+        r = m.tasks__update(t["id"], grooming={"risks": [{"text": "might break", "graded": None}]})
+        risks = m.tasks__get(t["id"])["grooming"]["risks"]
+        assert len(risks) == 1 and risks[0]["id"]
+        assert r  # update succeeded
+
+    def test_omitting_a_graded_risk_on_re_groom_carries_it_forward(self):
+        t = create()
+        m.tasks__update(t["id"], grooming={"risks": [{"text": "a", "graded": "materialized"}]})
+        rid = m.tasks__get(t["id"])["grooming"]["risks"][0]["id"]
+        # Re-groom omits the risk entirely, as a real re-groom pass would if
+        # it only wrote new clarifications and forgot to re-paste risks.
+        m.tasks__update(t["id"], grooming={"clarifications": ["new fact"]})
+        risks = m.tasks__get(t["id"])["grooming"]["risks"]
+        assert len(risks) == 1
+        assert risks[0]["id"] == rid
+        assert risks[0]["graded"] == "materialized"
+
+    def test_omitting_an_ungraded_risk_on_re_groom_drops_it(self):
+        t = create()
+        m.tasks__update(t["id"], grooming={"risks": [{"text": "a", "graded": None}]})
+        m.tasks__update(t["id"], grooming={"risks": []})
+        assert m.tasks__get(t["id"])["grooming"]["risks"] == []
+
+    def test_rewording_a_risk_by_id_preserves_its_grade(self):
+        t = create()
+        m.tasks__update(t["id"], grooming={"risks": [{"text": "a", "graded": "avoided"}]})
+        rid = m.tasks__get(t["id"])["grooming"]["risks"][0]["id"]
+        m.tasks__update(t["id"], grooming={
+            "risks": [{"id": rid, "text": "a, reworded", "graded": "avoided"}]
+        })
+        risks = m.tasks__get(t["id"])["grooming"]["risks"]
+        assert len(risks) == 1
+        assert risks[0]["id"] == rid
+        assert risks[0]["text"] == "a, reworded"
+        assert risks[0]["graded"] == "avoided"
+
+    def test_legacy_id_less_risk_matched_by_text_gains_an_id_without_duplicating(self):
+        t = create()
+        store_obj = m.store()
+        task = store_obj.get(t["id"])
+        task.grooming = {"risks": [{"text": "legacy risk", "graded": "wrong"}]}
+        store_obj.save(task)
+        # Re-groom re-pastes the same text with no id, as the old workflow did.
+        m.tasks__update(t["id"], grooming={"risks": [{"text": "legacy risk", "graded": "wrong"}]})
+        risks = m.tasks__get(t["id"])["grooming"]["risks"]
+        assert len(risks) == 1
+        assert risks[0]["id"]
+
+    def test_other_grooming_fields_stay_wholesale_replace(self):
+        t = create()
+        m.tasks__update(t["id"], grooming={"clarifications": ["old"]})
+        m.tasks__update(t["id"], grooming={"clarifications": ["new"]})
+        assert m.tasks__get(t["id"])["grooming"]["clarifications"] == ["new"]
+
+
 class TestChecklist:
     def test_ticking_updates_progress(self):
         t = create(resolution=["a", "b"])

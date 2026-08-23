@@ -51,8 +51,9 @@ An empty `lessons` list means nothing matched. If the word `lessons` appears in
 **Treat existing `grooming` as a draft to revise, not a blank page.** Carry
 forward what still holds, revise what changed, drop what is resolved, and add
 what is new. A prior risk graded `avoided` or `materialized` is evidence about
-what actually held up; discarding it throws away the most expensive information
-in the task.
+what actually held up. You no longer have to remember to re-paste it to keep
+it — `tasks__update` carries a graded risk forward on your behalf when a
+re-groom omits it, keyed by the risk's `id` rather than its text (task:f24be6e4).
 
 ## Investigate
 
@@ -89,7 +90,7 @@ tasks__update(task_id, grooming={
     "clarifications":       ["..."],
     "hidden_assumptions":   ["..."],
     "open_questions":       [{"question": "...", "blocking": False}],
-    "risks":                [{"text": "...", "graded": None}],
+    "risks":                [{"text": "...", "graded": None}],  # "id" is assigned for you
     "prior_art":            ["..."],
     "suggested_improvements": ["..."],
 })
@@ -105,7 +106,9 @@ motivation itself is fine and encouraged — that is repair, not annotation.
 
 `grooming` replaces wholesale: only the latest pass is kept. That is about
 storage, not authorship — the object you pass should be an edited revision of
-what was there.
+what was there. The one exception is `risks`, which merges by `id` rather than
+replacing (task:f24be6e4): reword a risk by keeping its `id` and its grade
+history follows; a new risk needs no `id` at all, one is assigned for you.
 
 ## Risks must be falsifiable
 

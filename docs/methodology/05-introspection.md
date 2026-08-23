@@ -25,22 +25,24 @@ recorded outcome. If grading surfaces a decision you skipped, **make the
 decision now**; that is the loop working, not a failure of it.
 
 Write the grades back by re-passing the whole grooming object with `graded`
-filled in:
+filled in, keeping each risk's `id` (from the grooming bundle) so the grade
+attaches to the right risk:
 
 ```python
 tasks__update(task_id, grooming={
     **existing_grooming,
     "risks": [
-        {"text": "<unchanged text>", "graded": "avoided"},
-        {"text": "<unchanged text>", "graded": "wrong"},
+        {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "avoided"},
+        {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "wrong"},
     ],
 })
 ```
 
 **`grooming` replaces wholesale**, so pass the other keys back unchanged or
-they are lost. Keep each risk's `text` byte-identical — `tasks__grooming_accuracy`
-groups recurring risks by text, and a reworded risk stops matching its own
-history.
+they are lost. `risks` is the one exception (task:f24be6e4): it merges by
+`id`, so a risk you omit here is carried forward automatically if it was
+already graded, and rewording a risk's `text` no longer resets its history —
+the `id` is what recurrence and grading key on now, not the wording.
 
 Repeated `wrong` grades mean grooming is asking the wrong questions. Repeated
 `missed` grades mean it is not asking enough of them. Both are signals to

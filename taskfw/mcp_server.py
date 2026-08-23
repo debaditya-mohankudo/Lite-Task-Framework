@@ -20,14 +20,14 @@ from typing import Any, Callable
 from mcp.server import MCPServer
 
 from taskfw import dispatcher, lifecycle
-from taskfw.accuracy import grooming_accuracy
+from taskfw.accuracy import _normalise, grooming_accuracy
 from taskfw.concepts import ConceptStore
 from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.context import build_context, related_candidates
 from taskfw.db.connect import connect
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
-from taskfw.models import ResolutionItem, Task
+from taskfw.models import ResolutionItem, Task, new_id
 from taskfw.store import TaskStore
 
 log = get_logger(__name__)
@@ -395,6 +395,80 @@ def tasks__create(
     return result
 
 
+def _coerce_risk(risk: Any) -> dict[str, Any]:
+    """A risk as a dict, tolerating the bare-string shape accuracy._risks tolerates."""
+    if isinstance(risk, str):
+        return {"text": risk, "graded": None}
+    if isinstance(risk, dict):
+        return dict(risk)
+    return {"text": str(risk), "graded": None}
+
+
+def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -> list[dict]:
+    """Union current and incoming grooming risks by id — task:f24be6e4.
+
+    Every other grooming field stays wholesale-replace; only `risks` merges,
+    because a risk's `graded` value is the loop's primary evidence and a
+    caller that omits a risk from a re-groom should never silently destroy
+    its grade. Rules:
+
+    - An incoming risk carrying an `id` that matches a current risk replaces
+      that entry outright — this is how a risk gets reworded or regraded
+      without losing its history, since the id (not the text) is its identity.
+    - An incoming risk with no `id` is a brand-new prediction: this function
+      assigns it one. A caller can never supply the id for a new risk — it is
+      framework-assigned by construction, so no caller can collide with an
+      existing one.
+    - A current risk whose id is absent from the incoming list is dropped if
+      ungraded (an ordinary retraction) but carried forward automatically if
+      graded, so a grade can never vanish just because a re-groom's payload
+      didn't repeat it.
+    - A current risk written before this change has no id at all. It is
+      matched to an incoming id-less risk by normalised text first, so its
+      first post-migration re-groom picks up an id instead of duplicating —
+      falling back to the same carry-forward-if-graded rule when nothing
+      matches. Stored grooming from before this change is never rewritten.
+    """
+    current = [_coerce_risk(r) for r in (current_raw or [])]
+    incoming = [_coerce_risk(r) for r in (incoming_raw or [])]
+
+    current_by_id = {r["id"]: r for r in current if r.get("id")}
+    current_idless = [r for r in current if not r.get("id")]
+    consumed_ids: set[str] = set()
+    consumed_idless: set[int] = set()
+
+    merged: list[dict] = []
+    for risk in incoming:
+        rid = risk.get("id")
+        if rid:
+            merged.append(risk)
+            consumed_ids.add(rid)
+            continue
+        key = _normalise(risk.get("text", ""))
+        match_i = next(
+            (i for i, cand in enumerate(current_idless)
+             if i not in consumed_idless and key and _normalise(cand.get("text", "")) == key),
+            None,
+        )
+        new_entry = dict(risk)
+        new_entry["id"] = new_id()
+        if match_i is not None:
+            consumed_idless.add(match_i)
+        merged.append(new_entry)
+
+    # Carry forward graded risks the incoming payload dropped by omission.
+    for rid, risk in current_by_id.items():
+        if rid not in consumed_ids and risk.get("graded"):
+            merged.append(risk)
+    for i, risk in enumerate(current_idless):
+        if i not in consumed_idless and risk.get("graded"):
+            new_entry = dict(risk)
+            new_entry["id"] = new_id()
+            merged.append(new_entry)
+
+    return merged
+
+
 @_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__update(
     task_id: str,
@@ -435,7 +509,11 @@ def tasks__update(
     if tags is not None:
         updated.tags = tags
     if grooming is not None:
-        updated.grooming = grooming
+        merged_grooming = dict(grooming)
+        merged_grooming["risks"] = _merge_grooming_risks(
+            (current.grooming or {}).get("risks"), grooming.get("risks")
+        )
+        updated.grooming = merged_grooming
 
     parent_task = store().get(updated.parent) if updated.parent else None
     decision = lifecycle.check_save(updated, previous=current, parent=parent_task)
