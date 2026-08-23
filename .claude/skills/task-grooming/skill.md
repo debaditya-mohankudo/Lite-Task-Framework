@@ -57,7 +57,7 @@ tasks__log_skill_invocation(skill="task-grooming/step-2-treat-prior-grooming", t
 
 The bundle's `grooming` section holds the last pass. **Revise it; do not start from a blank page.** Carry forward what still holds, revise what changed, drop what is resolved, add what is new.
 
-A risk already graded `avoided` or `materialized` is evidence about what actually held up — the most expensive information in the task. Discarding it to write a fresh block throws that away and risks re-flagging something already settled.
+A risk already graded `avoided` or `materialized` is evidence about what actually held up — the most expensive information in the task. `tasks__update` carries a graded risk forward automatically if a re-groom omits it, keyed by the risk's `id` rather than its text (task:f24be6e4) — reword a risk by keeping its `id` and its history follows.
 
 ## Step 3 — Investigate
 
@@ -90,7 +90,7 @@ tasks__update(task_id, grooming={
     "clarifications":         ["..."],
     "hidden_assumptions":     ["..."],
     "open_questions":         [{"question": "...", "blocking": False}],
-    "risks":                  [{"text": "...", "graded": None}],
+    "risks":                  [{"text": "...", "graded": None}],  # "id" is assigned for you
     "prior_art":              ["..."],
     "suggested_improvements": ["..."],
 })

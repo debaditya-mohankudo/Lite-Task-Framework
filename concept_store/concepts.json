@@ -176,23 +176,14 @@
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "Aggregates grooming risk grades across recent finished tasks — the only read that spans tasks rather than descending into one. Closes the feedback edge at the level of the loop itself: without it, 'repeated wrong grades mean grooming asks the wrong questions' is advice nothing can act on, because grades live inside each task and a pattern across tasks was writable but unreadable.",
       "evidence": [
-        "taskfw/accuracy.py:grooming_accuracy",
-        "taskfw/accuracy.py:_signals",
-        "taskfw/mcp_server.py:tasks__grooming_accuracy",
-        "tests/test_accuracy.py:TestDerivedNotReported",
-        "tests/test_accuracy.py:TestSkippedIntrospection"
+        "taskfw/accuracy.py:_recurrence_key",
+        "tests/test_accuracy.py:TestRecurring"
       ],
       "invariants": [
-        "Tallies are DERIVED from per-risk `graded` values and never read from an introspection report's self-reported grooming_accuracy count — the same reason progress is derived from the checklist",
-        "A disagreement between the self-reported tally and the derived one is reported, never silently resolved",
-        "risks.total counts every risk seen, independently of the grade buckets, so an unrecognised grade cannot make a risk vanish from the total",
-        "An unrecognised grade is bucketed and reported rather than dropped",
-        "Only a FINISHED task with ungraded risks is a skipped introspection; an open one is work in progress",
-        "predictive_value excludes ungraded risks from its denominator, so skipping the grading never flatters the score",
-        "Ratio signals require MIN_SAMPLE graded risks; the skipped-introspection signal requires no sample, because one is already the loop not running",
-        "A risk recurs only across DISTINCT tasks — a repeat within one task is a duplicate, not a pattern"
+        "Recurrence groups by a risk's id when it has one (task:f24be6e4) and falls back to normalised text only for id-less (pre-migration) risks; each recurring_risks entry reports keyed_by so a caller can tell which grouping produced it.",
+        "Because ids are assigned per-risk rather than shared across tasks, two occurrences of the 'same' risk written independently in different tasks will not recur under id-keying unless one was reworded forward from the other — a known, accepted limitation recorded as an open risk on task:f24be6e4, not yet resolved."
       ],
-      "last_validated": "2026-08-01T00:00:00+00:00",
+      "last_validated": "2026-08-23T06:02:25.947486+00:00",
       "module": "taskfw/accuracy.py",
       "name": "grooming-accuracy-aggregate"
     },
@@ -550,20 +541,16 @@
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "A task is one typed dataclass serialised to JSON. Two issue types only (epic, task) and four statuses. Typing removes two things outright rather than relocating them: required-section validation becomes schema validation, and 'resolution must be a checklist' becomes unrepresentable because resolution IS a list of items.",
       "evidence": [
-        "taskfw/models.py:Task",
-        "taskfw/models.py:Task.progress",
-        "taskfw/models.py:TASK_EDGE_RELATIONS",
-        "tests/test_store.py:TestRoundTrip",
-        "tests/test_lifecycle.py:TestCheckLinkRel"
+        "taskfw/mcp_server.py:_merge_grooming_risks",
+        "taskfw/mcp_server.py:tasks__update",
+        "tests/test_mcp_tools.py:TestGroomingRiskMerge"
       ],
       "invariants": [
-        "from_dict drops unknown keys rather than raising, so a store written by a newer version stays readable by an older one",
-        "progress is never stored — it cannot drift from the list it counts",
-        "notes exists deliberately as the escape hatch for anything the schema did not anticipate, and must survive later tidying",
-        "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent",
-        "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck"
+        "A grooming risk carries a stable, framework-assigned `id` (task:f24be6e4) — assigned by tasks__update whenever an incoming risk lacks one, never accepted from the caller, so no caller can collide with an existing id.",
+        "grooming.risks is the one field on Task.grooming that does not replace wholesale: tasks__update._merge_grooming_risks unions current and incoming risks by id, so a re-groom that omits a graded risk carries it forward automatically instead of destroying its grade by omission. Every other grooming field stays wholesale-replace.",
+        "A risk written before task:f24be6e4 has no id and is never rewritten to gain one — it is matched to an incoming risk by normalised text on its first post-migration merge, and stays id-less in storage otherwise."
       ],
-      "last_validated": "2026-08-06T00:49:28.638637+00:00",
+      "last_validated": "2026-08-23T06:02:22.082522+00:00",
       "module": "taskfw/models.py",
       "name": "typed-task-object"
     }
@@ -572,6 +559,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-23T05:24:54.152381+00:00"
+    "updated_at": "2026-08-23T06:02:25.947531+00:00"
   }
 }

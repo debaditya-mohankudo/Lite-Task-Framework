@@ -69,19 +69,19 @@ For each item in `grooming.risks`, grade what actually happened:
 
 `hidden_assumptions` is **not** graded — those are things grooming identified in the present, not predictions about the future.
 
-Write the grades back by re-passing the whole grooming object with `graded` filled in:
+Write the grades back by re-passing the whole grooming object with `graded` filled in, keeping each risk's `id` (from the grooming bundle) so the grade attaches to the right risk:
 
 ```python
 tasks__update(task_id, grooming={
     **existing_grooming,
     "risks": [
-        {"text": "<unchanged text>", "graded": "avoided"},
-        {"text": "<unchanged text>", "graded": "wrong"},
+        {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "avoided"},
+        {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "wrong"},
     ],
 })
 ```
 
-**`grooming` replaces wholesale**, so pass the other keys back unchanged or they are lost. Keep each risk's `text` byte-identical — `tasks__grooming_accuracy` groups recurring risks by text, and a reworded risk stops matching its own history.
+**`grooming` replaces wholesale**, so pass the other keys back unchanged or they are lost. `risks` is the one exception (task:f24be6e4): it merges by `id`, so an omitted risk that was already graded is carried forward automatically, and rewording `text` no longer resets its history — the `id` is what recurrence and grading key on now.
 
 Be honest about *materialized* versus *unresolved*. A risk that said "decide X now" and was simply not decided has not materialized — it is still open, and grading it as inevitable launders a skipped decision into a recorded outcome. If grading surfaces a decision you skipped, **make it now**; that is the loop working.
 
@@ -257,8 +257,8 @@ If a pass produces none of those, it was probably not worth running — say so r
 ## Rules
 
 - **Never skip decision-logging.** It is the highest-value part of the pass.
-- **Keep risk text byte-identical when grading**, or recurrence tracking silently breaks.
-- **Pass the whole grooming object back** — it replaces, it does not merge.
+- **Keep each risk's `id` when grading** — grading and recurrence key on it, not the wording, so a risk can be reworded without losing its history.
+- **Pass the whole grooming object back** — every field replaces except `risks`, which merges by `id`.
 - **Record behaviour, not incidental detail.** Preserve observable promises and
   causal lessons; leave implementation choices flexible unless they affect a
   contract, safety, clarity, or convention.

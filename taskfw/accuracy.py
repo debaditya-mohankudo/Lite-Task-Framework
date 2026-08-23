@@ -76,18 +76,39 @@ def _normalise(text: str) -> str:
 def _risks(task: Task) -> list[dict]:
     """The grooming risks of a task, tolerating a bare string for a risk.
 
-    The documented shape is {"text": ..., "graded": ...}, but a plain string is
-    a plausible thing to write and dropping it would make an ungraded risk
-    invisible — which is the one outcome this module exists to prevent.
+    The documented shape is {"id": ..., "text": ..., "graded": ...}, but a
+    plain string is a plausible thing to write and dropping it would make an
+    ungraded risk invisible — which is the one outcome this module exists to
+    prevent. `id` is optional: risks written before task:f24be6e4 have none,
+    and are never rewritten to gain one — see `_recurrence_key`.
     """
     raw = (task.grooming or {}).get("risks") or []
     out = []
     for risk in raw:
         if isinstance(risk, str):
-            out.append({"text": risk, "graded": None})
+            out.append({"id": None, "text": risk, "graded": None})
         elif isinstance(risk, dict):
-            out.append({"text": risk.get("text", ""), "graded": risk.get("graded")})
+            out.append({
+                "id": risk.get("id"),
+                "text": risk.get("text", ""),
+                "graded": risk.get("graded"),
+            })
     return out
+
+
+def _recurrence_key(risk: dict) -> tuple[str, str] | None:
+    """The key `grooming_accuracy` groups a risk's recurrence by, and which kind it is.
+
+    Grouping by `id` is exact — it survives a reworded risk. Falling back to
+    normalised text is the only option for a risk written before ids existed
+    (task:f24be6e4) and is kept indefinitely rather than migrated, since
+    stored grooming is never rewritten to fit a newer shape. Returns None for
+    a risk with neither an id nor any text to key on.
+    """
+    if risk.get("id"):
+        return ("id", risk["id"])
+    key = _normalise(risk.get("text", ""))
+    return ("text", key) if key else None
 
 
 def _reported_totals(task: Task) -> dict[str, int]:
@@ -152,9 +173,12 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
         for risk in risks:
             risks_seen += 1
             grade = risk["graded"]
-            key = _normalise(risk["text"])
-            if key:
-                entry = seen.setdefault(key, {"text": risk["text"], "tasks": [], "grades": []})
+            keyed = _recurrence_key(risk)
+            if keyed:
+                kind, key = keyed
+                entry = seen.setdefault(
+                    key, {"text": risk["text"], "tasks": [], "grades": [], "keyed_by": kind}
+                )
                 if task.id not in entry["tasks"]:
                     entry["tasks"].append(task.id)
                 entry["grades"].append(grade)
@@ -183,7 +207,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
 
     graded_total = sum(tallies.values())
     recurring = [
-        {"text": e["text"], "tasks": e["tasks"], "grades": e["grades"]}
+        {"text": e["text"], "tasks": e["tasks"], "grades": e["grades"], "keyed_by": e["keyed_by"]}
         for e in sorted(seen.values(), key=lambda e: -len(e["tasks"]))
         if len(e["tasks"]) >= RECURRENCE
     ][:MAX_RECURRING]
