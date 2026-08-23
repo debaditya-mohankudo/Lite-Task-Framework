@@ -44,8 +44,8 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "3b7d7902ca483e1b57f0fb58323fa0dde96848dd";
-        derivedAt = "2026-08-20";
+        derivedFromCommit = "0add71cd465071f8ac95a9cec4f65a7317cd863d";
+        derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/store.py",
             "taskfw/models.py",
@@ -120,7 +120,9 @@ package TaskFrameworkSystem {
              * It lives here as a documented behaviour of the interface layer,
              * the same way tasks__context's trim/truncation behaviour is
              * documented in this part's doc rather than given a part of its
-             * own.
+             * own: whole sections drop least-useful-first, except grooming,
+             * which is trimmed field-by-field before it is dropped whole —
+             * see PullContextRequirement.
              *
              * ONE TOOL IS THE EXCEPTION TO "dispatcher never changes what is
              * stored": tasks__check_item(done=True) also sets its task as
