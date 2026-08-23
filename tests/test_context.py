@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import pytest
 
-from taskfw.context import CHAR_BUDGET, MAX_EDGES, MAX_LESSONS, TRIM_ORDER, _size, build_context
+from taskfw.context import (
+    CHAR_BUDGET, MAX_EDGES, MAX_LESSONS, TRIM_ORDER, _BUNDLE_SKELETON, _size, build_context,
+)
 from taskfw.memory import MemoryStore
 from taskfw.task import ResolutionItem, Task
 from taskfw.store import TaskStore
@@ -152,6 +154,19 @@ class TestFullBundle:
         b = store.save(Task(title="degrade FTS to LIKE gracefully"))
         c = build_context(store, a.id)
         assert b.id in [r["id"] for r in c["related"]]
+
+    def test_keys_match_skeleton_on_a_non_truncating_bundle(self, populated):
+        """A field added/removed/renamed in build_context's return, without a
+        matching change to _BUNDLE_SKELETON, must fail here rather than only
+        if some other test happens to touch that field.
+
+        Uses `populated` specifically because it stays under CHAR_BUDGET — the
+        3 conditional keys (edges_truncated, truncated, grooming_truncated)
+        are deliberately absent from the skeleton, so an equality assertion
+        only holds on a bundle where none of them fired.
+        """
+        c = build_context(populated["store"], populated["task"].id)
+        assert set(c.keys()) == set(_BUNDLE_SKELETON.keys())
 
 
 class TestBudget:

@@ -107,6 +107,24 @@ GROOMING_TRIM_ORDER = (
     "risks", "open_questions", "clarifications",
 )
 
+#: The shape of a full-verbosity bundle, in section order — see the module
+#: docstring's SECTIONS list. build_context copies this fresh (dict(...)) and
+#: fills in every field on each call; nothing here is ever mutated or reused
+#: across calls. Deliberately excludes edges_truncated, truncated, and
+#: grooming_truncated: those three are conditional, added only when trimming
+#: actually happens, so a key present here would claim they are always part
+#: of the shape when they are not.
+_BUNDLE_SKELETON: dict = {
+    "verbosity": "full",
+    "task": None,
+    "decisions": [],
+    "grooming": {},
+    "graph": {},
+    "commits": [],
+    "related": [],
+    "lessons": [],
+}
+
 
 def _query_terms(task: Task) -> str:
     """The words that describe a task, for any full-text lookup about it.
@@ -207,8 +225,8 @@ def build_context(store: TaskStore, task_id: str, verbosity: str = "full",
         return {"task": _task_summary(task), "verbosity": "summary"}
 
     graph, edges_dropped = _graph(store, task)
-    bundle: dict = {
-        "verbosity": "full",
+    bundle: dict = dict(_BUNDLE_SKELETON)
+    bundle.update({
         "task": {
             **_task_summary(task),
             "motivation": task.motivation,
@@ -229,7 +247,7 @@ def build_context(store: TaskStore, task_id: str, verbosity: str = "full",
         "commits": store.commits(task_id)[:MAX_COMMITS],
         "related": related_candidates(store, task),
         "lessons": lessons_for(store, task, memory),
-    }
+    })
     if edges_dropped:
         bundle["edges_truncated"] = edges_dropped
 
