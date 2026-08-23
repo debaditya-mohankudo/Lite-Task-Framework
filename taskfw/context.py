@@ -369,6 +369,15 @@ def _enforce_budget(bundle: dict) -> list[str]:
             if not bundle["grooming"]:
                 bundle.pop("grooming_truncated", None)
                 dropped.append("grooming")
+                continue
+            if _size(bundle) > CHAR_BUDGET:
+                # Trimming every known field still left the bundle over budget —
+                # an unlisted grooming key (future schema, direct API write, or
+                # older data) survived GROOMING_TRIM_ORDER untouched. Fall back
+                # to dropping the section whole so the budget contract holds.
+                bundle["grooming"] = {}
+                bundle.pop("grooming_truncated", None)
+                dropped.append("grooming")
             continue
         bundle[section] = [] if isinstance(bundle[section], list) else {}
         dropped.append(section)

@@ -440,8 +440,12 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
     its grade. Rules:
 
     - An incoming risk carrying an `id` that matches a current risk replaces
-      that entry outright — this is how a risk gets reworded or regraded
-      without losing its history, since the id (not the text) is its identity.
+      that entry — this is how a risk gets reworded or regraded without
+      losing its history, since the id (not the text) is its identity. If the
+      incoming entry omits `graded` (or sends it empty) while the current
+      entry was graded, the existing grade is kept: an ordinary reword must
+      not silently reset introspection evidence just because the caller only
+      meant to edit the text.
     - An incoming risk with no `id` is a brand-new prediction: this function
       assigns it one. A caller can never supply the id for a new risk — it is
       framework-assigned by construction, so no caller can collide with an
@@ -468,6 +472,10 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
     for risk in incoming:
         rid = risk.get("id")
         if rid:
+            current_entry = current_by_id.get(rid)
+            if current_entry and current_entry.get("graded") and not risk.get("graded"):
+                risk = dict(risk)
+                risk["graded"] = current_entry["graded"]
             merged.append(risk)
             consumed_ids.add(rid)
             continue
