@@ -43,7 +43,7 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "0add71cd465071f8ac95a9cec4f65a7317cd863d";
+        derivedFromCommit = "59754fa098d947451136b84179f804717cf8266e";
         derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/db/schema.py",
@@ -225,7 +225,22 @@ package Requirements {
              *
              * Allocated to mcpTools, not store: this is a derivation over
              * persisted data, exactly as PullContextRequirement is, and the
-             * store holds no rules and no analysis. */
+             * store holds no rules and no analysis.
+             *
+             * Two additions (task:f24be6e4, task:07f9270c) protect the grades
+             * this requirement depends on rather than merely reading them.
+             * First, a risk carries a stable, framework-assigned `id`; a
+             * re-groom (tasks__update) merges grooming.risks by id instead of
+             * replacing the list wholesale, so a grade can no longer be
+             * dropped by omitting the risk from a later pass — every other
+             * grooming field is unaffected. Recurrence groups by id when
+             * present, falling back to normalised text only for risks written
+             * before this change. Second, the debt this requirement exists to
+             * make readable is now also surfaced proactively: tasks__set_active
+             * carries loop_debt_nudge/task_debt_nudge, derived from the same
+             * per-task classification (_task_grading) this aggregate uses, so
+             * skipped introspection is visible at the start of the next task
+             * rather than only on request. */
     }
     satisfy requirement GroomingFeedbackEdgeRequirement by system.mcpTools;
 
