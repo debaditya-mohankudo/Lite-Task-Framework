@@ -37,6 +37,9 @@ STORE_RELPATH = Path("concept_store") / "concepts.json"
 #: Fields every concept carries. Anything else is preserved but not required.
 REQUIRED = ("name", "module", "description")
 
+#: List-valued fields that upsert merges (union) rather than replaces outright.
+LIST_FIELDS = ("contracts", "invariants", "evidence")
+
 
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -133,9 +136,13 @@ class ConceptStore:
         """Insert or MERGE a concept.
 
         Merges rather than overwrites: a caller updating one field should not
-        silently drop invariants it did not mention. Passing an explicit empty
-        list still clears a field, so deletion stays possible — it just has to
-        be deliberate.
+        silently drop invariants it did not mention. This applies within a
+        list field too — a payload naming only some entries of `contracts`,
+        `invariants`, or `evidence` unions them with what is already stored
+        rather than replacing the list outright. Passing an explicit empty
+        list still clears that field, so deletion stays possible — it just
+        has to be deliberate. Every other field replaces if present, same as
+        before.
         """
         missing = [f for f in REQUIRED if not concept.get(f)]
         if missing:
@@ -144,9 +151,16 @@ class ConceptStore:
         name = concept["name"]
         existing = self._concepts.get(name, {})
         merged = {**existing, **concept}
-        merged.setdefault("contracts", [])
-        merged.setdefault("invariants", [])
-        merged.setdefault("evidence", [])
+        for lf in LIST_FIELDS:
+            if lf in concept:
+                incoming = concept[lf] or []
+                if incoming:
+                    prior = existing.get(lf, []) or []
+                    merged[lf] = prior + [item for item in incoming if item not in prior]
+                else:
+                    merged[lf] = []
+            else:
+                merged[lf] = existing.get(lf, [])
         merged.setdefault("confidence", 0.8)
         merged.setdefault("created_at", existing.get("created_at") or _utcnow())
         merged["last_validated"] = _utcnow()
