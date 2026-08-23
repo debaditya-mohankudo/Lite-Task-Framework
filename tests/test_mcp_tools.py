@@ -515,6 +515,45 @@ class TestActiveTask:
         assert "error" in m.tasks__context()
 
 
+class TestLoopDebtNudge:
+    """task:07f9270c — skipped introspection surfaced at tasks__set_active."""
+
+    def test_clean_loop_is_silent(self):
+        t = create()
+        r = m.tasks__set_active(t["id"])
+        assert "loop_debt_nudge" not in r and "task_debt_nudge" not in r
+
+    def test_a_finished_task_with_ungraded_risks_surfaces_as_loop_debt(self):
+        skipped = create(title="skipped")
+        m.tasks__update(skipped["id"], grooming={"risks": [{"text": "a", "graded": None}]})
+        m.tasks__update(skipped["id"], status="done")
+        t = create(title="unrelated")
+        r = m.tasks__set_active(t["id"])
+        assert "1 of the last" in r["loop_debt_nudge"]
+
+    def test_the_active_task_s_own_ungraded_risks_surface_as_task_debt(self):
+        t = create()
+        m.tasks__update(t["id"], grooming={"risks": [{"text": "a", "graded": None}]})
+        r = m.tasks__set_active(t["id"])
+        assert f"task:{t['id']} has 1 risk" in r["task_debt_nudge"]
+        assert "loop_debt_nudge" not in r  # t isn't finished, so it's not loop debt
+
+    def test_a_graded_risk_produces_no_task_debt(self):
+        t = create()
+        m.tasks__update(t["id"], grooming={"risks": [{"text": "a", "graded": "avoided"}]})
+        r = m.tasks__set_active(t["id"])
+        assert "task_debt_nudge" not in r
+
+    def test_loop_debt_count_matches_grooming_accuracy(self):
+        skipped = create(title="skipped")
+        m.tasks__update(skipped["id"], grooming={"risks": [{"text": "a", "graded": None}]})
+        m.tasks__update(skipped["id"], status="done")
+        t = create(title="unrelated")
+        r = m.tasks__set_active(t["id"])
+        assert skipped["id"] in m.tasks__grooming_accuracy()["skipped_introspection"]
+        assert "1 of the last" in r["loop_debt_nudge"]
+
+
 class TestClaudeHooksPush:
     """tasks__set_active/clear_active best-effort POST to claude-hooks'
     /set-active-taskid (task:6906557f, claude-hooks task:996cc8f0)."""
