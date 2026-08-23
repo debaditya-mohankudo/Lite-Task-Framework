@@ -10,7 +10,7 @@ the established one so a store written by either implementation stays readable
 by both:
 
     {"concepts": {"<slug>": {name, module, description, contracts,
-                             invariants, evidence, confidence,
+                             invariants, evidence, related, confidence,
                              created_at, last_validated}},
      "meta": {...}}
 
@@ -38,7 +38,13 @@ STORE_RELPATH = Path("concept_store") / "concepts.json"
 REQUIRED = ("name", "module", "description")
 
 #: List-valued fields that upsert merges (union) rather than replaces outright.
-LIST_FIELDS = ("contracts", "invariants", "evidence")
+LIST_FIELDS = ("contracts", "invariants", "evidence", "related")
+
+#: `related` is a pointer list (other concept slugs), not an evidence trail —
+#: it stays useful only if short. Capped, not truncated: a caller that would
+#: overflow it gets a ValueError, never a silent drop (CLAUDE.md: an omission
+#: must never be indistinguishable from an absence).
+RELATED_MAX = 3
 
 
 def _utcnow() -> str:
@@ -161,6 +167,11 @@ class ConceptStore:
                     merged[lf] = []
             else:
                 merged[lf] = existing.get(lf, [])
+        if len(merged.get("related", [])) > RELATED_MAX:
+            raise ValueError(
+                f"concept {name!r}: related would grow to "
+                f"{len(merged['related'])} entries, max is {RELATED_MAX}"
+            )
         merged.setdefault("confidence", 0.8)
         merged.setdefault("created_at", existing.get("created_at") or _utcnow())
         merged["last_validated"] = _utcnow()
