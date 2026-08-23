@@ -43,8 +43,8 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "3b7d7902ca483e1b57f0fb58323fa0dde96848dd";
-        derivedAt = "2026-08-20";
+        derivedFromCommit = "0add71cd465071f8ac95a9cec4f65a7317cd863d";
+        derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/db/schema.py",
             "taskfw/db/connect.py",
@@ -182,7 +182,26 @@ package Requirements {
              * prompt injection. Fixed section order, a documented trim order
              * that drops whole sections least-useful-first, and a `truncated`
              * list so an omitted section is never indistinguishable from an
-             * empty one. The task itself is never trimmed. */
+             * empty one. The task itself is never trimmed.
+             *
+             * GROOMING IS THE ONE EXCEPTION to whole-section dropping: it is
+             * trimmed field-by-field, least useful first (GROOMING_TRIM_ORDER),
+             * until the bundle fits or grooming has nothing left to give.
+             * Fields actually dropped are reported in `grooming_truncated`,
+             * distinct from `truncated` — the same omission-must-be-visible
+             * discipline applied one level down, because a bundle whose only
+             * over-budget section is grooming would otherwise come back with
+             * grooming silently gone instead of partially present. Only if
+             * grooming empties out entirely does it fall through to a normal
+             * whole-section drop and get named in `truncated` like everything
+             * else.
+             *
+             * `lessons` (loop memories matching the task) is a guaranteed
+             * section in the bundle, not an optional add-on — the same
+             * `_passes_floor` relevance floor used by `related_candidates`
+             * excludes weak matches from both sections rather than always
+             * filling to their count cap with whatever is available, however
+             * weak. */
     }
     satisfy requirement PullContextRequirement by system.mcpTools;
 

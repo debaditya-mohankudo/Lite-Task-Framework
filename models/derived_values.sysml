@@ -16,8 +16,8 @@ package DerivedValues {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "91c6bdf423189b0553a83258c67303e8504fc137";
-        derivedAt = "2026-08-17";
+        derivedFromCommit = "9ca4a06a434708ab024bc7408227177b0c6370b2";
+        derivedAt = "2026-08-23";
         modelledPaths = (
             "taskfw/models.py",
             "taskfw/memory.py",
