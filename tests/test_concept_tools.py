@@ -108,6 +108,21 @@ class TestUpsert:
         assert got["invariants"] == ["must stay true"], "merge dropped invariants"
         assert got["contracts"] == ["f() -> g"]
 
+    def test_a_payload_naming_only_some_list_entries_unions_not_replaces(self, repo):
+        """A caller touching invariants at all must not drop the ones it didn't mention."""
+        store = ConceptStore(repo)
+        store.upsert(concept(invariants=["first", "second"], contracts=["f() -> g"]))
+        store.upsert(concept(invariants=["third"]))
+        got = ConceptStore(repo).get("a-concept")
+        assert got["invariants"] == ["first", "second", "third"]
+        assert got["contracts"] == ["f() -> g"], "untouched list field must survive too"
+
+    def test_upserting_a_duplicate_list_entry_does_not_repeat_it(self, repo):
+        store = ConceptStore(repo)
+        store.upsert(concept(invariants=["first"]))
+        store.upsert(concept(invariants=["first", "second"]))
+        assert ConceptStore(repo).get("a-concept")["invariants"] == ["first", "second"]
+
     def test_an_explicit_empty_list_still_clears(self, repo):
         """Deletion stays possible — it just has to be deliberate."""
         store = ConceptStore(repo)

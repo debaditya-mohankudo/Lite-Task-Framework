@@ -4,7 +4,21 @@
       "confidence": 0.8,
       "contracts": [
         "loop_debt_nudge(skipped: int, tasks_examined: int) -> str | None; fires only when skipped > 0, wired onto tasks__set_active via mcp_server._loop_debt_hook (task:07f9270c)",
-        "task_debt_nudge(task_id: str, ungraded: int) -> str | None; fires only when ungraded > 0, wired onto tasks__set_active alongside loop_debt_nudge, both under mcp_server._loop_debt_hook"
+        "task_debt_nudge(task_id: str, ungraded: int) -> str | None; fires only when ungraded > 0, wired onto tasks__set_active alongside loop_debt_nudge, both under mcp_server._loop_debt_hook",
+        "introspection_nudge(report, task_id, conn) returns None or a string; never raises, never mutates the report or the task",
+        "Fires only when the report has an unpromoted lesson AND the task has never cited any memory",
+        "finish_nudge(task) returns None or a string; fires only when task.introspection is empty",
+        "drift_reflection_nudge(active_task_id, active_task_title='', active_task_phase='', active_task_next_item='', call_count=None, active_task_completed_items=None) returns None or a string; fires every _DRIFT_NUDGE_INTERVAL calls (the constant's current value, not repeated here, is the source of truth) when call_count is supplied, else every call. No `scope` param — the caller (taskfw/drift_hook.py) resolves scope itself via TaskStore before calling. active_task_next_item (next_open_item(task)) and active_task_completed_items (completed_items(task), added task:1d23eb67) are both derived fresh from task.resolution by the caller each time, never stored. Label shape: 'task:<id> (<title>) [<phase>] — done: <item>; <item> — next: \"<item>\"', each segment appended only when its input is non-empty.",
+        "completed_items(task) -> list[str] returns every checked resolution item's text in checklist order, derived from task.resolution on every call (task:1d23eb67) — same non-stored-derivation pattern as next_open_item and is_implemented.",
+        "phase_label(phase: dict[str,bool]) -> str collapses task_phase's three independent booleans into a single word — 'grooming' | 'implementation' | 'introspection' | 'done' — by returning the first stage not yet reached in that order. Lives next to task_phase, takes task_phase's dict output rather than a Task, so a caller composes the two rather than task_phase growing a mode flag (task:afd462e3).",
+        "is_implemented(task) -> bool is the pure predicate (task.progress total>0 and done==total), status-independent — extracted from finish_reminder_nudge's inline check (task:bf95ced8)",
+        "finish_reminder_nudge(task) returns None or a string; fires when is_implemented(task) is True AND task.status == 'open'",
+        "task_phase(task) -> {groomed, implemented, introspected} (all bool), fully derived every call, never stored — exposed via mcp_server.tasks__phase (task:bf95ced8)",
+        "stale_memory_nudge(memory: dict) -> str | None; fires when memory['standing'] is 'disputed' or 'contradicted', wired onto task_memory__link via mcp_server._stale_memory_hook. Stateless like finish_reminder_nudge, not throttled like drift_reflection_nudge — re-fires on every link() call that still finds the memory disputed/contradicted, including an idempotent re-link, since task_memory__link is an infrequent call with no need for call-count throttling (task:582dba10)",
+        "tool_called(name, pre=None, post=None): the name-carrying wrapper around one MCP tool call. On a clean exit it logs 'tool=<name> OK' when call.result has no 'error' key (or is not a dict, e.g. tasks__list's bare list), 'tool=<name> REFUSE rule=<rule>' when it does; on an exception it logs 'tool=<name> ERROR <type>: <msg>' and re-raises. post fires on any non-refused, dict-shaped result.",
+        "combine(*hooks) -> Callable[[dict], None] is a composite hook: runs each hook in order, same Callable[[dict], None] shape as any single one, so a tool needing several nudges (e.g. tasks__update wants both drift_reflection_nudge and finish_reminder_nudge) composes them at its own decorator line instead of tool_called/_tool needing a special multi-hook parameter.",
+        "apply_nudge(result, key, nudge) is the one shared result-mutation helper for every nudge function — call the nudge function yourself, then apply_nudge(result, key, nudge) sets result[key] only if nudge is truthy.",
+        "ungroomed_progress_nudge(task) returns None or a string; fires when task.progress has at least one checked item AND task.grooming is empty — matches task_phase()'s own bool(task.grooming) definition of 'groomed' so the two can never disagree. Stateless like finish_reminder_nudge and stale_memory_nudge: re-checks current state on every qualifying save rather than firing once and remembering it fired (task:a9e7082d)."
       ],
       "created_at": "2026-08-01T10:02:54.174596+00:00",
       "description": "Single home for advisory, non-blocking response annotations (nudges) AND unconditional per-call logging on MCP tool results.",
@@ -15,15 +29,50 @@
         "taskfw/accuracy.py:loop_debt",
         "tests/test_dispatcher.py::TestLoopDebtNudge",
         "tests/test_dispatcher.py::TestTaskDebtNudge",
-        "tests/test_mcp_tools.py::TestLoopDebtNudge"
+        "tests/test_mcp_tools.py::TestLoopDebtNudge",
+        "taskfw/dispatcher.py:tool_called",
+        "taskfw/dispatcher.py:combine",
+        "taskfw/dispatcher.py:introspection_nudge",
+        "taskfw/dispatcher.py:finish_nudge",
+        "taskfw/dispatcher.py:drift_reflection_nudge",
+        "taskfw/dispatcher.py:completed_items",
+        "taskfw/dispatcher.py:next_open_item",
+        "taskfw/dispatcher.py:phase_label",
+        "taskfw/dispatcher.py:is_implemented",
+        "taskfw/dispatcher.py:finish_reminder_nudge",
+        "taskfw/dispatcher.py:stale_memory_nudge",
+        "taskfw/dispatcher.py:task_phase",
+        "taskfw/dispatcher.py:apply_nudge",
+        "taskfw/dispatcher.py:ungroomed_progress_nudge",
+        "taskfw/mcp_server.py:_tool, _drift_reflection_hook, _finish_reminder_hook, _finish_hook, _introspection_hook, _stale_memory_hook, _ungroomed_progress_hook",
+        "tests/test_dispatcher.py::TestToolCalled",
+        "tests/test_dispatcher.py::TestCombine",
+        "tests/test_dispatcher.py::TestStaleMemoryNudge",
+        "tests/test_dispatcher.py::TestUngroomedProgressNudge",
+        "tests/test_dispatcher.py::TestDriftReflectionNudge",
+        "tests/test_dispatcher.py::TestCompletedItems",
+        "tests/test_dispatcher.py::TestPhaseLabel",
+        "tests/test_mcp_tools.py::TestToolCallLogging",
+        "tests/test_mcp_tools.py::TestStaleMemoryNudge",
+        "tests/test_mcp_tools.py:TestUpdate",
+        "tests/test_mcp_tools.py:TestChecklist"
       ],
       "invariants": [
         "loop_debt_nudge and task_debt_nudge surface at tasks__set_active, not inside tasks__context's bundle and not on tasks__create — set_active is the earlier of the two calls both documented lifecycle entry points make at the start of work (task:07f9270c), and tasks__context is already budget-constrained around per-task relevance, not a fit for a cross-task aggregate.",
         "Both nudges derive their counts from taskfw.accuracy._task_grading/loop_debt — the same classification tasks__grooming_accuracy itself uses — so none of the three can disagree about what counts as ungraded or skipped.",
         "Neither is throttled by a call counter (unlike drift_reflection_nudge) — tasks__set_active is called far less often per session than every MCP tool call, so the every-call default other stateless nudges (finish_reminder_nudge, stale_memory_nudge, ungroomed_progress_nudge) already use is the starting point here too.",
-        "loop_debt is computed over the whole shared task store, not scoped to the calling project — Task has no project/scope field, so a debt count surfaced while working in one repo can be driven by unrelated finished tasks in another (task:07f9270c's grooming, recorded as a known, accepted risk)."
+        "loop_debt is computed over the whole shared task store, not scoped to the calling project — Task has no project/scope field, so a debt count surfaced while working in one repo can be driven by unrelated finished tasks in another (task:07f9270c's grooming, recorded as a known, accepted risk).",
+        "Never blocks or changes a write — advisory only",
+        "No name-keyed dispatch table (no GATES-style registry) — explicitly reconsidered and re-rejected during task:58782207's design pass: a registry would let a rename silently desync a string key from the tool it names, adds a second place to read to know what a tool does on success, and accretes per-tool conditions into the table itself. Every hook stays local and explicit at its own tool's decorator line, composed via combine() when more than one applies.",
+        "Every one of mcp_server.py's ~35 registered tools produces exactly one tool_called log line per call — verified by tests/test_mcp_tools.py::TestToolCallLogging::test_every_registered_tool_logs_exactly_once_when_called, which enumerates the live m.mcp.list_tools() registry rather than a hand-maintained list",
+        "Log level is INFO, one terse line per call — tool name and outcome only, never arguments, to avoid flooding `logs` with payloads or PII",
+        "task_phase's 'groomed' has no separate groomed_at flag — a task is groomed exactly when task.grooming is non-empty",
+        "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires AFTER tasks__finish when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called",
+        "stale_memory_nudge never calls supersede()/forget() itself — advisory only, same as every other nudge here, consistent with task-introspection's 'never unilaterally delete stale memories' rule",
+        "ungroomed_progress_nudge is the first nudge built as a thin wrapper deriving its condition the same way task_phase() derives 'groomed' (bool(task.grooming)), rather than re-deriving its own independent condition from raw task fields — still fits the plain Callable[[dict], None] shape with no new mechanism.",
+        "phase_label never throws on a real Task's task_phase() output: grooming/introspection are dataclass fields with default_factory (never None) and progress is a derived property, so the dict it reads is always well-formed (task:afd462e3)."
       ],
-      "last_validated": "2026-08-23T06:07:53.669892+00:00",
+      "last_validated": "2026-08-23T06:25:34.216869+00:00",
       "module": "taskfw/dispatcher.py",
       "name": "advisory-nudge-dispatcher"
     },
@@ -66,7 +115,8 @@
         "taskfw/concepts.py:ConceptStore.save",
         "taskfw/mcp_server.py:concept__get",
         "tests/test_concept_tools.py:TestShapeHandling",
-        "tests/test_concept_tools.py:TestTools"
+        "tests/test_concept_tools.py:TestTools",
+        "tests/test_concept_tools.py:test_a_payload_naming_only_some_list_entries_unions_not_replaces"
       ],
       "invariants": [
         "concepts is a NAME-KEYED MAP on disk, never a list — a list is rejected at load with a message naming the problem rather than failing later with AttributeError",
@@ -76,9 +126,10 @@
         "created_at survives an update; last_validated is restamped on every upsert",
         "repo is always an explicit argument — a store is never tied to whichever server is running",
         "save() writes with ensure_ascii=False — without it, every em-dash and non-ASCII character in an untouched concept gets re-escaped on any single-entry write, producing a whole-file diff for a one-entry change",
-        "concept__get's found:True branch nests under concept: {...} rather than flattening fields onto the response, so \"found\" cannot collide with a real field name and a caller does not need to know which implementation answered the call"
+        "concept__get's found:True branch nests under concept: {...} rather than flattening fields onto the response, so \"found\" cannot collide with a real field name and a caller does not need to know which implementation answered the call",
+        "upsert merges at the LIST-ENTRY level, not just the field level: a payload naming contracts/invariants/evidence unions those entries with what's already stored (dedup by exact match) rather than replacing the list outright, so a caller updating one entry cannot silently drop the others it did not mention (task:706a498f, fixing a prior bug where any mention of the field replaced the whole list) — an explicit empty list still clears."
       ],
-      "last_validated": "2026-08-01T06:15:42.002982+00:00",
+      "last_validated": "2026-08-23T06:26:41.289815+00:00",
       "module": "taskfw/concepts.py",
       "name": "concept-store-name-keyed-map"
     },
@@ -132,19 +183,40 @@
     "grooming-accuracy-aggregate": {
       "confidence": 0.92,
       "contracts": [
-        "loop_debt(store, limit=10) -> {tasks_examined, skipped_introspection, ungraded_risks} — the cheap window mcp_server._loop_debt_hook reads on every tasks__set_active call (task:07f9270c), using a smaller limit than grooming_accuracy's default 25 since set_active fires far more often per session."
+        "loop_debt(store, limit=10) -> {tasks_examined, skipped_introspection, ungraded_risks} — the cheap window mcp_server._loop_debt_hook reads on every tasks__set_active call (task:07f9270c), using a smaller limit than grooming_accuracy's default 25 since set_active fires far more often per session.",
+        "grooming_accuracy(store, limit) -> tallies, recurring risks, skipped introspections, self-report disagreements, and signals",
+        "Scoped to status='done' only",
+        "Everything except `signals` is a raw count or a list of task ids",
+        "Exposed as tasks__grooming_accuracy"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "Aggregates grooming risk grades across recent finished tasks — the only read that spans tasks rather than descending into one. Closes the feedback edge at the level of the loop itself: without it, 'repeated wrong grades mean grooming asks the wrong questions' is advice nothing can act on, because grades live inside each task and a pattern across tasks was writable but unreadable.",
       "evidence": [
         "taskfw/accuracy.py:_task_grading",
         "taskfw/accuracy.py:loop_debt",
-        "tests/test_accuracy.py::TestLoopDebt"
+        "tests/test_accuracy.py::TestLoopDebt",
+        "taskfw/accuracy.py:grooming_accuracy",
+        "taskfw/accuracy.py:_signals",
+        "taskfw/mcp_server.py:tasks__grooming_accuracy",
+        "tests/test_accuracy.py:TestDerivedNotReported",
+        "tests/test_accuracy.py:TestSkippedIntrospection",
+        "taskfw/accuracy.py:_recurrence_key",
+        "tests/test_accuracy.py:TestRecurring"
       ],
       "invariants": [
-        "_task_grading(task) -> (risks, ungraded_count, any_graded) is the single per-task classification both grooming_accuracy and loop_debt call — factored out (task:07f9270c) so the two reads can never disagree about what counts as skipped or ungraded."
+        "_task_grading(task) -> (risks, ungraded_count, any_graded) is the single per-task classification both grooming_accuracy and loop_debt call — factored out (task:07f9270c) so the two reads can never disagree about what counts as skipped or ungraded.",
+        "Tallies are DERIVED from per-risk `graded` values and never read from an introspection report's self-reported grooming_accuracy count — the same reason progress is derived from the checklist",
+        "A disagreement between the self-reported tally and the derived one is reported, never silently resolved",
+        "risks.total counts every risk seen, independently of the grade buckets, so an unrecognised grade cannot make a risk vanish from the total",
+        "An unrecognised grade is bucketed and reported rather than dropped",
+        "Only a FINISHED task with ungraded risks is a skipped introspection; an open one is work in progress",
+        "predictive_value excludes ungraded risks from its denominator, so skipping the grading never flatters the score",
+        "Ratio signals require MIN_SAMPLE graded risks; the skipped-introspection signal requires no sample, because one is already the loop not running",
+        "A risk recurs only across DISTINCT tasks — a repeat within one task is a duplicate, not a pattern",
+        "Recurrence groups by a risk's id when it has one (task:f24be6e4) and falls back to normalised text only for id-less (pre-migration) risks; each recurring_risks entry reports keyed_by so a caller can tell which grouping produced it.",
+        "Because ids are assigned per-risk rather than shared across tasks, two occurrences of the 'same' risk written independently in different tasks will not recur under id-keying unless one was reworded forward from the other — a known, accepted limitation recorded as an open risk on task:f24be6e4, not yet resolved."
       ],
-      "last_validated": "2026-08-23T06:08:03.007474+00:00",
+      "last_validated": "2026-08-23T06:25:56.739322+00:00",
       "module": "taskfw/accuracy.py",
       "name": "grooming-accuracy-aggregate"
     },
@@ -504,14 +576,24 @@
       "evidence": [
         "taskfw/mcp_server.py:_merge_grooming_risks",
         "taskfw/mcp_server.py:tasks__update",
-        "tests/test_mcp_tools.py:TestGroomingRiskMerge"
+        "tests/test_mcp_tools.py:TestGroomingRiskMerge",
+        "taskfw/models.py:Task",
+        "taskfw/models.py:Task.progress",
+        "taskfw/models.py:TASK_EDGE_RELATIONS",
+        "tests/test_store.py:TestRoundTrip",
+        "tests/test_lifecycle.py:TestCheckLinkRel"
       ],
       "invariants": [
         "A grooming risk carries a stable, framework-assigned `id` (task:f24be6e4) — assigned by tasks__update whenever an incoming risk lacks one, never accepted from the caller, so no caller can collide with an existing id.",
         "grooming.risks is the one field on Task.grooming that does not replace wholesale: tasks__update._merge_grooming_risks unions current and incoming risks by id, so a re-groom that omits a graded risk carries it forward automatically instead of destroying its grade by omission. Every other grooming field stays wholesale-replace.",
-        "A risk written before task:f24be6e4 has no id and is never rewritten to gain one — it is matched to an incoming risk by normalised text on its first post-migration merge, and stays id-less in storage otherwise."
+        "A risk written before task:f24be6e4 has no id and is never rewritten to gain one — it is matched to an incoming risk by normalised text on its first post-migration merge, and stays id-less in storage otherwise.",
+        "from_dict drops unknown keys rather than raising, so a store written by a newer version stays readable by an older one",
+        "progress is never stored — it cannot drift from the list it counts",
+        "notes exists deliberately as the escape hatch for anything the schema did not anticipate, and must survive later tidying",
+        "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent",
+        "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck"
       ],
-      "last_validated": "2026-08-23T06:02:22.082522+00:00",
+      "last_validated": "2026-08-23T06:25:34.224502+00:00",
       "module": "taskfw/models.py",
       "name": "typed-task-object"
     }
@@ -520,6 +602,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-23T06:08:03.007580+00:00"
+    "updated_at": "2026-08-23T06:26:41.290241+00:00"
   }
 }
