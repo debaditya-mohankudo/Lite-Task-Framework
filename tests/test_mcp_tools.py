@@ -756,6 +756,59 @@ class TestIntrospection:
         assert "memory_nudge" not in r
 
 
+class TestFullLifecycle:
+    def test_create_groom_implement_introspect(self):
+        """One pass through the whole loop, asserting the state each stage leaves behind.
+
+        The other classes in this file pin each tool's behaviour in isolation
+        (risk merge, nudges, transitions); nothing chains them the way a real
+        task actually moves through the loop. This is that chain, checked at
+        the end against tasks__get rather than against each call's own return
+        value, so it fails if any stage silently didn't persist what the
+        previous stage produced.
+        """
+        # create
+        t = create(title="Add a widget", resolution=["build it", "test it"])
+        tid = t["id"]
+        assert m.tasks__get(tid)["status"] == "open"
+
+        # groom: record a risk prediction before implementation starts
+        groom = m.tasks__update(tid, grooming={
+            "clarifications": ["the widget slots into the existing panel"],
+            "risks": [{"text": "panel layout may not have room for it"}],
+        })
+        assert groom["ok"]
+        risk_id = m.tasks__get(tid)["grooming"]["risks"][0]["id"]
+
+        # implement: work happens, checklist gets ticked off
+        m.tasks__check_item(tid, 0)
+        r = m.tasks__check_item(tid, 1)
+        assert r["status"] == "done"  # last item checked auto-finishes the task
+
+        # introspect: grade the risk and record what was learned
+        m.tasks__update(tid, grooming={
+            "clarifications": ["the widget slots into the existing panel"],
+            "risks": [{"id": risk_id, "text": "panel layout may not have room for it",
+                       "graded": "avoided"}],
+        })
+        report = m.tasks__add_introspection(tid, {
+            "date": "2026-01-01",
+            "new_knowledge": ["panel has more slack than it looks like"],
+        })
+        assert report["ok"] and report["reports"] == 1
+
+        final = m.tasks__get(tid)
+        assert final["status"] == "done"
+        assert all(r["done"] for r in final["resolution"])
+        assert final["grooming"]["risks"][0] == {
+            "id": risk_id, "text": "panel layout may not have room for it",
+            "graded": "avoided",
+        }
+        assert final["introspection"] == [
+            {"date": "2026-01-01", "new_knowledge": ["panel has more slack than it looks like"]}
+        ]
+
+
 class TestLoopMemory:
     """Scoped to what introspection produces; everything else has a home."""
 

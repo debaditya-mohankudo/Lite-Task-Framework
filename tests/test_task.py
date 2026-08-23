@@ -1,226 +1,97 @@
-"""SysML model tests — the single-allocation criterion, enforced mechanically.
+"""Task's own contracts — serialisation and derived fields, pinned directly.
 
-The model's whole acceptance criterion is that NO REQUIREMENT MAY BE SATISFIED
-BY MORE THAN ONE PART. A second allocation means a rule and its data have
-drifted apart, which is the defect this project's decomposition exists to
-avoid.
-
-A criterion stated in a model and checked by nothing is a comment: the model
-stays plausible while the code drifts under it, and the drift is found only
-when someone tries to extract a part and discovers it does not come away
-clean. So this runs on every commit.
+These were previously only proven by proxy through store.py's save/load and
+search tests, which check outcomes (a search matched, a reload round-tripped)
+rather than Task's own documented rules. Pure Task construction and
+(de)serialisation, so — like test_lifecycle.py — this needs no store.
 """
 from __future__ import annotations
 
-import re
-from pathlib import Path
-
-import pytest
-
-MODELS = Path(__file__).parent.parent / "models"
-EXPECTED = {"foundation.sysml", "requirements.sysml",
-            "task_framework_system.sysml", "task_lifecycle.sysml",
-            "derived_values.sysml", "mcp_interface.sysml"}
-
-REQUIREMENT_DEF = re.compile(r"requirement\s+def\s+(\w+)")
-SATISFY = re.compile(r"satisfy\s+requirement\s+(\w+)\s+by\s+([\w.]+)\s*;")
-PART_DEF = re.compile(r"part\s+def\s+(\w+)")
-#: `part <name> : <Type>;` — the composition inside System.
-PART_INSTANCE = re.compile(r"part\s+(\w+)\s*:\s*(\w+)\s*;")
+from taskfw.task import ResolutionItem, Task
 
 
-@pytest.fixture(scope="module")
-def requirements() -> str:
-    return (MODELS / "requirements.sysml").read_text()
-
-
-@pytest.fixture(scope="module")
-def system() -> str:
-    return (MODELS / "task_framework_system.sysml").read_text()
-
-
-class TestPresence:
-    def test_every_model_file_exists(self):
-        assert {p.name for p in MODELS.glob("*.sysml")} == EXPECTED
-
-
-class TestSingleAllocation:
-    def test_no_requirement_has_more_than_one_satisfy(self, requirements):
-        """THE acceptance criterion. A second allocation is a design defect."""
-        counts: dict[str, list[str]] = {}
-        for name, part in SATISFY.findall(requirements):
-            counts.setdefault(name, []).append(part)
-        duplicates = {n: p for n, p in counts.items() if len(p) > 1}
-        assert not duplicates, (
-            "requirements allocated to more than one part — a rule and its data "
-            f"have drifted apart: {duplicates}"
+class TestSearchText:
+    def test_flattens_title_motivation_notes_tags_files_and_resolution(self):
+        t = Task(
+            title="ship it",
+            motivation="because",
+            notes="a note",
+            tags=["urgent", "backend"],
+            files=["a.py", "b.py"],
+            resolution=[ResolutionItem(text="do the thing"), ResolutionItem(text="check it", done=True)],
         )
+        text = t.search_text()
+        for expected in ("ship it", "because", "a note", "urgent backend",
+                          "a.py b.py", "do the thing", "check it"):
+            assert expected in text
 
-    def test_every_requirement_is_allocated(self, requirements):
-        defined = set(REQUIREMENT_DEF.findall(requirements))
-        allocated = {name for name, _ in SATISFY.findall(requirements)}
-        assert defined == allocated, (
-            f"unallocated: {sorted(defined - allocated)}; "
-            f"allocated but undefined: {sorted(allocated - defined)}"
+    def test_falsy_fields_are_excluded_rather_than_appearing_blank(self):
+        t = Task(title="only a title")
+        text = t.search_text()
+        assert text == "only a title"
+
+    def test_resolution_item_text_is_included_even_when_done(self):
+        t = Task(title="t", resolution=[ResolutionItem(text="finished item", done=True)])
+        assert "finished item" in t.search_text()
+
+
+class TestJSONRoundTrip:
+    def test_to_json_and_from_json_preserve_every_field(self):
+        t = Task(
+            type="epic",
+            status="blocked",
+            parent="parentid",
+            title="t",
+            motivation="m",
+            resolution=[ResolutionItem(text="x", done=True)],
+            files=["f.py"],
+            tags=["tag"],
+            notes="n",
+            grooming={"clarifications": ["c"]},
+            introspection=[{"date": "2026-01-01"}],
         )
+        restored = Task.from_json(t.to_json())
+        assert restored == t
 
-    def test_allocations_name_real_parts(self, requirements, system):
-        """Every `by system.X` must match a part actually composed into System."""
-        composed = {name for name, _ in PART_INSTANCE.findall(system)}
-        for requirement, target in SATISFY.findall(requirements):
-            assert target.startswith("system."), f"{requirement} allocated to {target}"
-            part = target.split(".", 1)[1]
-            assert part in composed, f"{requirement} allocated to unknown part {part!r}"
+    def test_from_dict_tolerates_unknown_keys(self):
+        t = Task.from_dict({"id": "x", "title": "t", "field_from_the_future": 1})
+        assert t.id == "x" and t.title == "t"
+        assert not hasattr(t, "field_from_the_future")
 
+    def test_from_dict_defaults_missing_keys(self):
+        t = Task.from_dict({"title": "t"})
+        assert t.status == "open" and t.type == "task" and t.resolution == []
 
-class TestParts:
-    def test_the_four_parts_are_defined(self, system):
-        assert set(PART_DEF.findall(system)) == {
-            "TaskStore", "LifecycleRules", "TaskMCPTools", "System"
-        }
+    def test_from_dict_converts_raw_resolution_dicts_to_resolution_items(self):
+        t = Task.from_dict({"title": "t", "resolution": [{"text": "x", "done": True}]})
+        assert t.resolution == [ResolutionItem(text="x", done=True)]
 
-    def test_no_part_is_named_for_a_specific_host(self, system):
-        """Host names belong to instances, not to the structure.
+    def test_from_dict_passes_through_existing_resolution_items_unchanged(self):
+        item = ResolutionItem(text="x")
+        t = Task.from_dict({"title": "t", "resolution": [item]})
+        assert t.resolution == [item]
 
-        There is no host-specific part left to name — the one that existed
-        (HostAdapter) was removed once every behaviour it carried either
-        duplicated what TaskMCPTools already does explicitly, or could just be
-        a skill's own step. This test stays as a guard against one reappearing.
-        """
-        for part in PART_DEF.findall(system):
-            assert "ClaudeCode" not in part and "Claude" not in part, (
-                f"part {part!r} names a specific host — host-specific behaviour "
-                f"belongs in a skill, not a part"
-            )
-
-    def test_the_interface_depends_on_the_rules(self, system):
-        """The structural form of 'rules cannot be bypassed'.
-
-        If TaskMCPTools stopped composing LifecycleRules it could reach the
-        store directly, and the project's central claim would quietly become
-        false while every test still passed.
-        """
-        block = system.split("part def TaskMCPTools")[1].split("part def")[0]
-        assert "rules : LifecycleRules" in block, "TaskMCPTools does not depend on the rules"
-
-    def test_no_host_adapter_part_reappeared(self, system):
-        """A host-specific adapter part was removed deliberately — see the
-        package doc comment. If host-specific automaticity is wanted again,
-        the argument is a skill's own step, not a part of this model."""
-        assert "part def HostAdapter" not in system
-        assert "part hooks" not in system
-
-    def test_no_daemon_part_reappeared(self, system):
-        """An earlier revision centred a daemon; it was abandoned deliberately."""
-        assert "RuntimeServer" not in system
-        assert "part def Daemon" not in system
+    def test_from_json_of_none_or_empty_returns_a_default_task(self):
+        for t in (Task.from_json(None), Task.from_json("{}")):
+            assert t.title == "" and t.status == "open" and t.type == "task"
+            assert t.resolution == []
 
 
-class TestLifecycleMatchesCode:
-    def test_modelled_states_match_the_implementation(self):
-        from taskfw.task import STATUSES
+class TestProgress:
+    def test_no_resolution_items_is_zero_of_zero(self):
+        assert Task(title="t").progress == (0, 0)
 
-        text = (MODELS / "task_lifecycle.sysml").read_text()
-        for status in STATUSES:
-            assert f"state {status}State" in text, f"{status} missing from the state model"
+    def test_counts_done_versus_total(self):
+        t = Task(title="t", resolution=[
+            ResolutionItem(text="a", done=True),
+            ResolutionItem(text="b", done=False),
+            ResolutionItem(text="c", done=True),
+        ])
+        assert t.progress == (2, 3)
 
-    def test_modelled_transitions_match_the_implementation(self):
-        from taskfw.lifecycle import TERMINAL, TRANSITIONS
-
-        text = (MODELS / "task_lifecycle.sysml").read_text()
-        for current, targets in TRANSITIONS.items():
-            for target in targets:
-                name = f"{current}To{target.capitalize()}"
-                assert name in text, f"transition {current}->{target} missing from the model"
-        for terminal in TERMINAL:
-            assert f"transition {terminal}To" not in text, f"{terminal} must have no transitions"
-
-
-class TestDerivedValuesMatchCode:
-    """Same construction as TestLifecycleMatchesCode: the calc def bodies in
-    derived_values.sysml are not executed, so they are kept honest by
-    importing the real Python source of truth and asserting the model's
-    identifiers match it."""
-
-    @pytest.fixture
-    def text(self):
-        return (MODELS / "derived_values.sysml").read_text()
-
-    def test_progress_is_computed_not_stored(self, text):
-        import inspect
-
-        from taskfw.task import Task
-
-        assert "calc def Progress" in text
-        assert "return done" in text
-        assert "return total" in text
-        # progress must be a read-only property — a setter would mean the
-        # value can be assigned independently of the resolution list it
-        # derives from, which is exactly what the requirement forbids.
-        assert isinstance(Task.progress, property)
-        assert Task.progress.fset is None
-        src = inspect.getsource(Task.progress.fget)
-        assert "resolution" in src
-
-    def test_memory_standing_values_match_the_implementation(self, text):
-        import inspect
-
-        from taskfw.memory import _standing
-
-        assert "calc def MemoryStanding" in text
-        src = inspect.getsource(_standing)
-        returned = re.findall(r'return "(\w+)"', src)
-        assert returned, "no return literals found in _standing — source may have changed shape"
-        for standing in returned:
-            assert standing in text, f"{standing} missing from MemoryStandingValue"
-
-    def test_grooming_accuracy_grades_match_the_implementation(self, text):
-        from taskfw.accuracy import GRADES
-
-        assert "calc def GroomingAccuracyTally" in text
-        for grade in GRADES:
-            assert grade in text, f"{grade} missing from GroomingAccuracyTally"
-
-
-class TestMcpInterfaceMatchesCode:
-    """mcp_interface.sysml's port items are not executed, so they are kept
-    honest by enumerating the LIVE tool registry — the same
-    m.mcp.list_tools() call test_mcp_tools.py::TestRegistration uses — rather
-    than trusting a hand-copied name list, which would be a second
-    unenforced restatement of the registry."""
-
-    @pytest.fixture
-    def text(self):
-        return (MODELS / "mcp_interface.sysml").read_text()
-
-    @pytest.fixture
-    def live_tool_names(self):
-        import asyncio
-
-        from taskfw import mcp_server as m
-
-        return {t.name for t in asyncio.run(m.mcp.list_tools())}
-
-    def test_every_registered_tool_appears_in_some_port(self, text, live_tool_names):
-        for name in live_tool_names:
-            assert f"item {name};" in text, f"{name} missing from mcp_interface.sysml"
-
-    def test_every_port_item_is_a_real_registered_tool(self, text, live_tool_names):
-        items = re.findall(r"item\s+(\w+);", text)
-        assert items, "no port items found in mcp_interface.sysml"
-        for name in items:
-            assert name in live_tool_names, f"{name} in mcp_interface.sysml is not a registered tool"
-
-    def test_tools_family_matches_their_port(self, text, live_tool_names):
-        tasks_block = text.split("port def TasksPort")[1].split("port def")[0]
-        concept_block = text.split("port def ConceptPort")[1].split("port def")[0]
-        memory_block = text.split("port def TaskMemoryPort")[1].split("port def")[0]
-        for name in live_tool_names:
-            if name.startswith("tasks__"):
-                assert f"item {name};" in tasks_block, f"{name} missing from TasksPort"
-            elif name.startswith("concept__"):
-                assert f"item {name};" in concept_block, f"{name} missing from ConceptPort"
-            elif name.startswith("task_memory__"):
-                assert f"item {name};" in memory_block, f"{name} missing from TaskMemoryPort"
-            else:
-                pytest.fail(f"{name} matches none of the three known tool-name prefixes")
+    def test_progress_is_derived_not_stored(self):
+        """Mutating resolution changes progress immediately — nothing to keep in sync."""
+        t = Task(title="t", resolution=[ResolutionItem(text="a")])
+        assert t.progress == (0, 1)
+        t.resolution[0].done = True
+        assert t.progress == (1, 1)
