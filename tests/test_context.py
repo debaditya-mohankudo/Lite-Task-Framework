@@ -113,6 +113,40 @@ class TestFullBundle:
         c = build_context(store, a.id)
         assert b.id in [r["id"] for r in c["related"]]
 
+    def test_related_floor_rejects_a_candidate_with_no_meaningful_overlap(self, store):
+        """A candidate ranked only by incidental body-text overlap, with zero
+        title or tag overlap, must not surface at all.
+
+        Reproduces the live case from task:1f1e48e2's grooming: task 0fecd30e
+        ("Remove LLM from certificate renewal flow") appeared as related to
+        several genuinely unrelated tasks on shared short/common words alone.
+        """
+        a = store.save(Task(
+            title="Grade the orphaned risks on finished tasks",
+            tags=["task-framework", "feedback-loop", "introspection"],
+        ))
+        store.save(Task(
+            title="Remove LLM from certificate renewal flow — fully deterministic",
+            tags=["project:acme-certificate-lifecycle-agent", "llm", "renewal",
+                  "agent", "deterministic", "certificate", "planner"],
+        ))
+        c = build_context(store, a.id)
+        assert c["related"] == []
+
+    def test_related_floor_does_not_empty_out_genuine_matches(self, store):
+        a = store.save(Task(title="Fix the sqlite migration path"))
+        b = store.save(Task(title="Sqlite migration path is broken on restore"))
+        c = build_context(store, a.id)
+        assert b.id in [r["id"] for r in c["related"]]
+
+    def test_related_floor_ignores_date_stamped_tag_collisions(self, store):
+        """Two tasks tagged with the same review date share no real topic —
+        the floor must not treat the shared digits as overlap."""
+        a = store.save(Task(title="Audit the billing export job", tags=["2026-08-23"]))
+        store.save(Task(title="Rotate the deploy signing key", tags=["2026-08-23"]))
+        c = build_context(store, a.id)
+        assert c["related"] == []
+
     def test_related_still_matches_an_exact_title_phrase(self, store):
         a = store.save(Task(title="degrade FTS to LIKE"))
         b = store.save(Task(title="degrade FTS to LIKE gracefully"))
@@ -147,6 +181,37 @@ class TestBudget:
         c = build_context(populated["store"], populated["task"].id)
         assert c["commits"], "fixture has a commit"
         assert "truncated" not in c
+
+
+class TestRelevanceFloorHelper:
+    """Unit-level pins on _passes_floor, independent of any store — the
+    shared predicate related_candidates and lessons_for both filter through.
+    """
+
+    def test_no_shared_word_fails(self):
+        from taskfw.context import _passes_floor
+        assert _passes_floor("migration sqlite path", "certificate renewal flow") is False
+
+    def test_one_shared_word_passes(self):
+        from taskfw.context import _passes_floor
+        assert _passes_floor("migration sqlite path", "restore the sqlite backup") is True
+
+    def test_short_words_do_not_count_as_overlap(self):
+        from taskfw.context import _passes_floor
+        # "fix" (both) is too short to anchor a match on its own.
+        assert _passes_floor("fix a critical bug", "the big fox ran to fix it") is False
+
+    def test_purely_numeric_tokens_do_not_count_as_overlap(self):
+        from taskfw.context import _passes_floor
+        assert _passes_floor("audit job 2026-08-23", "rotate key 2026-08-23") is False
+
+    def test_empty_query_is_permissive(self):
+        from taskfw.context import _passes_floor
+        assert _passes_floor("", "anything at all") is True
+
+    def test_query_with_only_short_words_is_permissive(self):
+        from taskfw.context import _passes_floor
+        assert _passes_floor("fix a bug", "totally unrelated content here") is True
 
 
 class TestGroomingTrim:
@@ -314,6 +379,23 @@ class TestLessons:
         memory.record("migrations-are-additive", task_id=t.id,
                       text="Sqlite migration steps must be additive; a rewrite loses rows.")
         assert "lessons" not in build_context(store, t.id, "summary", memory=memory)
+
+    def test_lessons_floor_rejects_a_slug_with_no_meaningful_overlap(self, store, memory):
+        """Pre-floor, this memory always filled a slot on relevance ranking
+        alone, however weak the match — see test_no_match_returns_an_empty_section_not_a_missing_one,
+        which pins the same scenario but predates the floor existing at all."""
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory.record("unrelated-lesson", task_id=t.id, kind="technique",
+                      text="Espresso extraction favours a coarser burr grind setting.")
+        c = build_context(store, t.id, memory=memory)
+        assert c["lessons"] == []
+
+    def test_lessons_floor_does_not_empty_out_a_genuine_match(self, store, memory):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory.record("migrations-are-additive", task_id=t.id, kind="constraint",
+                      text="Sqlite migration steps must be additive; a rewrite loses rows.")
+        c = build_context(store, t.id, memory=memory)
+        assert [m["slug"] for m in c["lessons"]] == ["migrations-are-additive"]
 
     def test_lessons_is_trimmed_after_related_and_before_commits(self):
         i = TRIM_ORDER.index("lessons")

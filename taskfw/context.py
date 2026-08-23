@@ -65,6 +65,8 @@ work.
 """
 from __future__ import annotations
 
+import re
+
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore
 from taskfw.models import Task
@@ -82,11 +84,14 @@ MAX_COMMITS = 5
 MAX_RELATED = 5
 MAX_EDGES = 5  # per direction
 
-#: Lower than MAX_RELATED on purpose. Neither section has a relevance floor —
-#: both fill up to their cap with the best available matches however weak — but
-#: the consequences differ. A weak related task reads as a pointer the agent can
-#: ignore; a weak lesson reads as advice, and advice that does not apply is
-#: worse than none. Fewer slots is the cheapest available brake.
+#: Lower than MAX_RELATED on purpose — a volume limit, not a relevance
+#: mechanism (that distinction matters: task:60ebca8e's introspection graded
+#: this cap ineffective as a relevance brake before _passes_floor existed,
+#: because a cap bounds count and only a floor bounds quality). Kept lower
+#: anyway because the consequences of a weak match still differ even after
+#: both sections carry a floor: a weak related task reads as a pointer the
+#: agent can ignore, while a weak lesson reads as advice, and inapplicable
+#: advice is worse than none.
 MAX_LESSONS = 3
 
 #: Least useful first. Reversing this is how you decide what survives.
@@ -112,6 +117,61 @@ def _query_terms(task: Task) -> str:
     surface as an inconsistent bundle.
     """
     return " ".join([task.title, *task.tags]).strip()
+
+
+#: Below this length a word carries too little meaning to anchor a relevance
+#: floor ("the", "is", "for") — kept as a length cutoff rather than a curated
+#: stopword list, because a list needs maintaining and a length rarely does.
+_MIN_TERM_LEN = 4
+
+_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def _term_set(text: str) -> set[str]:
+    """Meaningful lowercase words in `text`, for the term-overlap floor.
+
+    Purely-numeric tokens are dropped even at full length: a tag like
+    `introspection-2026-08-23` should contribute "introspection", not "2026" —
+    every task and memory recorded on the same day would otherwise share that
+    token and pass the floor on a date collision that means nothing.
+    """
+    return {
+        w for w in _WORD_RE.findall(text.lower())
+        if len(w) >= _MIN_TERM_LEN and not w.isdigit()
+    }
+
+
+def _passes_floor(query_terms: str, candidate_text: str) -> bool:
+    """The relevance floor shared by related_candidates and lessons_for.
+
+    related_candidates and lessons_for rank by relevance but never excluded
+    anything, so both always filled up to their cap with the best available
+    match among ALL rows in the store, however weak — confirmed live
+    (task:60ebca8e) surfacing candidates with zero title or tag overlap with
+    the task asking. Ranking orders candidates; it does not reject them, and
+    only a floor does.
+
+    TERM-OVERLAP MINIMUM, not a score threshold or a cutoff relative to the
+    top hit — chosen because it is the one form that applies unchanged to
+    both call sites. related_candidates ranks via store.search()'s
+    _combination_score (tag overlap weighted 3:1 over body); lessons_for
+    ranks via memories_fts's plain bm25 over a schema with no tags column at
+    all. Neither score is comparable to the other or stable as the store
+    grows, so a threshold or relative cutoff tuned against one would need
+    separate recalibration for the other and would still drift as the corpus
+    changes shape. A raw term-overlap check reads the same two strings
+    (`query_terms`, `candidate_text`) regardless of which scorer ranked the
+    candidate, so it is the only option that needed writing once.
+
+    Requires at least one shared word of `_MIN_TERM_LEN`+ letters. If the
+    query itself has no such word (a very short title, no tags), there is no
+    vocabulary to test candidates against — the floor is permissive, not
+    rejecting, in that case, since it has nothing but noise to filter on.
+    """
+    q = _term_set(query_terms)
+    if not q:
+        return True
+    return bool(q & _term_set(candidate_text))
 
 
 def _task_summary(task: Task) -> dict:
@@ -215,6 +275,13 @@ def related_candidates(store: TaskStore, task: Task) -> list[dict]:
     hand-curated signal store.search()'s own scoring weights 3:1 over body
     text, so leaving them out of the query meant two tasks sharing only tags
     (no title overlap) could never surface as related to each other.
+
+    RELEVANCE FLOOR (task:1f1e48e2): store.search() ranks but never excludes,
+    so without a floor this always filled to MAX_RELATED with the best
+    available match, however weak — see _passes_floor. Over-fetches
+    MAX_RELATED*4+1 hits, the same multiplier store.search() itself uses
+    internally, so filtering out the ones that fail the floor still leaves
+    room to fill the cap from genuine matches instead of running dry early.
     """
     query = _query_terms(task)
     if not query:
@@ -222,8 +289,10 @@ def related_candidates(store: TaskStore, task: Task) -> list[dict]:
     # store.search() builds its own OR-of-terms query internally — passing
     # plain words (not pre-formatted FTS5 syntax) is what makes term overlap
     # work instead of requiring an exact phrase.
-    hits = store.search(query, limit=MAX_RELATED + 1)
-    return [_task_summary(t) for t in hits if t.id != task.id][:MAX_RELATED]
+    hits = store.search(query, limit=MAX_RELATED * 4 + 1)
+    candidates = [t for t in hits if t.id != task.id]
+    passing = [t for t in candidates if _passes_floor(query, _query_terms(t))]
+    return [_task_summary(t) for t in passing[:MAX_RELATED]]
 
 
 def lessons_for(store: TaskStore, task: Task,
@@ -252,12 +321,25 @@ def lessons_for(store: TaskStore, task: Task,
     arrives carrying its derived `standing`, so a disputed lesson is handed
     over marked disputed rather than as settled fact. Nothing is recomputed
     here — standing is derived in the memory store and has one home.
+
+    RELEVANCE FLOOR (task:1f1e48e2): the same _passes_floor used by
+    related_candidates, applied here too rather than reimplemented — one
+    definition of the floor per the same reasoning _query_terms already
+    gives for the query shape. MAX_LESSONS was originally set below
+    MAX_RELATED as a stand-in brake on relevance; task:60ebca8e's
+    introspection graded that ineffective, because a cap bounds volume and
+    only a floor bounds quality — MAX_LESSONS is a volume limit now that the
+    floor exists to do the job it was never able to do. Over-fetches
+    MAX_LESSONS*4, mirroring recall()'s own internal over-fetch multiplier,
+    so filtering still leaves room to fill the cap.
     """
     query = _query_terms(task)
     if not query:
         return []
     store_ = memory if memory is not None else MemoryStore(conn=store.conn)
-    return store_.recall(query, limit=MAX_LESSONS, count_hit=False)
+    candidates = store_.recall(query, limit=MAX_LESSONS * 4, count_hit=False)
+    passing = [m for m in candidates if _passes_floor(query, f"{m['slug']} {m['text']}")]
+    return passing[:MAX_LESSONS]
 
 
 def _size(bundle: dict) -> int:
