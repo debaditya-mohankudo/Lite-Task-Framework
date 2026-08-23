@@ -80,7 +80,7 @@ def _risks(task: Task) -> list[dict]:
     plain string is a plausible thing to write and dropping it would make an
     ungraded risk invisible — which is the one outcome this module exists to
     prevent. `id` is optional: risks written before task:f24be6e4 have none,
-    and are never rewritten to gain one — see `_recurrence_key`.
+    and are never rewritten to gain one — see `_RecurrenceGrouper`.
     """
     raw = (task.grooming or {}).get("risks") or []
     out = []
@@ -96,19 +96,65 @@ def _risks(task: Task) -> list[dict]:
     return out
 
 
-def _recurrence_key(risk: dict) -> tuple[str, str] | None:
-    """The key `grooming_accuracy` groups a risk's recurrence by, and which kind it is.
+class _RecurrenceGrouper:
+    """Groups risks across tasks into recurrence entries for `grooming_accuracy`.
 
-    Grouping by `id` is exact — it survives a reworded risk. Falling back to
-    normalised text is the only option for a risk written before ids existed
-    (task:f24be6e4) and is kept indefinitely rather than migrated, since
-    stored grooming is never rewritten to fit a newer shape. Returns None for
-    a risk with neither an id nor any text to key on.
+    A risk written via `tasks__update` always gets a fresh, framework-assigned
+    id (`_merge_grooming_risks`), so two different tasks predicting the same
+    risk text end up with two different ids — grouping by id alone would key
+    them apart and recurrence would never fire for anything groomed after
+    task:f24be6e4. Text is the real recurrence signal; id only matters when a
+    risk gets reworded but keeps its id (a regroom of the same task) or when
+    an id is deliberately reused.
+
+    Id-less risks (written before ids existed) group by normalised text only,
+    in their own keyspace — they never merge with an id-bearing risk, since an
+    id-bearing entry is a confirmed later prediction and matching it against a
+    legacy text-only risk would associate them by coincidence rather than by
+    the framework's own identity for either one.
     """
-    if risk.get("id"):
-        return ("id", risk["id"])
-    key = _normalise(risk.get("text", ""))
-    return ("text", key) if key else None
+
+    def __init__(self) -> None:
+        self._entries: list[dict[str, Any]] = []
+        self._idless_text_index: dict[str, int] = {}
+        self._id_index: dict[str, int] = {}
+        self._id_text_index: dict[str, int] = {}
+
+    def add(self, risk: dict, task_id: str, grade: Any) -> None:
+        text = risk.get("text", "")
+        key = _normalise(text)
+        rid = risk.get("id")
+
+        if rid:
+            idx = self._id_index.get(rid)
+            matched_via = "id" if idx is not None else None
+            if idx is None and key:
+                idx = self._id_text_index.get(key)
+                matched_via = "text" if idx is not None else None
+            if idx is None:
+                idx = len(self._entries)
+                self._entries.append({"text": text, "tasks": [], "grades": [], "keyed_by": "id"})
+            elif matched_via == "text":
+                self._entries[idx]["keyed_by"] = "text"
+            self._id_index[rid] = idx
+            if key:
+                self._id_text_index[key] = idx
+        else:
+            if not key:
+                return
+            idx = self._idless_text_index.get(key)
+            if idx is None:
+                idx = len(self._entries)
+                self._entries.append({"text": text, "tasks": [], "grades": [], "keyed_by": "text"})
+            self._idless_text_index[key] = idx
+
+        entry = self._entries[idx]
+        if task_id not in entry["tasks"]:
+            entry["tasks"].append(task_id)
+        entry["grades"].append(grade)
+
+    def entries(self) -> list[dict[str, Any]]:
+        return self._entries
 
 
 def _task_grading(task: Task) -> tuple[list[dict], int, bool]:
@@ -200,7 +246,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
     risks_seen = 0
     skipped: list[str] = []
     disagreements: list[dict] = []
-    seen: dict[str, dict[str, Any]] = {}
+    grouper = _RecurrenceGrouper()
 
     for task in tasks:
         risks, task_ungraded, any_graded = _task_grading(task)
@@ -213,15 +259,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
         for risk in risks:
             risks_seen += 1
             grade = risk["graded"]
-            keyed = _recurrence_key(risk)
-            if keyed:
-                kind, key = keyed
-                entry = seen.setdefault(
-                    key, {"text": risk["text"], "tasks": [], "grades": [], "keyed_by": kind}
-                )
-                if task.id not in entry["tasks"]:
-                    entry["tasks"].append(task.id)
-                entry["grades"].append(grade)
+            grouper.add(risk, task.id, grade)
             if grade is None or grade == "":
                 continue
             if grade in GRADES:
@@ -247,7 +285,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
     graded_total = sum(tallies.values())
     recurring = [
         {"text": e["text"], "tasks": e["tasks"], "grades": e["grades"], "keyed_by": e["keyed_by"]}
-        for e in sorted(seen.values(), key=lambda e: -len(e["tasks"]))
+        for e in sorted(grouper.entries(), key=lambda e: -len(e["tasks"]))
         if len(e["tasks"]) >= RECURRENCE
     ][:MAX_RECURRING]
 
