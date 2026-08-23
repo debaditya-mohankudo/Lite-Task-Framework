@@ -227,6 +227,19 @@ class TestRecurring:
         assert set(recurring[0]["tasks"]) == {a.id, b.id}
         assert recurring[0]["keyed_by"] == "id"
 
+    def test_two_freshly_assigned_ids_with_matching_text_still_recur(self, store):
+        """The real-world case: tasks__update assigns every id-less risk its own
+        id (task:f24be6e4), so two different tasks predicting the same risk text
+        end up with two DIFFERENT ids, never a shared one. Keying purely by id
+        would never group these — text has to be the fallback signal, not just
+        an alternative for legacy id-less risks."""
+        a = finished(store, "one", [{"id": "id-a", "text": "migration could lock the table", "graded": "wrong"}])
+        b = finished(store, "two", [{"id": "id-b", "text": "migration could lock the table", "graded": "wrong"}])
+        recurring = grooming_accuracy(store)["recurring_risks"]
+        assert len(recurring) == 1
+        assert set(recurring[0]["tasks"]) == {a.id, b.id}
+        assert recurring[0]["keyed_by"] == "text"
+
     def test_an_id_less_and_id_bearing_risk_do_not_merge_across_tasks(self, store):
         finished(store, "one", [{"text": "shared", "graded": "wrong"}])
         finished(store, "two", [{"id": "r1", "text": "shared", "graded": "wrong"}])
