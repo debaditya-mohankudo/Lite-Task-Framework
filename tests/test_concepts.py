@@ -18,9 +18,10 @@ import pytest
 ROOT = Path(__file__).parent.parent
 STORE = ROOT / "concept_store" / "concepts.json"
 PACKAGE = ROOT / "taskfw"
+TESTS = ROOT / "tests"
 
 #: Modules too small or too mechanical to carry an architectural concept.
-TRIVIAL = {"__init__.py", "config.py"}
+TRIVIAL = {"__init__.py", "config.py", "conftest.py"}
 
 
 @pytest.fixture(scope="module")
@@ -31,7 +32,8 @@ def store() -> dict:
 def source_modules() -> list[str]:
     return sorted(
         str(p.relative_to(ROOT))
-        for p in PACKAGE.rglob("*.py")
+        for package in (PACKAGE, TESTS)
+        for p in package.rglob("*.py")
         if p.name not in TRIVIAL and "__pycache__" not in p.parts
     )
 

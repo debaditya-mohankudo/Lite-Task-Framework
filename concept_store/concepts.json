@@ -58,6 +58,47 @@
         "task-phase-derivation"
       ]
     },
+    "backfill-recovers-without-the-original-call": {
+      "confidence": 0.8,
+      "contracts": [
+        "A commit referencing an unknown task id is counted in unknown_tasks rather than raising."
+      ],
+      "created_at": "2026-08-23T15:09:25.933164+00:00",
+      "description": "Pins that taskfw.backfill.backfill never depends on tasks__add_commit having been called — it recovers task-commit links purely by scanning real git log output for task:<id> references, is idempotent (a second run reports already_linked rather than re-linking), and dry_run never writes to the store.",
+      "evidence": [
+        "tests/test_backfill.py:TestBackfill",
+        "tests/test_backfill.py:TestTaskRefExtraction"
+      ],
+      "invariants": [
+        "backfill() must produce identical results whether or not any tasks__add_commit call ever happened for a given commit.",
+        "dry_run=True must never call store.add_commit."
+      ],
+      "last_validated": "2026-08-23T15:09:25.933176+00:00",
+      "module": "tests/test_backfill.py",
+      "name": "backfill-recovers-without-the-original-call",
+      "related": []
+    },
+    "claude-hooks-push-best-effort-not-required": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:12:45.225998+00:00",
+      "description": "Pins tasks__set_active/clear_active's push to claude-hooks' /set-active-taskid endpoint as strictly best-effort: it must post the workspace, task id, and title (empty strings on clear) with a bounded timeout, but any network failure -- connection refused, an unreachable CLAUDE_HOOKS_URL, or a raised exception from urlopen -- must never surface as a tool failure or block the local state change from succeeding.",
+      "evidence": [
+        "tests/test_mcp_tools.py:TestClaudeHooksPush"
+      ],
+      "invariants": [
+        "tasks__set_active(id) POSTs {workspace, task_id, title} to CLAUDE_HOOKS_URL + '/set-active-taskid' with timeout=m._PUSH_TIMEOUT_S.",
+        "tasks__clear_active() POSTs the same shape with task_id and title as empty strings.",
+        "Any exception raised by urlopen (ConnectionRefusedError or otherwise) is swallowed -- the tool result still reports ok=True and the local active-task state still updates.",
+        "This holds against both a mocked urlopen and the real urllib path against a genuinely unreachable port, so the real network exception class is proven caught, not just a mock's stand-in."
+      ],
+      "last_validated": "2026-08-23T15:12:45.226010+00:00",
+      "module": "tests/test_mcp_tools.py",
+      "name": "claude-hooks-push-best-effort-not-required",
+      "related": [
+        "mcp-tools-enforce-nothing-themselves"
+      ]
+    },
     "commit-backfill-recovery": {
       "confidence": 0.92,
       "contracts": [
@@ -85,6 +126,27 @@
         "typed-task-object",
         "mcp-portable-interface"
       ]
+    },
+    "concept-store-coverage-enforced-by-test": {
+      "confidence": 0.8,
+      "contracts": [
+        "source_modules() is the single definition of what 'coverage' means; TestCoverage's tests must never diverge on scope."
+      ],
+      "created_at": "2026-08-23T15:09:32.086667+00:00",
+      "description": "Whether the concept store stays refreshed after each task is answered structurally rather than by discipline: this test file fails the suite the moment a scanned source module has no concept, or a concept describes a module that no longer exists, or an evidence citation points at a missing file. source_modules() defines the scanned scope.",
+      "evidence": [
+        "tests/test_concepts.py:TestCoverage",
+        "tests/test_concepts.py:source_modules"
+      ],
+      "invariants": [
+        "Every non-trivial *.py file under the scanned scope must have at least one concept whose module field matches it exactly.",
+        "No concept's module or evidence file path may reference a deleted file.",
+        "Every concept must state at least one invariant and a non-stub description (>80 chars) — a concept with neither is a summary, not architectural knowledge."
+      ],
+      "last_validated": "2026-08-23T15:09:32.086678+00:00",
+      "module": "tests/test_concepts.py",
+      "name": "concept-store-coverage-enforced-by-test",
+      "related": []
     },
     "concept-store-name-keyed-map": {
       "confidence": 0.93,
@@ -123,6 +185,49 @@
         "mcp-portable-interface"
       ]
     },
+    "concept-store-self-contained-no-external-server": {
+      "confidence": 0.8,
+      "contracts": [
+        "concept__get always returns {found, concept} on both branches, never flattening concept fields onto the top-level result."
+      ],
+      "created_at": "2026-08-23T15:09:29.254268+00:00",
+      "description": "Pins that task-framework reads its own concept_store/concepts.json without depending on another project's MCP server, and that ConceptStore.upsert performs field-level merge semantics (list fields union rather than replace, an explicit empty list still clears, related is capped at 3 across merges, not just per payload) rather than a blind overwrite.",
+      "evidence": [
+        "tests/test_concept_tools.py:TestUpsert",
+        "tests/test_concept_tools.py:TestShapeHandling",
+        "tests/test_concept_tools.py:TestSelfContained"
+      ],
+      "invariants": [
+        "A payload naming only some list-field entries must not drop entries it didn't mention.",
+        "related merges are capped at 3 total across all merges, so a payload that looks valid alone can still be rejected if the union overflows.",
+        "Non-ASCII text is written to disk literally, never \\uXXXX-escaped, since ensure_ascii=True would rewrite every untouched entry's em-dashes on any single-entry write."
+      ],
+      "last_validated": "2026-08-23T15:09:29.254293+00:00",
+      "module": "tests/test_concept_tools.py",
+      "name": "concept-store-self-contained-no-external-server",
+      "related": []
+    },
+    "connection-pragma-enforcement-and-fk-integrity-tested": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:20.936406+00:00",
+      "description": "Pins the connection-level guarantees taskfw.db.connect.connect() must establish on every handle: WAL journaling, a positive busy_timeout, and enforced foreign keys, plus the constraint layer's idempotent-insert behavior for edges and commit captures via natural-key uniqueness.",
+      "evidence": [
+        "tests/test_foundation.py:TestConnectionPragmas",
+        "tests/test_foundation.py:TestConstraints"
+      ],
+      "invariants": [
+        "Every connection from connect() has journal_mode=wal, busy_timeout > 0, and foreign_keys=1.",
+        "Inserting a task_event referencing a nonexistent task_id raises sqlite3.IntegrityError rather than silently orphaning the row.",
+        "Re-inserting an identical task_edge or task_commit natural key raises sqlite3.IntegrityError, giving callers idempotency for free rather than requiring an application-level check-then-insert."
+      ],
+      "last_validated": "2026-08-23T15:11:20.936445+00:00",
+      "module": "tests/test_foundation.py",
+      "name": "connection-pragma-enforcement-and-fk-integrity-tested",
+      "related": [
+        "connection-pragmas-single-point"
+      ]
+    },
     "connection-pragmas-single-point": {
       "confidence": 0.93,
       "contracts": [
@@ -147,6 +252,113 @@
         "schema-single-source-additive-migration",
         "taskstore-data-access-only",
         "stderr-only-logging"
+      ]
+    },
+    "context-bundle-trim-behavior-pinned": {
+      "confidence": 0.8,
+      "contracts": [
+        "build_context's returned top-level keys on a non-truncating bundle exactly match _BUNDLE_SKELETON's keys."
+      ],
+      "created_at": "2026-08-23T15:09:34.233834+00:00",
+      "description": "Pins tasks__context's full contract beyond what build_context's own docstring states: section presence and order, that trimming always reports what it dropped (truncated, grooming_truncated, edges_truncated) so an omitted section never looks identical to an absent one, and the relevance floor that keeps related/lessons from filling with the best-available-however-weak match.",
+      "evidence": [
+        "tests/test_context.py:TestBudget",
+        "tests/test_context.py:TestRelevanceFloorHelper",
+        "tests/test_context.py:TestGroomingTrim"
+      ],
+      "invariants": [
+        "A section dropped for budget must always be named in truncated, never silently emptied.",
+        "grooming trims field-by-field (least useful first) before falling back to a whole-section drop, unlike every other section.",
+        "related_candidates and lessons_for must both reject a candidate with zero meaningful (4+ letter, non-numeric) word overlap with the task's query terms."
+      ],
+      "last_validated": "2026-08-23T15:09:34.233881+00:00",
+      "module": "tests/test_context.py",
+      "name": "context-bundle-trim-behavior-pinned",
+      "related": []
+    },
+    "db-migration-destructive-sql-impossible-by-test": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:16.565240+00:00",
+      "description": "Enforces the AdditiveOnlyMigration requirement structurally rather than by convention: taskfw.db.schema.migrate() must be observably incapable of emitting DROP, DELETE, or a non-additive ALTER TABLE, verified via sqlite3's set_trace_callback so every statement the connection actually executes is inspected, not just the statements the test author expected.",
+      "evidence": [
+        "tests/test_foundation.py:TestAdditiveOnly",
+        "tests/test_foundation.py:TestSchemaCreation"
+      ],
+      "invariants": [
+        "migrate() never emits a statement containing DROP or DELETE.",
+        "Every ALTER TABLE statement migrate() emits contains ADD COLUMN.",
+        "An orphaned/unknown column is reported in the migration result but left in the schema, never dropped.",
+        "migrate() is idempotent: a second call against an already-migrated connection creates nothing and adds nothing."
+      ],
+      "last_validated": "2026-08-23T15:11:16.565251+00:00",
+      "module": "tests/test_foundation.py",
+      "name": "db-migration-destructive-sql-impossible-by-test",
+      "related": [
+        "schema-single-source-additive-migration"
+      ]
+    },
+    "dispatcher-nudge-firing-conditions-pinned": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:01.108436+00:00",
+      "description": "Pins the exact firing/silencing conditions for each advisory nudge in taskfw.dispatcher: introspection_nudge only counts new_knowledge and legacy surprises-with-lesson fields (never bare surprises or missed_surprises), and goes permanently silent once any memory has been cited from the task, regardless of report shape. Several nudges (ungroomed_progress_nudge, stale_memory_nudge on contradicted/disputed) are deliberately stateless and re-fire on every call rather than tracking a shown-once flag.",
+      "evidence": [
+        "tests/test_dispatcher.py:TestIntrospectionNudge",
+        "tests/test_dispatcher.py:TestStaleMemoryNudge",
+        "tests/test_dispatcher.py:TestUngroomedProgressNudge"
+      ],
+      "invariants": [
+        "introspection_nudge fires only when new_knowledge or surprises[].lesson is present, never on missed_surprises or lesson-less surprises.",
+        "introspection_nudge returns None permanently once the task has any cited memory (learned_from), independent of the report passed in.",
+        "stale_memory_nudge fires only on contradicted/disputed standing, never on unverified, confirmed, or superseded.",
+        "ungroomed_progress_nudge and finish_reminder_nudge re-fire on every call while their condition still holds -- they hold no internal counter."
+      ],
+      "last_validated": "2026-08-23T15:11:01.108586+00:00",
+      "module": "tests/test_dispatcher.py",
+      "name": "dispatcher-nudge-firing-conditions-pinned",
+      "related": [
+        "advisory-nudge-policies",
+        "nudge-dispatch-chassis"
+      ]
+    },
+    "dispatcher-submodule-reexport-guard": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:08.374085+00:00",
+      "description": "Guards the risk flagged when dispatcher.py was split into chassis/phase/nudges submodules: a name defined in one of those submodules but forgotten from taskfw.dispatcher.__init__'s __all__ becomes reachable via the submodule but invisible through the public taskfw.dispatcher import, a silent two-tier API that only a structural test would notice.",
+      "evidence": [
+        "tests/test_dispatcher.py:TestReexportCompleteness"
+      ],
+      "invariants": [
+        "Every public (non-underscore-prefixed) name actually defined in chassis, phase, or nudges must appear in taskfw.dispatcher.__all__.",
+        "Membership is checked by comparing inspect.getmodule(obj) to the defining submodule, so re-imported names from elsewhere don't produce false positives."
+      ],
+      "last_validated": "2026-08-23T15:11:08.374098+00:00",
+      "module": "tests/test_dispatcher.py",
+      "name": "dispatcher-submodule-reexport-guard",
+      "related": [
+        "nudge-dispatch-chassis"
+      ]
+    },
+    "drift-hook-call-count-plumbing-pinned": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:12.761512+00:00",
+      "description": "Pins the stdin-to-gating plumbing of taskfw/drift_hook.py separately from the throttling logic itself (which belongs to dispatcher.drift_reflection_nudge and is tested in test_dispatcher.py). build_nudge must pass call_count through to the dispatcher unchanged, and main() must fail open -- treating a missing or non-int _taskfw_drift_call_count field, or fully malformed stdin JSON, as no counter at all rather than erroring.",
+      "evidence": [
+        "tests/test_drift_hook.py:TestBuildNudge",
+        "tests/test_drift_hook.py:TestMainStdinParsing"
+      ],
+      "invariants": [
+        "build_nudge(store, scope, call_count) forwards call_count to dispatcher.drift_reflection_nudge without transformation.",
+        "A missing '_taskfw_drift_call_count' key, a non-int value for it, or unparseable stdin JSON must all be treated as call_count=None (fires every call) and main() must still return 0, never raise."
+      ],
+      "last_validated": "2026-08-23T15:11:12.761554+00:00",
+      "module": "tests/test_drift_hook.py",
+      "name": "drift-hook-call-count-plumbing-pinned",
+      "related": [
+        "drift-hook-posttooluse-entrypoint"
       ]
     },
     "drift-hook-posttooluse-entrypoint": {
@@ -225,6 +437,51 @@
         "typed-task-object"
       ]
     },
+    "grooming-accuracy-derived-not-self-reported": {
+      "confidence": 0.8,
+      "contracts": [
+        "grooming_accuracy(store) and loop_debt(store) must agree on skipped_introspection count and ungraded risk count for the same tasks (task:07f9270c)."
+      ],
+      "created_at": "2026-08-23T15:09:24.087156+00:00",
+      "description": "Pins two properties of taskfw.accuracy.grooming_accuracy: risk tallies are always derived from per-risk `graded` fields rather than trusted from an introspection report's self-reported counts, and a finished task with ungraded risks is surfaced as a skipped-introspection signal distinct from a task with zero risks. Both are silent-failure classes a passing implementation could otherwise mask.",
+      "evidence": [
+        "tests/test_accuracy.py:TestDerivedNotReported",
+        "tests/test_accuracy.py:TestSkippedIntrospection"
+      ],
+      "invariants": [
+        "Tallies must be recomputed from grooming.risks[].graded on every call, never read from introspection[].grooming_accuracy.",
+        "A finished task with any ungraded risk appears in skipped_introspection; an open task with ungraded risks never does."
+      ],
+      "last_validated": "2026-08-23T15:09:24.087199+00:00",
+      "module": "tests/test_accuracy.py",
+      "name": "grooming-accuracy-derived-not-self-reported",
+      "related": [
+        "grooming-accuracy-aggregate"
+      ]
+    },
+    "lifecycle-rules-pure-function-testing": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:25.945420+00:00",
+      "description": "Protects taskfw.lifecycle's rules being pure functions over plain values (statuses, Task instances) with no store or session dependency -- the test module needs no fixtures at all, which is itself the property: the moment a rule needed a session or host, it would stop being importable by every caller (MCP tools, hooks, migration) uniformly.",
+      "evidence": [
+        "tests/test_lifecycle.py:TestTransitions",
+        "tests/test_lifecycle.py:TestCheckSave",
+        "tests/test_lifecycle.py:TestCheckLinkRel"
+      ],
+      "invariants": [
+        "check_transition, check_parent, check_type, check_status, check_link_rel, and check_save take only plain values/Task objects and a Decision return type -- no store, connection, or session argument.",
+        "Same-status transitions are always allowed even from a terminal state, and this precedence (same-status beats terminal-lock) is checked ahead of the terminal rule.",
+        "check_save evaluates type before parent before transition, so the first failing rule is always the one reported.",
+        "parent_of is deliberately excluded from the closed relation set enforced by check_link_rel, since it is redundant with Task.parent."
+      ],
+      "last_validated": "2026-08-23T15:11:25.945430+00:00",
+      "module": "tests/test_lifecycle.py",
+      "name": "lifecycle-rules-pure-function-testing",
+      "related": [
+        "lifecycle-single-rule-implementation"
+      ]
+    },
     "lifecycle-single-rule-implementation": {
       "confidence": 0.96,
       "contracts": [
@@ -260,6 +517,50 @@
         "mcp-portable-interface",
         "taskstore-data-access-only",
         "typed-task-object"
+      ]
+    },
+    "log-sink-thread-safety-and-fail-open-tested": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:37.401420+00:00",
+      "description": "Regression coverage for task:7fff42f4: SQLiteHandler must never let a broken or cross-thread connection break the call that triggered the log write. A single process-wide sqlite3 connection reused across an MCP server's worker threads raises ProgrammingError from a thread that did not create it; SQLiteHandler.emit's bare except previously swallowed that silently for the rest of the process, so the fix (threading.local, one connection per thread) makes the reuse unrepresentable instead of catching it after the fact. Also pins JsonlHandler's truncate-on-construct behavior and that the taskfw logger never attaches a stdout stream handler, since an MCP server speaks JSON-RPC on stdout and a stray log write would corrupt it.",
+      "evidence": [
+        "tests/test_logging.py:TestSQLiteSink",
+        "tests/test_logging.py:TestJsonlSink",
+        "tests/test_logging.py:TestLogDestination"
+      ],
+      "invariants": [
+        "SQLiteHandler.emit() never raises, even against a broken connection object or from a second thread -- it must keep working via one connection per thread (threading.local), not merely swallow the failure.",
+        "No handler on the 'taskfw' logger ever has stream is sys.stdout.",
+        "JsonlHandler truncates its target file at construction time, and a log call landing in the module-level get_logger() actually writes to TASKFW_LOG_JSONL during test runs.",
+        "tasks__logs(logger=...) matching requires the full 'taskfw.' prefix taskfw.log.get_logger() always applies -- a caller-supplied name missing that prefix matches nothing."
+      ],
+      "last_validated": "2026-08-23T15:11:37.401464+00:00",
+      "module": "tests/test_logging.py",
+      "name": "log-sink-thread-safety-and-fail-open-tested",
+      "related": [
+        "stderr-only-logging"
+      ]
+    },
+    "logging-one-line-explainability-tested": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:30.297573+00:00",
+      "description": "Pins the debuggability contract that a rule denial or a store state change must be explicable from a single log line, including the ids and states involved -- asserted directly rather than assumed, because logging that is not tested rots invisibly (nothing fails when a log line silently loses its rule name or its id).",
+      "evidence": [
+        "tests/test_logging.py:TestRuleLogging",
+        "tests/test_logging.py:TestStoreLogging"
+      ],
+      "invariants": [
+        "A lifecycle DENY logs at INFO with the rule name, a human reason, and the states/ids involved; ALLOW is DEBUG-only and invisible at INFO.",
+        "TaskStore logs CREATE with the new id, STATUS with both old and new status, link/unlink with a removed=N count, and a duplicate link as 'already existed' -- all distinguishable by substring in caplog.text.",
+        "A plain field update (no status change) logs at DEBUG only, never emitting CREATE or STATUS at INFO."
+      ],
+      "last_validated": "2026-08-23T15:11:30.297611+00:00",
+      "module": "tests/test_logging.py",
+      "name": "logging-one-line-explainability-tested",
+      "related": [
+        "stderr-only-logging"
       ]
     },
     "loop-memory-derived-standing": {
@@ -373,6 +674,144 @@
         "nudge-dispatch-chassis"
       ]
     },
+    "mcp-tools-enforce-nothing-themselves": {
+      "confidence": 0.8,
+      "contracts": [
+        "Tools call taskfw.lifecycle for every rule check rather than re-implementing it (task-framework's one-rule-one-place constraint)."
+      ],
+      "created_at": "2026-08-23T15:12:40.112348+00:00",
+      "description": "Protects the property that MCP tools carry no rule logic of their own -- every check a tool result reflects (transition validity, parent rules, relation closed-set) is delegated to taskfw.lifecycle, so a tool cannot silently enforce a different rule set than a hook or the migration path does. Tools are exercised by calling the decorated functions directly (MCPServer's decorator returns them unchanged), which reaches the same code path a real host transport does without standing up JSON-RPC.",
+      "evidence": [
+        "tests/test_mcp_tools.py:TestDriftReflectionWiring",
+        "tests/test_mcp_tools.py:TestCreate"
+      ],
+      "invariants": [
+        "Every rule-shaped refusal returned by a tasks__ tool traces back to a taskfw.lifecycle Decision, not to logic duplicated in mcp_server.py.",
+        "Calling a registered tool function directly (bypassing any transport) exercises the identical code path a real MCP host would invoke through the decorator.",
+        "drift_reflection_nudge never appears as a key on any mcp_server tool result -- its trigger lives solely in taskfw/drift_hook.py's separate PostToolUse hook, so the two paths cannot silently coexist and disagree."
+      ],
+      "last_validated": "2026-08-23T15:12:40.112377+00:00",
+      "module": "tests/test_mcp_tools.py",
+      "name": "mcp-tools-enforce-nothing-themselves",
+      "related": [
+        "mcp-portable-interface",
+        "lifecycle-single-rule-implementation"
+      ]
+    },
+    "memory-standing-and-recall-tests-pinned": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:42.270721+00:00",
+      "description": "Protects two properties of taskfw.memory: standing (unverified/confirmed/contradicted/disputed) is always derived from confirmed_by/contradicted_by links at read time, never stored or self-asserted, matching the same derive-don't-trust discipline taskfw.accuracy enforces elsewhere. A disputed memory (both a confirming and a contradicting link) is reported as disputed rather than silently resolved one way, since the store has no basis to pick a side.",
+      "evidence": [
+        "tests/test_memory.py:TestStanding",
+        "tests/test_memory.py:TestRecord"
+      ],
+      "invariants": [
+        "MemoryStore.get()/recall() compute standing solely from memory_links rows at call time; nothing in the memories table stores a standing value.",
+        "A memory with both confirmed_by and contradicted_by links reports standing='disputed', never silently collapsing to one side.",
+        "Linking the same (slug, task, relation) twice is a no-op (returns False the second time) and does not duplicate the id in confirmed_by/contradicted_by.",
+        "record() rejects non-kebab-case slugs, unknown kinds, and text shorter than MIN_TEXT (a label masquerading as a lesson) via Rejected."
+      ],
+      "last_validated": "2026-08-23T15:11:42.270734+00:00",
+      "module": "tests/test_memory.py",
+      "name": "memory-standing-and-recall-tests-pinned",
+      "related": [
+        "loop-memory-derived-standing"
+      ]
+    },
+    "memory-supersede-hides-by-default-tested": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:46.099556+00:00",
+      "description": "Pins that a superseded memory leaves recall() by default but the row itself survives and names its replacement -- stale knowledge that keeps surfacing reads as current and is worse than none, so supersede() must actually hide it from the default recall path while still being reachable via include_superseded=True, and forget() must cascade to delete its links so no standing points at a memory that no longer exists.",
+      "evidence": [
+        "tests/test_memory.py:TestSupersede",
+        "tests/test_memory.py:TestForget"
+      ],
+      "invariants": [
+        "memories.recall() excludes superseded memories unless include_superseded=True is passed explicitly.",
+        "supersede(old, new) leaves the old row in place with superseded_by=new and standing='superseded'; it never deletes the row.",
+        "A memory cannot supersede itself, and superseding by an unknown slug is rejected.",
+        "forget(slug) deletes memory_links rows referencing that slug along with the memory row -- no orphaned link survives the memory it points at."
+      ],
+      "last_validated": "2026-08-23T15:11:46.099597+00:00",
+      "module": "tests/test_memory.py",
+      "name": "memory-supersede-hides-by-default-tested",
+      "related": [
+        "loop-memory-derived-standing"
+      ]
+    },
+    "methodology-docs-tool-references-verified-by-test": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:52.144576+00:00",
+      "description": "Guards against the docs describing an API that no longer exists -- the most likely and most silent failure mode for prose documentation. Every tasks__/task_memory__ token found in docs/methodology/*.md is checked against the tool names actually registered on taskfw.mcp_server, and the docs are further checked for host-prefixed tool names or a session_id concept, both signs the prose still describes the prior system this framework replaced.",
+      "evidence": [
+        "tests/test_methodology_docs.py:TestToolReferences",
+        "tests/test_methodology_docs.py:TestCrossReferences",
+        "tests/test_methodology_docs.py:TestSimplifiedModel"
+      ],
+      "invariants": [
+        "Every tasks__ or task_memory__ token appearing in any methodology doc must name a tool actually present on taskfw.mcp_server (registered_tools() reads dir(m), never a restated list).",
+        "No methodology doc contains 'mcp__claude-hooks__' (a host-prefixed tool name) or 'session_id' (a concept this framework has no notion of).",
+        "Every markdown-to-markdown link within docs/methodology resolves to a file that exists, and README.md indexes every other document in the directory.",
+        "The docs explicitly state both 'pull' and 'inject' somewhere in README.md, since a reader coming from an injection-based system needs the pull-not-push distinction stated, not implied."
+      ],
+      "last_validated": "2026-08-23T15:11:52.144619+00:00",
+      "module": "tests/test_methodology_docs.py",
+      "name": "methodology-docs-tool-references-verified-by-test",
+      "related": [
+        "pull-context-bundle",
+        "mcp-portable-interface"
+      ]
+    },
+    "migrate-hooks-idempotency-regression-pinned": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:57.560153+00:00",
+      "description": "Every assertion in this file corresponds to a claim the claude-hooks-to-taskfw migration makes about itself in prose, run rather than trusted. The idempotency test exists because that prose was wrong on the first live run: tasks upsert by id and edges/commits have natural keys, but task_events has an autoincrement id with nothing to collide against, so a second run silently duplicated 4072 event rows in a real database -- nothing caught it except actually running the migration twice and counting rows.",
+      "evidence": [
+        "tests/test_migrate_hooks.py:TestIdempotency",
+        "tests/test_migrate_hooks.py:TestAccounting",
+        "tests/test_migrate_hooks.py:TestOrdering"
+      ],
+      "invariants": [
+        "Running taskfw.migrate_hooks.migrate() two or three times against the same source produces identical table row counts each time (idempotency), including for task_events which has no natural key.",
+        "migrated + empty + orphaned counts must sum to the total source rows for events, edges, and commits -- a dropped row nothing reports is indistinguishable from one that never existed.",
+        "A parent cycle in the source is reported via report.unplaceable rather than silently reparented or dropped, and produces zero migrated tasks.",
+        "dry_run=True computes and reports counts without writing any row to the destination tables."
+      ],
+      "last_validated": "2026-08-23T15:11:57.560167+00:00",
+      "module": "tests/test_migrate_hooks.py",
+      "name": "migrate-hooks-idempotency-regression-pinned",
+      "related": [
+        "migration-writes-through-the-store",
+        "backfill-recovers-without-the-original-call"
+      ]
+    },
+    "migrate-hooks-type-collapse-preserves-relationships": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:12:03.044040+00:00",
+      "description": "Pins how the migration collapses claude-hooks' five issue types (epic/story/bug/subtask/feedback) and a 'review' status down into taskfw's two-type, four-status model without losing information: the dropped label is preserved as a data tag rather than discarded outright, and a structurally impossible shape (an epic with a parent) is demoted to a task while its real parent relationship is kept, never orphaned.",
+      "evidence": [
+        "tests/test_migrate_hooks.py:TestTypeCollapse",
+        "tests/test_migrate_hooks.py:TestContent"
+      ],
+      "invariants": [
+        "story/bug/subtask/feedback all become type='task' in taskfw, with the original type name preserved inside the task's data as a tag (e.g. 'was-story').",
+        "An epic that had a parent in the source is demoted to type='task' with its parent preserved and 'was-epic' recorded in data -- the relationship is never dropped to satisfy the epic-cannot-have-parent rule.",
+        "status='review' becomes 'open' with 'was-review' recorded in data.",
+        "Body checklist markup ('- [x]'/'- [ ]') is parsed into typed ResolutionItem entries and the raw body is also preserved verbatim in notes."
+      ],
+      "last_validated": "2026-08-23T15:12:03.044082+00:00",
+      "module": "tests/test_migrate_hooks.py",
+      "name": "migrate-hooks-type-collapse-preserves-relationships",
+      "related": [
+        "lifecycle-single-rule-implementation"
+      ]
+    },
     "migration-writes-through-the-store": {
       "confidence": 0.8,
       "contracts": [],
@@ -397,6 +836,28 @@
         "taskstore-data-access-only",
         "schema-single-source-additive-migration",
         "typed-task-object"
+      ]
+    },
+    "model-provenance-stamp-enforced-by-test": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:12:08.438711+00:00",
+      "description": "Enforces the @ModelProvenance stamps every models/*.sysml package carries: each declares modelledPaths (the code it describes) and derivedFromCommit (the commit it was last read against), and this test checks both against git so a failure means the model has not been re-read since the modelled code moved -- not that the model is wrong. Bumping derivedFromCommit without re-reading the package would convert a useful drift signal into a lie, which the test's own docstring calls out as worse than having no stamp.",
+      "evidence": [
+        "tests/test_model_provenance.py:test_stamp_matches_last_commit_touching_modelled_code",
+        "tests/test_model_provenance.py:test_modelled_paths_still_resolve"
+      ],
+      "invariants": [
+        "Every models/*.sysml file has an @ModelProvenance stamp with a derivedFromCommit of at least 7 hex characters and a non-empty modelledPaths list.",
+        "Every path in modelledPaths must exist in the working tree -- a cited path that was deleted is drift the commit-comparison check alone cannot catch, since git log over a deleted path still resolves and may match the stamp.",
+        "derivedFromCommit must equal (or be an ancestor consistent with) the last commit that touched any of modelledPaths, per `git log -1 -- <paths>`; a mismatch means the model is stale relative to the code, not necessarily wrong.",
+        "Checks skip gracefully (not fail) when not in a git checkout, when git log returns nothing for the paths, or when the stamped commit isn't present in a shallow clone's history."
+      ],
+      "last_validated": "2026-08-23T15:12:08.438725+00:00",
+      "module": "tests/test_model_provenance.py",
+      "name": "model-provenance-stamp-enforced-by-test",
+      "related": [
+        "sysml-doc-only-model-enforcement"
       ]
     },
     "nudge-dispatch-chassis": {
@@ -520,6 +981,30 @@
         "taskstore-data-access-only"
       ]
     },
+    "skills-tool-reference-and-host-neutrality-tested": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:12:15.083880+00:00",
+      "description": "Guards the one mechanical failure that has already happened once: the .claude/skills wrappers were carried over verbatim from a prior system and referenced roughly a dozen tools that do not exist here, a session_id concept the framework lacks, and a host-prefixed mcp__ namespace -- nothing caught it until a person read the files. This test makes that class of drift fail the suite instead, the same bargain test_concepts.py makes for concept coverage. It does not check whether a skill's prose still agrees with its methodology doc or with other skills -- that judgment call belongs to /task-skills-audit.",
+      "evidence": [
+        "tests/test_skills.py:TestToolReferences",
+        "tests/test_skills.py:TestFrontmatter",
+        "tests/test_skills.py:TestCoverage"
+      ],
+      "invariants": [
+        "Every tasks__/task_memory__/concept__ token referenced in a skill.md must name a tool actually registered on taskfw.mcp_server.",
+        "No skill other than task-skills-audit (which must exist exactly once, as the sole enumerator of these prohibitions) may contain an mcp__ host-prefixed tool name or the string 'session_id'.",
+        "Every skill's frontmatter carries name/description/user-invocable/updated/doc, its name matches its directory, its doc: field points at a methodology file that exists, and its frontmatter never names an external checkout (e.g. 'claude-hooks').",
+        "Every methodology stage document (0*.md) is referenced by at least one skill's doc: field, and tasks__grooming_accuracy -- the one cross-task tool with no natural discovery path -- is mentioned by at least one skill."
+      ],
+      "last_validated": "2026-08-23T15:12:15.083901+00:00",
+      "module": "tests/test_skills.py",
+      "name": "skills-tool-reference-and-host-neutrality-tested",
+      "related": [
+        "mcp-portable-interface",
+        "methodology-docs-tool-references-verified-by-test"
+      ]
+    },
     "stderr-only-logging": {
       "confidence": 0.92,
       "contracts": [
@@ -564,14 +1049,15 @@
       "description": "SysML v2 structural models in this repo (state defs, calc defs, interface defs/port defs) are transcribed by hand from Python source rather than parsed/bound to it. They are kept honest not by execution but by a paired pytest class that imports the real Python source of truth and string-matches its identifiers/literals against the .sysml file text.",
       "evidence": [
         "models/mcp_interface.sysml",
-        "tests/test_task.py:TestMcpInterfaceMatchesCode"
+        "tests/test_task.py:TestMcpInterfaceMatchesCode",
+        "tests/test_sysml.py:TestMcpInterfaceMatchesCode"
       ],
       "invariants": [
         "A calc def or state def with no matching TestXMatchesCode test is an unenforced restatement of the same claim the prose already made — not acceptable per this task's motivation.",
         "Test risk text and grading must stay byte-identical to grooming's `risks` entries for tasks__grooming_accuracy recurrence tracking to work."
       ],
-      "last_validated": "2026-08-17T14:02:54.919350+00:00",
-      "module": "models/task_lifecycle.sysml",
+      "last_validated": "2026-08-23T15:07:26.197659+00:00",
+      "module": "tests/test_sysml.py",
       "name": "sysml-doc-only-model-enforcement",
       "related": [
         "mcp-portable-interface",
@@ -617,6 +1103,31 @@
       "related": [
         "advisory-nudge-policies",
         "nudge-dispatch-chassis"
+      ]
+    },
+    "task-serialization-contracts-pinned": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:12:30.859036+00:00",
+      "description": "Pins taskfw.task.Task's own serialization and derived-field rules directly, rather than only by proxy through TaskStore's save/load and search tests (which check outcomes like 'a search matched' rather than Task's documented rules themselves). Covers search_text's flattening rules, to_json/from_json round-tripping, from_dict's tolerance of unknown and missing keys, and progress as a purely derived field -- pure Task construction needing no store, the same design point test_lifecycle.py protects for lifecycle rules.",
+      "evidence": [
+        "tests/test_task.py:TestSearchText",
+        "tests/test_task.py:TestJSONRoundTrip",
+        "tests/test_task.py:TestProgress"
+      ],
+      "invariants": [
+        "search_text() concatenates title, motivation, notes, tags, files, and every resolution item's text (done or not) -- falsy fields are omitted entirely rather than appearing as blank segments.",
+        "Task.from_dict silently drops unknown keys (forward compatibility with a newer schema) and defaults every missing key (status='open', type='task', resolution=[]) rather than raising.",
+        "from_dict converts raw resolution dicts to ResolutionItem instances but passes through already-constructed ResolutionItem objects unchanged.",
+        "to_json()/from_json() round-trips every field losslessly, and from_json(None) or from_json('{}') both produce the same default Task as a bare constructor call.",
+        "Task.progress is always (done_count, total_count) computed live from resolution -- never a stored field that could drift from it."
+      ],
+      "last_validated": "2026-08-23T15:12:30.859055+00:00",
+      "module": "tests/test_task.py",
+      "name": "task-serialization-contracts-pinned",
+      "related": [
+        "typed-task-object",
+        "taskstore-round-trip-and-relational-guarantees-tested"
       ]
     },
     "tasks-table-projection-contract": {
@@ -693,6 +1204,71 @@
         "typed-task-object"
       ]
     },
+    "taskstore-round-trip-and-relational-guarantees-tested": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:12:20.482342+00:00",
+      "description": "Protects TaskStore's round-trip fidelity (every Task field, including nested ResolutionItem and grooming dict content, survives save/get unchanged) and its relational guarantees for edges: link() is idempotent, edges() reports both incoming and outgoing directions, and unlink() -- added specifically because its absence in the prior system left stale edges with no way to clear -- removes either a specific relation or all relations between two tasks and reports the exact count removed.",
+      "evidence": [
+        "tests/test_store.py:TestRoundTrip",
+        "tests/test_store.py:TestEdges",
+        "tests/test_store.py:TestProgress"
+      ],
+      "invariants": [
+        "save() followed by get() returns a Task equal in every field to what was saved, including resolution item done-state and nested grooming/tags/files structures.",
+        "save() is an upsert keyed on id -- saving the same id twice updates the one row rather than creating a second.",
+        "link(a, b, rel) returns True on first creation and False on a no-op repeat; edges(a)['outgoing'] and edges(b)['incoming'] both reflect the same link.",
+        "unlink(a, b, rel) removes only that relation and returns the count removed; unlink(a, b) with no rel removes all relations between the pair.",
+        "Task.progress is always computed from resolution at access time -- mutating a fetched Task's resolution list changes .progress with no explicit resync step."
+      ],
+      "last_validated": "2026-08-23T15:12:20.482384+00:00",
+      "module": "tests/test_store.py",
+      "name": "taskstore-round-trip-and-relational-guarantees-tested",
+      "related": [
+        "taskstore-data-access-only",
+        "typed-task-object"
+      ]
+    },
+    "taskstore-search-degrades-and-ranks-by-tag": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:12:25.366282+00:00",
+      "description": "Pins TaskStore.search()'s two non-obvious properties: an invalid FTS5 query (e.g. an unbalanced quote, which is a plausible user typo) must degrade to a usable fallback rather than raising a 500-class error, and a match against a task's tags must rank above a match found only in body text even when title text is otherwise equal, without breaking ranking for queries that don't touch tags at all.",
+      "evidence": [
+        "tests/test_store.py:TestSearch"
+      ],
+      "invariants": [
+        "A malformed FTS5 query string never raises out of search() -- it falls back to a broader match strategy instead.",
+        "search() results reflect the current row state, not a stale index -- updating a task's title makes old-title queries stop matching and new-title queries start matching immediately.",
+        "When a query term matches one task's tags and another task's body only, the tag match ranks first, but this weighting must not change relative ranking for queries that match neither task's tags."
+      ],
+      "last_validated": "2026-08-23T15:12:25.366292+00:00",
+      "module": "tests/test_store.py",
+      "name": "taskstore-search-degrades-and-ranks-by-tag",
+      "related": [
+        "taskstore-data-access-only"
+      ]
+    },
+    "tool-called-refusal-vs-exception-semantics": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-08-23T15:11:05.130058+00:00",
+      "description": "Pins tool_called's exact gating rule: its post hook and its OK/REFUSE/ERROR log line are both keyed on the absence of an 'error' key in call.result, never on a truthy 'ok' key or on the result being a dict at all. This lets read tools (no 'ok' key) and list tools (bare list, no key to write a marker into) compose uniformly with write tools under the same hook.",
+      "evidence": [
+        "tests/test_dispatcher.py:TestToolCalled"
+      ],
+      "invariants": [
+        "post runs exactly when call.result is a dict without an 'error' key; it never runs on a dict with 'error', a non-dict result, or when the wrapped block raises.",
+        "Logging (OK/REFUSE rule=/ERROR) is unconditional and independent of whether post/pre hooks are supplied -- it must fire even with zero hooks configured.",
+        "A raised exception inside the with-block always re-raises after being logged; post is never invoked in that case."
+      ],
+      "last_validated": "2026-08-23T15:11:05.130076+00:00",
+      "module": "tests/test_dispatcher.py",
+      "name": "tool-called-refusal-vs-exception-semantics",
+      "related": [
+        "mcp-portable-interface"
+      ]
+    },
     "typed-task-object": {
       "confidence": 0.95,
       "contracts": [
@@ -737,6 +1313,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-23T13:12:28.871916+00:00"
+    "updated_at": "2026-08-23T15:12:45.226051+00:00"
   }
 }
