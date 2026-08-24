@@ -114,8 +114,9 @@ package Requirements {
     satisfy requirement TaskStateMachineRequirement by system.rules;
 
     requirement def ParentRuleRequirement {
-        doc /* Source: taskfw/lifecycle.py:check_parent. An epic has no parent;
-             * a task cannot be its own parent. That is the entire hierarchy.
+        doc /* Source: taskfw/lifecycle.py:check_parent (an epic has no
+             * parent) and check_save (a task cannot be its own parent).
+             * That is the entire hierarchy.
              *
              * Recorded as a requirement because of how little it takes to
              * satisfy. A Jira-style set of five issue types needs a matrix of

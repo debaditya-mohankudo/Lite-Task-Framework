@@ -1,5 +1,7 @@
 """
-Enforces the @ModelProvenance stamps in models/*.sysml.
+Enforces the @ModelProvenance stamps in models/*.sysml, and separately
+checks that any taskfw/*.py or tests/*.py path named in doc-comment prose
+still exists.
 
 The SysML model is prose about code, and prose rots silently: a requirement
 goes on citing a file long after that file's behaviour changed, and nothing
@@ -15,6 +17,13 @@ having no stamp at all.
 
 See models/foundation.sysml::ModelProvenance for the rationale behind
 stamping the modelled-code commit rather than the .sysml file's own commit.
+
+modelledPaths is a package's DECLARED citations. A doc comment can also name
+a file in running prose without declaring it there — task:4e2d5f28 found
+two such citations (taskfw/dispatcher.py, tests/test_models.py) that had
+gone stale after a split and a rename, caught only by a human re-reading the
+package by hand. test_prose_cited_paths_still_resolve below is the
+mechanical version of that same check.
 """
 
 from __future__ import annotations
@@ -35,6 +44,11 @@ _STAMP_RE = re.compile(r"@ModelProvenance\s*\{(.*?)\}", re.DOTALL)
 _COMMIT_RE = re.compile(r"derivedFromCommit\s*=\s*\"([0-9a-fA-F]+)\"")
 _PATHS_RE = re.compile(r"modelledPaths\s*=\s*\((.*?)\)", re.DOTALL)
 _QUOTED_RE = re.compile(r"\"([^\"]+)\"")
+
+# Doc-comment prose, not the @ModelProvenance block above: a citation here is
+# freeform and never validated against modelledPaths, so it needs its own check.
+_DOC_COMMENT_RE = re.compile(r"doc\s*/\*(.*?)\*/", re.DOTALL)
+_PROSE_PATH_RE = re.compile(r"\b(?:taskfw|tests)/[A-Za-z0-9_/]+\.py\b")
 
 
 def _git(*args: str) -> str | None:
@@ -81,6 +95,19 @@ def _model_files() -> list[Path]:
     return sorted(MODEL_DIR.glob("*.sysml"))
 
 
+def _prose_cited_paths(path: Path) -> set[str]:
+    """Every taskfw/*.py or tests/*.py-shaped token in this file's doc comments.
+
+    Scoped to text inside doc /* ... */ blocks, not the whole file, so this
+    never re-checks what modelledPaths already declares — the two are
+    distinct citation mechanisms, and conflating them would just duplicate
+    test_modelled_paths_still_resolve under a different name.
+    """
+    text = path.read_text()
+    doc_text = "\n".join(m.group(1) for m in _DOC_COMMENT_RE.finditer(text))
+    return set(_PROSE_PATH_RE.findall(doc_text))
+
+
 def test_model_dir_is_not_empty():
     """Guards the parametrized tests below: an empty glob passes vacuously."""
     assert _model_files(), f"no .sysml files found under {MODEL_DIR}"
@@ -107,6 +134,26 @@ def test_modelled_paths_still_resolve(model_file: Path):
         f"{', '.join(missing)}.\n"
         "Either the model is describing code that was renamed or removed, or "
         "the path list is stale. Fix the model, then update modelledPaths."
+    )
+
+
+@pytest.mark.parametrize("model_file", _model_files(), ids=lambda p: p.name)
+def test_prose_cited_paths_still_resolve(model_file: Path):
+    """
+    task:4e2d5f28 — a doc comment can name a taskfw/*.py or tests/*.py file in
+    running prose without ever declaring it in modelledPaths, so
+    test_modelled_paths_still_resolve never sees it. A file split (e.g.
+    taskfw/dispatcher.py into taskfw/dispatcher/) or renamed outright (e.g.
+    tests/test_models.py to tests/test_sysml.py) leaves that prose stale with
+    nothing to catch it until someone reads the package by hand.
+    """
+    missing = sorted(p for p in _prose_cited_paths(model_file) if not (REPO_ROOT / p).exists())
+    assert not missing, (
+        f"{model_file.name} doc comments cite paths that no longer exist: "
+        f"{', '.join(missing)}.\n"
+        "The file was renamed or removed and the prose needs updating to "
+        "match — or, if the text was never meant as a citation, reword it "
+        "so it doesn't read like a real path."
     )
 
 
