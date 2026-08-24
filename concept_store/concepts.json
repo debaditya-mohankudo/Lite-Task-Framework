@@ -1,5 +1,36 @@
 {
   "concepts": {
+    "active-task-pointer-lifecycle": {
+      "confidence": 0.9,
+      "contracts": [
+        "tasks__check_item(task_id, index, done=True) auto-activates task_id for the current scope as a direct side effect when done=True -- not via the _tool(hook=...) mechanism, but inline in the tool body via _auto_activate_on_checklist_progress. As of task:f5ace343 this is unconditional: active status is a single ephemeral pointer, not a stack, so checking an item on any task simply replaces whatever was active (no more lifecycle.check_active_switch confirm gate, no more 'active_task_notice' when a different task was active -- that gate and the check_active_switch function it called were both removed along with the stack). set_active is a no-op when task_id is already active. done=False (unchecking) never activates anything.",
+        "tasks__set_active/tasks__active/tasks__clear_active response shapes carry no stack_depth or stack list (task:f5ace343) -- {'ok', 'active', 'scope'} / {'active', 'scope'} / {'ok', 'active': null, 'scope'} respectively, mirroring the single in-memory pointer store.set_active/get_active/clear_active now hold.",
+        "tasks__create clears any active task for its scope on the way out (task:74bf3542) -- starting a new task is a clean break from whatever was active before it, not an implicit continuation.",
+        "tasks__set_active/tasks__clear_active best-effort POST {workspace, task_id, title} to claude-hooks' running server via _push_active_task (task:6906557f) -- a courtesy push, not a dependency; every failure mode (connection refused, timeout, DNS, non-2xx) is swallowed and logged at debug, and the tool's own return value/error semantics are unaffected either way."
+      ],
+      "created_at": "2026-08-24T12:03:06.202765+00:00",
+      "description": "Pulled out of [[mcp-portable-interface]]. The active-task pointer is a single in-memory value per scope (task:f5ace343) -- not a stack, not persisted, gone on server restart. tasks__check_item auto-activates unconditionally on done=True, tasks__create clears whatever was active on the way out, and claude-hooks receives a best-effort courtesy push whose failure never affects a tool's own result.",
+      "evidence": [
+        "taskfw/mcp_server.py:_auto_activate_on_checklist_progress, tasks__check_item",
+        "taskfw/mcp_server.py:_push_active_task, tasks__set_active, tasks__active, tasks__clear_active",
+        "taskfw/mcp_server.py:tasks__create",
+        "tests/test_mcp_tools.py::TestChecklist::test_checking_first_item_activates_the_task_when_nothing_else_is_active",
+        "tests/test_mcp_tools.py::TestChecklist::test_checking_an_item_on_a_different_task_does_not_silently_switch",
+        "tests/test_mcp_tools.py::TestClaudeHooksPush"
+      ],
+      "invariants": [
+        "_push_active_task reads CLAUDE_HOOKS_URL from os.environ on every call rather than caching it at import time, specifically so tests can redirect it via monkeypatch.setenv without needing to reload the module -- a module-level constant computed once at import would not observe a later monkeypatch.setenv (task:6906557f).",
+        "Active status is now exactly as long-lived as the pass that sets it (task:f5ace343) -- task-grooming and task-introspection skills activate/deactivate at their own pass boundaries rather than relying on any persistence layer."
+      ],
+      "last_validated": "2026-08-24T12:03:06.202846+00:00",
+      "module": "taskfw/mcp_server.py",
+      "name": "active-task-pointer-lifecycle",
+      "related": [
+        "mcp-portable-interface",
+        "mcp-tool-registration-and-hooks",
+        "task-tool-response-shapes"
+      ]
+    },
     "advisory-nudge-policies": {
       "confidence": 0.8,
       "contracts": [
@@ -618,60 +649,54 @@
     "mcp-portable-interface": {
       "confidence": 0.93,
       "contracts": [
-        "Every tool returns a dict; a refusal is {'error': reason, 'rule': which_rule}",
-        "tasks__context with no argument falls back to the active task for the workspace",
-        "tasks__finish is idempotent on an already-done task and refuses an abandoned one",
-        "tasks__add_introspection appends where tasks__update(grooming=...) replaces",
-        "tasks__format_commit_message(task_id, subject, body) validates the task exists and returns the canonical message shape",
-        "tasks__logs(logger, level, limit) reads config.db_path() directly via log_conn(), never store().conn",
-        "tasks__logs(logger, level, limit) filters by EXACT match only (SQL 'logger=?'/'level=?'), no LIKE/prefix/wildcard support -- auditing a family of related logger names (e.g. every 'taskfw.skill.<name>/<step>' row for one skill) requires either querying each exact name individually or pulling unfiltered rows and filtering client-side by string prefix (verified task:a0bb2c26).",
-        "tasks__log_skill_invocation(skill, task_id='') is a thin wrapper around get_logger()",
-        "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task",
-        "tasks__create(...) returns {ok, id, type, status} plus an OPTIONAL related_candidates key (list of task summaries, context.related_candidates() against the new task's title) -- present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657).",
-        "_tool(hook=None) is the single decorator every tool carries instead of @mcp.tool(): it wraps fn in dispatcher.tool_called(fn.__name__, post=hook) and registers the WRAPPED function with mcp.tool() itself, so the module-level name bound is the logged version too. Plain tools use @_tool(); tools needing one or more nudges pass @_tool(hook=some_hook) or @_tool(hook=dispatcher.combine(hook_a, hook_b)).",
-        "The 5 hook functions (_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook) are all Callable[[dict], None], defined once near _tool and referenced by name at each tool's own decorator line -- never centrally dispatched by tool name. Hooks that need the post-mutation task re-fetch it via store().get(result['id']) rather than closing over a local variable computed mid-function, since the mutation is already persisted (store().save() already ran) by the time any hook fires -- this is what let hook-bearing and plain tools converge on one decorator instead of two different wiring mechanisms (task:58782207).",
-        "tasks__set_active/tasks__clear_active best-effort POST {workspace, task_id, title} to claude-hooks' running server via _push_active_task (task:6906557f) -- a courtesy push, not a dependency; every failure mode (connection refused, timeout, DNS, non-2xx) is swallowed and logged at debug, and the tool's own return value/error semantics are unaffected either way.",
-        "tasks__check_item(task_id, index, done=True) auto-activates task_id for the current scope as a direct side effect when done=True -- not via the _tool(hook=...) mechanism, but inline in the tool body via _auto_activate_on_checklist_progress. As of task:f5ace343 this is unconditional: active status is a single ephemeral pointer, not a stack, so checking an item on any task simply replaces whatever was active (no more lifecycle.check_active_switch confirm gate, no more 'active_task_notice' when a different task was active -- that gate and the check_active_switch function it called were both removed along with the stack). set_active is a no-op when task_id is already active. done=False (unchecking) never activates anything.",
-        "tasks__set_active/tasks__active/tasks__clear_active response shapes carry no stack_depth or stack list (task:f5ace343) -- {'ok', 'active', 'scope'} / {'active', 'scope'} / {'ok', 'active': null, 'scope'} respectively, mirroring the single in-memory pointer store.set_active/get_active/clear_active now hold.",
-        "tasks__create clears any active task for its scope on the way out (task:74bf3542) -- starting a new task is a clean break from whatever was active before it, not an implicit continuation."
+        "Every tool returns a dict; a refusal is {'error': reason, 'rule': which_rule}"
       ],
-      "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process -- they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store. As of task:58782207, every one of the ~35 registered tools is also wrapped in dispatcher.tool_called for unconditional logging via a single mechanism, mcp_server._tool -- the one route every tool goes through for registration + logging + an optional post-success hook. A tool skips registration entirely if it skips _tool; there is no 'registered but unlogged' state.",
+      "created_at": "2026-08-24T12:02:44.159385+00:00",
+      "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process -- they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store. Three narrower concepts hold this module's detail: [[mcp-tool-registration-and-hooks]] (the _tool decorator and its hook wiring), [[active-task-pointer-lifecycle]] (the single in-memory active-task pointer), and [[task-tool-response-shapes]] (per-tool response contracts).",
       "evidence": [
-        "taskfw/mcp_server.py:_tool",
-        "taskfw/mcp_server.py:_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook",
-        "taskfw/mcp_server.py:_auto_activate_on_checklist_progress, tasks__check_item",
-        "taskfw/mcp_server.py:tasks__create",
-        "taskfw/mcp_server.py:tasks__finish",
-        "taskfw/mcp_server.py:tasks__phase",
-        "taskfw/mcp_server.py:_push_active_task, tasks__set_active, tasks__active, tasks__clear_active",
-        "taskfw/drift_hook.py",
-        "tests/test_mcp_tools.py::TestRegistration",
-        "tests/test_mcp_tools.py::TestToolCallLogging",
-        "tests/test_mcp_tools.py::TestPhase",
-        "tests/test_mcp_tools.py::TestChecklist::test_checking_first_item_activates_the_task_when_nothing_else_is_active",
-        "tests/test_mcp_tools.py::TestChecklist::test_checking_an_item_on_a_different_task_does_not_silently_switch",
-        "tests/test_mcp_tools.py::TestCreate::test_surfaces_related_candidates_when_titles_overlap",
-        "tests/test_mcp_tools.py::TestClaudeHooksPush"
+        "taskfw/mcp_server.py",
+        "tests/test_mcp_tools.py::TestRegistration"
       ],
       "invariants": [
         "No tool enforces a rule itself -- all validation goes through lifecycle.check_*, so a tool cannot enforce a different set than a hook",
         "The store is opened lazily, so importing the module never touches disk",
-        "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global",
-        "No tool is missing the _tool wrapper and none is double-wrapped -- pinned by tests/test_mcp_tools.py::TestToolCallLogging, which enumerates the live m.mcp.list_tools() registry rather than a hand-maintained list, so a new tool that forgets the decorator fails this test rather than silently going unlogged",
-        "related_candidates in tasks__create's response is computed inline in the tool body, NOT via the dispatcher hook/nudge mechanism -- every existing nudge is str | None, a candidate list is list[dict], a structurally different shape (task:78853657)",
-        "_push_active_task reads CLAUDE_HOOKS_URL from os.environ on every call rather than caching it at import time, specifically so tests can redirect it via monkeypatch.setenv without needing to reload the module -- a module-level constant computed once at import would not observe a later monkeypatch.setenv (task:6906557f).",
-        "There is no drift-reflection hook left in this module (task:8be768df removed _drift_reflection_hook entirely) -- drift-reflection awareness now lives solely in taskfw/drift_hook.py, a standalone PostToolUse hook Claude Code invokes directly on every tool call in the session, independent of any MCP tool call. tasks__check_item's auto-activation (see contracts) is unrelated to that removal -- it is a store mutation, not a nudge, and lives in mcp_server.py precisely because dispatcher.py's hooks never mutate stored state (see task_framework_system.sysml's TaskMCPTools doc).",
-        "Active status is now exactly as long-lived as the pass that sets it (task:f5ace343) -- task-grooming and task-introspection skills activate/deactivate at their own pass boundaries rather than relying on any persistence layer.",
-        "_introspection_hook checks dispatcher.is_introspected(task) rather than the raw task.introspection truthy test it used before (task:f6be04bf's audit) -- consolidating on task-phase-derivation's single-source predicate rather than re-testing the field, matching finish_nudge/ungroomed_progress_nudge's own consolidation in nudges.py."
+        "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global"
       ],
-      "last_validated": "2026-08-23T13:15:11.952292+00:00",
+      "last_validated": "2026-08-24T12:02:44.159462+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface",
       "related": [
         "lifecycle-single-rule-implementation",
-        "advisory-nudge-policies",
-        "nudge-dispatch-chassis"
+        "mcp-tool-registration-and-hooks",
+        "active-task-pointer-lifecycle"
+      ]
+    },
+    "mcp-tool-registration-and-hooks": {
+      "confidence": 0.9,
+      "contracts": [
+        "_tool(hook=None) is the single decorator every tool carries instead of @mcp.tool(): it wraps fn in dispatcher.tool_called(fn.__name__, post=hook) and registers the WRAPPED function with mcp.tool() itself, so the module-level name bound is the logged version too. Plain tools use @_tool(); tools needing one or more nudges pass @_tool(hook=some_hook) or @_tool(hook=dispatcher.combine(hook_a, hook_b)).",
+        "The 5 hook functions (_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook) are all Callable[[dict], None], defined once near _tool and referenced by name at each tool's own decorator line -- never centrally dispatched by tool name. Hooks that need the post-mutation task re-fetch it via store().get(result['id']) rather than closing over a local variable computed mid-function, since the mutation is already persisted (store().save() already ran) by the time any hook fires -- this is what let hook-bearing and plain tools converge on one decorator instead of two different wiring mechanisms (task:58782207)."
+      ],
+      "created_at": "2026-08-24T12:02:56.521066+00:00",
+      "description": "Pulled out of [[mcp-portable-interface]]. Every one of the ~35 registered tools is wrapped in dispatcher.tool_called for unconditional logging via a single mechanism, mcp_server._tool -- the one route every tool goes through for registration + logging + an optional post-success hook. A tool skips registration entirely if it skips _tool; there is no 'registered but unlogged' state.",
+      "evidence": [
+        "taskfw/mcp_server.py:_tool",
+        "taskfw/mcp_server.py:_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook",
+        "taskfw/drift_hook.py",
+        "tests/test_mcp_tools.py::TestToolCallLogging"
+      ],
+      "invariants": [
+        "No tool is missing the _tool wrapper and none is double-wrapped -- pinned by tests/test_mcp_tools.py::TestToolCallLogging, which enumerates the live m.mcp.list_tools() registry rather than a hand-maintained list, so a new tool that forgets the decorator fails this test rather than silently going unlogged",
+        "There is no drift-reflection hook left in this module (task:8be768df removed _drift_reflection_hook entirely) -- drift-reflection awareness now lives solely in taskfw/drift_hook.py, a standalone PostToolUse hook Claude Code invokes directly on every tool call in the session, independent of any MCP tool call.",
+        "_introspection_hook checks dispatcher.is_introspected(task) rather than the raw task.introspection truthy test it used before (task:f6be04bf's audit) -- consolidating on task-phase-derivation's single-source predicate rather than re-testing the field, matching finish_nudge/ungroomed_progress_nudge's own consolidation in nudges.py."
+      ],
+      "last_validated": "2026-08-24T12:02:56.521133+00:00",
+      "module": "taskfw/mcp_server.py",
+      "name": "mcp-tool-registration-and-hooks",
+      "related": [
+        "mcp-portable-interface",
+        "nudge-dispatch-chassis",
+        "advisory-nudge-policies"
       ]
     },
     "mcp-tools-enforce-nothing-themselves": {
@@ -1130,6 +1155,40 @@
         "taskstore-round-trip-and-relational-guarantees-tested"
       ]
     },
+    "task-tool-response-shapes": {
+      "confidence": 0.9,
+      "contracts": [
+        "tasks__context with no argument falls back to the active task for the workspace",
+        "tasks__finish is idempotent on an already-done task and refuses an abandoned one",
+        "tasks__add_introspection appends where tasks__update(grooming=...) replaces",
+        "tasks__format_commit_message(task_id, subject, body) validates the task exists and returns the canonical message shape",
+        "tasks__logs(logger, level, limit) reads config.db_path() directly via log_conn(), never store().conn",
+        "tasks__logs(logger, level, limit) filters by EXACT match only (SQL 'logger=?'/'level=?'), no LIKE/prefix/wildcard support -- auditing a family of related logger names (e.g. every 'taskfw.skill.<name>/<step>' row for one skill) requires either querying each exact name individually or pulling unfiltered rows and filtering client-side by string prefix (verified task:a0bb2c26).",
+        "tasks__log_skill_invocation(skill, task_id='') is a thin wrapper around get_logger()",
+        "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task",
+        "tasks__create(...) returns {ok, id, type, status} plus an OPTIONAL related_candidates key (list of task summaries, context.related_candidates() against the new task's title) -- present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657)."
+      ],
+      "created_at": "2026-08-24T12:03:13.375728+00:00",
+      "description": "Pulled out of [[mcp-portable-interface]]. Per-tool response-shape and semantics contracts for individual tasks__* tools not covered by registration/hooks or active-task mechanics -- context fallback, finish idempotency, introspection append-vs-replace, commit-message formatting, and tasks__logs' exact-match-only log query.",
+      "evidence": [
+        "taskfw/mcp_server.py:tasks__finish",
+        "taskfw/mcp_server.py:tasks__phase",
+        "taskfw/mcp_server.py:tasks__create",
+        "tests/test_mcp_tools.py::TestPhase",
+        "tests/test_mcp_tools.py::TestCreate::test_surfaces_related_candidates_when_titles_overlap"
+      ],
+      "invariants": [
+        "related_candidates in tasks__create's response is computed inline in the tool body, NOT via the dispatcher hook/nudge mechanism -- every existing nudge is str | None, a candidate list is list[dict], a structurally different shape (task:78853657)"
+      ],
+      "last_validated": "2026-08-24T12:03:13.376810+00:00",
+      "module": "taskfw/mcp_server.py",
+      "name": "task-tool-response-shapes",
+      "related": [
+        "mcp-portable-interface",
+        "active-task-pointer-lifecycle",
+        "mcp-tool-registration-and-hooks"
+      ]
+    },
     "tasks-table-projection-contract": {
       "confidence": 0.85,
       "contracts": [
@@ -1313,6 +1372,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-23T15:12:45.226051+00:00"
+    "updated_at": "2026-08-24T12:03:13.377055+00:00"
   }
 }
