@@ -43,7 +43,7 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "02850c83e4d8fef5575d574879151aed529c3fd0";
+        derivedFromCommit = "0c8678fa3f503fb1e95eb228cda67f78b0aac4c5";
         derivedAt = "2026-08-26";
         modelledPaths = (
             "taskfw/db/schema.py",
@@ -202,7 +202,7 @@ package Requirements {
              *
              * `lessons` (loop memories matching the task) is a guaranteed
              * section in the bundle, not an optional add-on — the same
-             * `_passes_floor` relevance floor used by `related_candidates`
+             * `_passes_floor` relevance floor used by `_related_candidates`
              * excludes weak matches from both sections rather than always
              * filling to their count cap with whatever is available, however
              * weak. */
