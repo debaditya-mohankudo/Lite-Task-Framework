@@ -22,7 +22,7 @@
         "_push_active_task reads CLAUDE_HOOKS_URL from os.environ on every call rather than caching it at import time, specifically so tests can redirect it via monkeypatch.setenv without needing to reload the module -- a module-level constant computed once at import would not observe a later monkeypatch.setenv (task:6906557f).",
         "Active status is now exactly as long-lived as the pass that sets it (task:f5ace343) -- task-grooming and task-introspection skills activate/deactivate at their own pass boundaries rather than relying on any persistence layer."
       ],
-      "last_validated": "2026-08-24T12:03:06.202846+00:00",
+      "last_validated": "2026-08-25T13:41:08.696873+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "active-task-pointer-lifecycle",
       "related": [
@@ -209,7 +209,7 @@
         "concept__get's found:True branch nests under concept: {...} rather than flattening fields onto the response, so \"found\" cannot collide with a real field name and a caller does not need to know which implementation answered the call",
         "upsert merges at the LIST-ENTRY level, not just the field level: a payload naming contracts/invariants/evidence unions those entries with what's already stored (dedup by exact match) rather than replacing the list outright, so a caller updating one entry cannot silently drop the others it did not mention (task:706a498f, fixing a prior bug where any mention of the field replaced the whole list) — an explicit empty list still clears."
       ],
-      "last_validated": "2026-08-23T06:26:41.289815+00:00",
+      "last_validated": "2026-08-25T13:41:19.091905+00:00",
       "module": "taskfw/concepts.py",
       "name": "concept-store-name-keyed-map",
       "related": [
@@ -459,7 +459,7 @@
         "Recurrence groups by a risk's id when it has one (task:f24be6e4) and falls back to normalised text only for id-less (pre-migration) risks; each recurring_risks entry reports keyed_by so a caller can tell which grouping produced it.",
         "Because ids are assigned per-risk rather than shared across tasks, two occurrences of the 'same' risk written independently in different tasks will not recur under id-keying unless one was reworded forward from the other — a known, accepted limitation recorded as an open risk on task:f24be6e4, not yet resolved."
       ],
-      "last_validated": "2026-08-23T06:25:56.739322+00:00",
+      "last_validated": "2026-08-25T13:41:21.291873+00:00",
       "module": "taskfw/accuracy.py",
       "name": "grooming-accuracy-aggregate",
       "related": [
@@ -541,7 +541,7 @@
         "check_link_rel is the FIRST policy check ever added to tasks__link — before task:1c9d37d7 it had zero lifecycle validation, calling store().link() directly after only confirming both task ids exist",
         "tasks__finish/tasks__check_item's auto-finish share one _finish_task() helper (mcp_server.py) that pops the active-task stack only when the finished task_id is on top — a buried finish still marks the task done, it just skips the pop (task:f302eb2b)"
       ],
-      "last_validated": "2026-08-15T17:19:39.616655+00:00",
+      "last_validated": "2026-08-25T13:41:11.416382+00:00",
       "module": "taskfw/lifecycle.py",
       "name": "lifecycle-single-rule-implementation",
       "related": [
@@ -637,7 +637,7 @@
         "A malformed FTS5 query falls back to an unranked LIKE match rather than being treated as proof no memories exist",
         "hit_count/last_hit are purely observational usage signals, not staleness inputs — nothing currently reads them to drive supersede/forget automation (see task:582dba10, open). They count DELIBERATE recalls only: context bundle assembly passes count_hit=False precisely so the signal task:582dba10 would consume stays uncontaminated by automatic reads."
       ],
-      "last_validated": "2026-08-23T04:34:37.417466+00:00",
+      "last_validated": "2026-08-25T13:41:15.798635+00:00",
       "module": "taskfw/memory.py",
       "name": "loop-memory-derived-standing",
       "related": [
@@ -662,7 +662,7 @@
         "The store is opened lazily, so importing the module never touches disk",
         "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global"
       ],
-      "last_validated": "2026-08-24T12:02:44.159462+00:00",
+      "last_validated": "2026-08-25T13:41:25.481648+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface",
       "related": [
@@ -911,7 +911,7 @@
         "Call sites build `post` with a lambda, not functools.partial: apply_nudge takes `result` first, but partial appends new positional args after the pre-bound ones, so partial(apply_nudge, key, nudge) called as p(result) would call apply_nudge(key, nudge, result) — wrong order.",
         "chassis.py imports nothing from nudges.py or phase.py — it is pure mechanism operating only on a Callable[[dict], None] hook and a result dict, never on task state itself; that is what keeps it the one module none of the others need to change when a nudge's condition changes."
       ],
-      "last_validated": "2026-08-23T10:14:15.066516+00:00",
+      "last_validated": "2026-08-25T13:41:23.425049+00:00",
       "module": "taskfw/dispatcher/chassis.py",
       "name": "nudge-dispatch-chassis",
       "related": [
@@ -1122,7 +1122,7 @@
         "phase.py has zero imports from chassis.py or nudges.py — it operates only on a Task's own fields, which is what makes it safe for nudges.py to import from without any risk of a cycle.",
         "nudges.py's finish_nudge and ungroomed_progress_nudge call is_introspected(task)/is_groomed(task) rather than testing task.introspection/task.grooming directly (task:5a5fde0d) — every phase-boolean check is coupled to these single predicates, so a future redefinition of what 'groomed' or 'introspected' means changes one function in phase.py instead of requiring every call site to be found and updated independently."
       ],
-      "last_validated": "2026-08-23T13:12:28.870999+00:00",
+      "last_validated": "2026-08-25T13:41:13.647462+00:00",
       "module": "taskfw/dispatcher/phase.py",
       "name": "task-phase-derivation",
       "related": [
@@ -1214,7 +1214,7 @@
         "New Task fields do NOT need a matching scalar column by default — only fields that need to be filtered/indexed independent of JSON parsing get promoted (see schema.py's own comment on TASKS.data)",
         "schema.migrate()'s additive-only guarantee (see schema-single-source-additive-migration) means a scalar column can be added but never renamed in place — a Task field rename therefore always means a NEW scalar column plus an orphaned old one, not an in-place rename"
       ],
-      "last_validated": "2026-08-08T05:41:07.507641+00:00",
+      "last_validated": "2026-08-25T13:41:06.523981+00:00",
       "module": "taskfw/store.py",
       "name": "tasks-table-projection-contract",
       "related": [
@@ -1254,7 +1254,7 @@
         "FTS5 absence degrades search rather than failing at import",
         "_combination_score scores tags and body against DISJOINT word sets -- a word counted as a tag match is excluded from the body-overlap count, so it can never score twice"
       ],
-      "last_validated": "2026-08-20T06:06:54.058538+00:00",
+      "last_validated": "2026-08-25T13:41:04.355105+00:00",
       "module": "taskfw/store.py",
       "name": "taskstore-data-access-only",
       "related": [
@@ -1358,7 +1358,7 @@
         "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent",
         "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck"
       ],
-      "last_validated": "2026-08-23T06:25:34.224502+00:00",
+      "last_validated": "2026-08-25T13:41:02.161898+00:00",
       "module": "taskfw/task.py",
       "name": "typed-task-object",
       "related": [
@@ -1372,6 +1372,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-24T12:03:13.377055+00:00"
+    "updated_at": "2026-08-25T13:41:35.039061+00:00"
   }
 }

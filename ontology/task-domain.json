@@ -1,0 +1,70 @@
+{
+  "meta": {
+    "note": "Ubiquitous-language ontology for task-framework's domain: the vocabulary the code embodies, and the explicit typed relations between terms (is-a, part-of, relates, persists, references, describes). Deliberately separate from concept_store/concepts.json -- that store is architecture PER MODULE (one summary per file, enforced 1:1 by tests/test_concepts.py) and answers 'what does this module promise'. This file is vocabulary PER DOMAIN TERM and answers 'what is this thing, and what is it to the others' -- a term here can span several modules, and a module can define several terms, so it does not fit concept_store's per-file shape. Ground truth is still the code; this is a durable, human-readable map of the graph rather than N separate summaries.",
+    "repo": "task-framework",
+    "created_at": "2026-08-25"
+  },
+  "bounded_contexts": {
+    "Task Tracking": "The core domain: tasks, epics, checklists, links between tasks, and which task is currently active.",
+    "Loop Memory": "Lessons the grooming/introspection loop produces that nothing else can hold -- separate vocabulary, separate lifecycle, only loosely coupled to Task Tracking by citation.",
+    "Architectural Knowledge": "What each source module promises, tracked in concept_store/concepts.json -- describes the codebase itself, not tasks or memories."
+  },
+  "terms": {
+    "Task": {
+      "bounded_context": "Task Tracking",
+      "definition": "One unit of work: id, type, status, resolution (checklist), tags, notes, grooming findings, introspection reports. The single typed object the whole domain is built around.",
+      "evidence": "taskfw/task.py:Task"
+    },
+    "Epic": {
+      "bounded_context": "Task Tracking",
+      "definition": "Not a distinct kind of thing -- a Task whose type field is 'epic', used to group other Tasks under it. There is no separate Epic class, table, or lifecycle.",
+      "evidence": "taskfw/task.py:TASK_TYPES"
+    },
+    "ResolutionItem": {
+      "bounded_context": "Task Tracking",
+      "definition": "One checklist entry (text, done) inside a Task's resolution list. A Task's progress is derived by counting these, never stored as a separate counter.",
+      "evidence": "taskfw/task.py:ResolutionItem"
+    },
+    "Link": {
+      "bounded_context": "Task Tracking",
+      "definition": "A directed, typed connection between two Tasks (from_id, to_id, rel), rel drawn from the closed vocabulary TASK_EDGE_RELATIONS. Stored in task_edges, never inside a Task's own JSON blob.",
+      "evidence": "taskfw/task.py:TASK_EDGE_RELATIONS, taskfw/store.py:TaskStore.link"
+    },
+    "TaskStore": {
+      "bounded_context": "Task Tracking",
+      "definition": "The Repository for Task: reads and writes tasks, edges, and commits. Deliberately does no rule-checking of its own -- validation lives entirely in taskfw/lifecycle.py.",
+      "evidence": "taskfw/store.py:TaskStore"
+    },
+    "ActiveTaskPointer": {
+      "bounded_context": "Task Tracking",
+      "definition": "Which task_id is currently 'active' for a scope. A single in-memory value, not persisted, not a stack -- gone on process restart. Not a field on Task itself.",
+      "evidence": "taskfw/mcp_server.py:tasks__set_active, tasks__active, tasks__clear_active"
+    },
+    "MemoryRecord": {
+      "bounded_context": "Loop Memory",
+      "definition": "A lesson introspection produced: a constraint, technique, or recurring pitfall that nothing else in Task Tracking can hold. Has a derived 'standing' (confirmed/contradicted/disputed/superseded), computed fresh from its links on every read, never stored.",
+      "evidence": "taskfw/memory.py:MemoryStore"
+    },
+    "Concept": {
+      "bounded_context": "Architectural Knowledge",
+      "definition": "A durable summary of what one source module promises and what must stay true of it -- description, contracts, invariants, evidence. Keyed by module path, enforced 1:1 against the real file tree by tests/test_concepts.py.",
+      "evidence": "taskfw/concepts.py:ConceptStore"
+    }
+  },
+  "relations": [
+    {"subject": "Epic", "predicate": "is-a", "object": "Task",
+     "note": "type='epic' is a value on the same Task record, not a separate class or table -- there is no independent Epic to fall out of sync with Task."},
+    {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
+     "note": "Nested inside task.resolution; no identity or lifecycle of its own outside the Task that holds it."},
+    {"subject": "Link", "predicate": "relates", "object": "Task",
+     "note": "A task_edges row only exists in relation to two Tasks (from_id, to_id); it is never addressed by an id of its own, and removal (tasks__unlink) is deliberately ungated so a legacy rel can't get stuck."},
+    {"subject": "TaskStore", "predicate": "persists", "object": "Task",
+     "note": "The Repository for the Task aggregate; persistence and validation stay separable because TaskStore enforces no rules itself."},
+    {"subject": "ActiveTaskPointer", "predicate": "references", "object": "Task",
+     "note": "Names the currently-active task_id per scope; ephemeral and non-persisted, never a property stored on Task."},
+    {"subject": "MemoryRecord", "predicate": "references", "object": "Task",
+     "note": "Cited to the task it was learned from (learned_from) -- a pointer INTO Task Tracking from a different bounded context, never reachable by walking Task's own fields."},
+    {"subject": "Concept", "predicate": "describes", "object": "SourceModule",
+     "note": "Keyed by module path, not by task_id -- Architectural Knowledge shares no term with Task Tracking or Loop Memory; the only connection between the three bounded contexts is this ontology file itself."}
+  ]
+}

@@ -187,7 +187,7 @@ Failing open is only acceptable when it does not mean losing data quietly.
 
 The last one is the one that actually happens.
 
-## Two things worth knowing exist
+## Three things worth knowing exist
 
 `models/*.sysml` holds structural claims — state machines, requirements,
 calc defs — transcribed by hand from the code they describe, not generated
@@ -205,9 +205,25 @@ touches it. It grows the same way loop memory does: a task either updates a
 concept that turned out wrong, or writes one for a module nobody had
 understood well enough to describe yet.
 
-Neither is instructions for using it — the introspection methodology and
-the tool schemas cover that. What is worth knowing here is only that they
-exist and why: both are ways of not re-deriving the same fact twice.
+`ontology/task-domain.json` is the domain's ubiquitous language: the nouns
+(Task, Epic, Link, TaskStore, MemoryRecord, …) and the explicit typed
+relations between them — is-a, part-of, relates, persists, references,
+describes. It exists separately from concept_store because the two answer
+different questions and don't share a shape: concept_store is architecture
+PER MODULE, one summary per file, enforced 1:1 against the file tree by
+tests/test_concepts.py; the ontology is vocabulary PER TERM, and a single
+term routinely spans several modules while a module can define several
+terms. Forcing the ontology into concept_store's per-file schema would have
+meant either a fake module anchor for a cross-cutting idea or silently
+bending the coverage test's guarantee — so it gets its own file and its own,
+looser shape instead. Unlike concept_store, nothing currently tests it
+against the code, so treat it as a map that can drift, not a claim that's
+checked.
+
+None of the three is instructions for using it — the introspection
+methodology and the tool schemas cover that. What is worth knowing here is
+only that they exist and why: each is a way of not re-deriving the same fact
+twice.
 
 ## Memory
 
