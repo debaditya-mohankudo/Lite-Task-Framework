@@ -27,18 +27,18 @@
     },
     "TaskEdge": {
       "bounded_context": "Task Tracking",
-      "definition": "A directed, typed connection between two Tasks (from_id, to_id, rel), rel drawn from the closed vocabulary TASK_EDGE_RELATIONS. Stored in task_edges, never inside a Task's own JSON blob.",
-      "evidence": "taskfw/task.py:TASK_EDGE_RELATIONS, taskfw/store.py:TaskStore.link"
+      "definition": "A directed, typed connection between two Tasks, with a relation drawn from a fixed, closed vocabulary. Stored separately from Tasks, never inside a Task's own record.",
+      "evidence": "taskfw/task.py:TASK_EDGE_RELATIONS"
     },
     "TaskStore": {
       "bounded_context": "Task Tracking",
-      "definition": "The Repository for Task: reads and writes tasks, edges, and commits. Deliberately does no rule-checking of its own -- validation lives entirely in taskfw/lifecycle.py.",
+      "definition": "The Repository for Task: reads and writes tasks, edges, and commits. Deliberately does no rule-checking of its own -- validation lives entirely in a separate layer.",
       "evidence": "taskfw/store.py:TaskStore"
     },
     "ActiveTaskPointer": {
       "bounded_context": "Task Tracking",
       "definition": "Which task_id is currently 'active' for a scope. A single in-memory value, not persisted, not a stack -- gone on process restart. Not a field on Task itself.",
-      "evidence": "taskfw/mcp_server.py:tasks__set_active, tasks__active, tasks__clear_active"
+      "evidence": "taskfw/mcp_server.py:tasks__set_active"
     },
     "MemoryRecord": {
       "bounded_context": "Loop Memory",
@@ -47,28 +47,33 @@
     },
     "Concept": {
       "bounded_context": "Architectural Knowledge",
-      "definition": "A durable summary of what one source module promises and what must stay true of it -- description, contracts, invariants, evidence. Keyed by module path, enforced 1:1 against the real file tree by tests/test_concepts.py.",
+      "definition": "A durable summary of what one source module promises and what must stay true of it -- description, contracts, invariants, evidence. Keyed by module path, enforced 1:1 against the real file tree.",
       "evidence": "taskfw/concepts.py:ConceptStore"
     },
     "SkillInvocation": {
       "bounded_context": "Loop Memory",
-      "definition": "A record that a named skill (e.g. commit, task-grooming) ran, optionally against a task_id. Deliberately just a log line through the existing get_logger()/SQLiteHandler sink, not a stored, referentially-integral record -- task_id is not validated, and there is no separate table. Exists for skill-usage observability only, scoped narrowly so it can't become a second home for decisions or notes.",
+      "definition": "A record that a named skill (e.g. commit, task-grooming) ran, optionally against a Task. Deliberately just a lightweight log entry, not a stored, referentially-integral record -- the task reference is not validated. Exists for skill-usage observability only, scoped narrowly so it can't become a second home for decisions or notes.",
       "evidence": "taskfw/mcp_server.py:tasks__log_skill_invocation"
     },
     "Grooming": {
       "bounded_context": "Loop Memory",
-      "definition": "The pre-implementation pass that records a task's current best understanding as falsifiable risks/findings before work starts. Held as task.grooming, a dict replaced wholesale each pass -- unlike Introspection, only the latest pass is kept, because grooming is a current-belief snapshot, not a history.",
+      "definition": "The pre-implementation pass that records a task's current best understanding as falsifiable risks/findings before work starts. Recorded as part of the Task and replaced wholesale each pass -- unlike Introspection, only the latest pass is kept, because grooming is a current-belief snapshot, not a history.",
       "evidence": "taskfw/task.py:Task.grooming"
     },
     "Introspection": {
       "bounded_context": "Loop Memory",
-      "definition": "The post-implementation pass that grades how well Grooming's predictions held up and surfaces lessons for Loop Memory. Held as task.introspection, a list appended to on every pass, since each report is evidence about one distinct execution and the series itself is the value.",
-      "evidence": "taskfw/task.py:Task.introspection, taskfw/mcp_server.py:tasks__add_introspection"
+      "definition": "The post-implementation pass that grades how well Grooming's predictions held up and surfaces lessons for Loop Memory. Recorded as part of the Task as an appended series rather than Grooming's replace-in-place snapshot, since each report is evidence about one distinct execution and the series itself is the value.",
+      "evidence": "taskfw/task.py:Task.introspection"
+    },
+    "Nudge": {
+      "bounded_context": "Task Tracking",
+      "definition": "Not a distinct class or stored record -- a nudge is a transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time and never persisted anywhere. It never blocks the action or changes what gets stored; it only points back at context the caller already has (this task, this memory, this report) and asks it to be looked at again. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
+      "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge"
     },
     "TaskContext": {
       "bounded_context": "Task Tracking",
-      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order. Not persisted anywhere; assembled fresh on every call and gone once returned. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it via tasks__context. As of task:01fba67f, callers no longer assemble it by calling build_context/related_candidates as free functions -- they go through this one class, bound once per store/memory pair; both free functions were renamed private (_build_context, _related_candidates) in the same task, since TaskContext became their only caller outside taskfw/context.py.",
-      "evidence": "taskfw/context.py:TaskContext, taskfw/context.py:_build_context, taskfw/mcp_server.py:tasks__context"
+      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order. Not persisted anywhere; assembled fresh on every call and gone once returned. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it.",
+      "evidence": "taskfw/context.py:TaskContext"
     }
   },
   "relations": [
@@ -77,28 +82,32 @@
     {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
      "note": "Nested inside task.resolution; no identity or lifecycle of its own outside the Task that holds it."},
     {"subject": "TaskEdge", "predicate": "relates", "object": "Task",
-     "note": "A task_edges row only exists in relation to two Tasks (from_id, to_id); it is never addressed by an id of its own, and removal (tasks__unlink) is deliberately ungated so a legacy rel can't get stuck."},
+     "note": "A TaskEdge only exists in relation to two Tasks; it is never addressed by an id of its own, and removing one is deliberately ungated so a legacy relation type can't get stuck."},
     {"subject": "TaskStore", "predicate": "persists", "object": "Task",
      "note": "The Repository for the Task aggregate; persistence and validation stay separable because TaskStore enforces no rules itself."},
     {"subject": "ActiveTaskPointer", "predicate": "references", "object": "Task",
      "note": "Names the currently-active task_id per scope; ephemeral and non-persisted, never a property stored on Task."},
     {"subject": "MemoryRecord", "predicate": "references", "object": "Task",
-     "note": "Cited to the task it was learned from (learned_from) -- a pointer INTO Task Tracking from a different bounded context, never reachable by walking Task's own fields."},
+     "note": "Cited to the task it was learned from -- a pointer into Task Tracking from a different bounded context, never reachable by walking Task's own fields."},
     {"subject": "Concept", "predicate": "describes", "object": "SourceModule",
      "note": "Keyed by module path, not by task_id -- Architectural Knowledge shares no term with Task Tracking or Loop Memory; the only connection between the three bounded contexts is this ontology file itself."},
     {"subject": "SkillInvocation", "predicate": "references", "object": "Task",
-     "note": "Carries an optional task_id, but the reference is unvalidated and one-directional -- a Task has no field or list that points back to the skills invoked against it."},
+     "note": "Carries an optional reference, but it is unvalidated and one-directional -- a Task has no field or list that points back to the skills invoked against it."},
     {"subject": "Grooming", "predicate": "part-of", "object": "Task",
-     "note": "Held as task.grooming; not a separate table or class, and never addressed by an id of its own."},
+     "note": "Recorded as part of the Task; not a separate table or class, and never addressed by an id of its own."},
     {"subject": "Introspection", "predicate": "part-of", "object": "Task",
-     "note": "Held as task.introspection; an appended list rather than Grooming's replace-in-place dict, reflecting that each pass is a distinct piece of evidence."},
+     "note": "Recorded as part of the Task; an appended series rather than Grooming's replace-in-place snapshot, reflecting that each pass is a distinct piece of evidence."},
     {"subject": "MemoryRecord", "predicate": "references", "object": "Introspection",
-     "note": "tasks__add_introspection is where a lesson is surfaced into Loop Memory -- a report carrying a lesson with no cited memory triggers dispatcher's non-blocking memory_nudge, so the omission stays visible instead of silent."},
+     "note": "Introspection is where a lesson is surfaced for possible promotion into Loop Memory -- a report carrying a lesson with no cited memory triggers a Nudge, so the omission stays visible instead of silent."},
     {"subject": "TaskContext", "predicate": "describes", "object": "Task",
      "note": "One bundle is assembled per task_id on demand; it has no identity or storage of its own separate from the Task it was built from."},
     {"subject": "TaskContext", "predicate": "references", "object": "TaskEdge",
-     "note": "The bundle's graph section pulls a Task's edges fresh via TaskStore.edges() on every call, capped at MAX_EDGES per direction -- edges are read into the bundle, never duplicated into it."},
+     "note": "The bundle's graph section pulls a Task's edges fresh on every call, capped per direction -- edges are read into the bundle, never duplicated into it."},
     {"subject": "TaskContext", "predicate": "references", "object": "MemoryRecord",
-     "note": "The bundle's lessons section is the guaranteed read path back into Loop Memory (see MemoryRecord's Introspection link for the write side) -- without it, a lesson only reached an agent if it happened to call task_memory__recall on its own."}
+     "note": "The bundle's lessons section is the guaranteed read path back into Loop Memory (see MemoryRecord's Introspection link for the write side) -- without it, a lesson only reached an agent if it happened to look for it directly."},
+    {"subject": "Nudge", "predicate": "references", "object": "Task",
+     "note": "A nudge speaks only about the one task or memory the triggering call already touched, never some other record the caller didn't ask about -- it rides on a response, it does not fetch or add a fact of its own."},
+    {"subject": "Nudge", "predicate": "references", "object": "Introspection",
+     "note": "One nudge checks whether a just-recorded Introspection report's lessons have been promoted to a MemoryRecord yet, without itself writing to Loop Memory."}
   ]
 }

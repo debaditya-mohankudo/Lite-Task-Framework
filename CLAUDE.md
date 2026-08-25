@@ -127,43 +127,7 @@ available, and it evaporates within the hour.
 honest report is one line saying so. Padding teaches the next reader to skim,
 and once they skim, the loop is decoration.
 
-## A groomed plan is a framing, not the answer
 
-Grooming resolves uncertainty about the plan in front of you. It does nothing
-about the plan that was never in front of you — the one that would have come
-from starting somewhere else. Those are different failures. The first shows up
-as an open question you can name. The second shows up as a clean
-implementation of the wrong shape, discovered late, when the return on
-revisiting it is smallest.
-
-Before implementation starts — and only once grooming has produced a plan you
-believe — spend one deliberate pass trying to make a *different* plan. Not to
-find flaws in this one; to see if a different starting point lands somewhere
-else entirely. A few reliable levers:
-
-- **Change what's assumed fixed.** If the plan treats the current schema, API
-  shape, or file boundary as given, ask what the task would look like if that
-  boundary moved instead of everything around it.
-- **Solve for the opposite constraint.** If the plan optimises for minimal
-  diff, sketch the version that optimises for the cleanest resulting shape,
-  and vice versa. The gap between the two is information, even when you keep
-  the first one.
-- **Ask what a different role would object to.** A reviewer, an operator six
-  months from now, someone porting this to another host — each notices
-  something the author's own framing makes invisible, because that framing is
-  exactly what sits inside the author's blind spot.
-
-Most of the time the second pass agrees with the first, and that agreement is
-worth having in its own right — a plan that survived being re-derived, not
-merely a plan that survived being read. When it disagrees, the disagreement is
-a `risk` or an `open_question`, not a private doubt: write it where grooming
-already looks, or it is exactly as lost as if the second pass never happened.
-
-This is not a second grooming pass and it does not earn its own checklist —
-turning it into a step would make it precisely the kind of ritual doc 05 warns
-against skipping once the work "went well." It is one deliberate act of
-distrust in your own first framing, sized to the task, owned by whoever is
-about to start implementing rather than handed to a separate reviewer.
 
 ## Optional means optional
 
@@ -224,6 +188,15 @@ None of the three is instructions for using it — the introspection
 methodology and the tool schemas cover that. What is worth knowing here is
 only that they exist and why: each is a way of not re-deriving the same fact
 twice.
+
+Read in that order, the three form one chain, coarse to fine: this file says
+*why* the project is shaped as it is, `ontology/task-domain.json` names the
+*terms* that shape produces and how they relate, and `concept_store/concepts.json`
+pins what each *module* promises in service of those terms. A term the
+ontology introduces should be traceable down to the module(s) that embody it
+in concept_store, and a module's concept should be traceable up to the term
+it exists to serve — the chain is only worth keeping if both directions
+still resolve.
 
 ## Memory
 
