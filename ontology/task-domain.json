@@ -49,6 +49,21 @@
       "bounded_context": "Architectural Knowledge",
       "definition": "A durable summary of what one source module promises and what must stay true of it -- description, contracts, invariants, evidence. Keyed by module path, enforced 1:1 against the real file tree by tests/test_concepts.py.",
       "evidence": "taskfw/concepts.py:ConceptStore"
+    },
+    "SkillInvocation": {
+      "bounded_context": "Loop Memory",
+      "definition": "A record that a named skill (e.g. commit, task-grooming) ran, optionally against a task_id. Deliberately just a log line through the existing get_logger()/SQLiteHandler sink, not a stored, referentially-integral record -- task_id is not validated, and there is no separate table. Exists for skill-usage observability only, scoped narrowly so it can't become a second home for decisions or notes.",
+      "evidence": "taskfw/mcp_server.py:tasks__log_skill_invocation"
+    },
+    "Grooming": {
+      "bounded_context": "Loop Memory",
+      "definition": "The pre-implementation pass that records a task's current best understanding as falsifiable risks/findings before work starts. Held as task.grooming, a dict replaced wholesale each pass -- unlike Introspection, only the latest pass is kept, because grooming is a current-belief snapshot, not a history.",
+      "evidence": "taskfw/task.py:Task.grooming"
+    },
+    "Introspection": {
+      "bounded_context": "Loop Memory",
+      "definition": "The post-implementation pass that grades how well Grooming's predictions held up and surfaces lessons for Loop Memory. Held as task.introspection, a list appended to on every pass, since each report is evidence about one distinct execution and the series itself is the value.",
+      "evidence": "taskfw/task.py:Task.introspection, taskfw/mcp_server.py:tasks__add_introspection"
     }
   },
   "relations": [
@@ -65,6 +80,14 @@
     {"subject": "MemoryRecord", "predicate": "references", "object": "Task",
      "note": "Cited to the task it was learned from (learned_from) -- a pointer INTO Task Tracking from a different bounded context, never reachable by walking Task's own fields."},
     {"subject": "Concept", "predicate": "describes", "object": "SourceModule",
-     "note": "Keyed by module path, not by task_id -- Architectural Knowledge shares no term with Task Tracking or Loop Memory; the only connection between the three bounded contexts is this ontology file itself."}
+     "note": "Keyed by module path, not by task_id -- Architectural Knowledge shares no term with Task Tracking or Loop Memory; the only connection between the three bounded contexts is this ontology file itself."},
+    {"subject": "SkillInvocation", "predicate": "references", "object": "Task",
+     "note": "Carries an optional task_id, but the reference is unvalidated and one-directional -- a Task has no field or list that points back to the skills invoked against it."},
+    {"subject": "Grooming", "predicate": "part-of", "object": "Task",
+     "note": "Held as task.grooming; not a separate table or class, and never addressed by an id of its own."},
+    {"subject": "Introspection", "predicate": "part-of", "object": "Task",
+     "note": "Held as task.introspection; an appended list rather than Grooming's replace-in-place dict, reflecting that each pass is a distinct piece of evidence."},
+    {"subject": "MemoryRecord", "predicate": "references", "object": "Introspection",
+     "note": "tasks__add_introspection is where a lesson is surfaced into Loop Memory -- a report carrying a lesson with no cited memory triggers dispatcher's non-blocking memory_nudge, so the omission stays visible instead of silent."}
   ]
 }
