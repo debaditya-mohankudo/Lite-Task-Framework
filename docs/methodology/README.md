@@ -2,7 +2,7 @@
 
 The store and the rules are plumbing. **This is the actual product.**
 
-These five documents describe a loop for doing engineering work with an AI
+These six documents describe a loop for doing engineering work with an AI
 agent, in which each pass leaves the system slightly more capable than the
 last. They are plain markdown on purpose: the methodology is the portable
 asset, and `/slash-command` invocation is one host's delivery mechanism, not
@@ -14,15 +14,16 @@ the thing itself. Package them per host however that host expects.
 | 2 | [Create](02-create.md) | Writing a task worth reading later |
 | 3 | [Grooming](03-grooming.md) | Before implementation begins |
 | 4 | [Implementation](04-implementation.md) | While building |
-| 5 | [Introspection](05-introspection.md) | After a task closes |
+| 5 | [Verification](05-verification.md) | Before finishing, after building |
+| 6 | [Introspection](06-introspection.md) | After a task closes |
 
 ## The loop
 
 ```
-create ──▶ groom ──▶ implement ──▶ introspect ──┐
-   ▲                                            │
-   └────────────────────────────────────────────┘
-        introspection improves the next create
+create ──▶ groom ──▶ implement ──▶ verify ──▶ finish ──▶ introspect ──┐
+   ▲                                                                  │
+   └──────────────────────────────────────────────────────────────────┘
+                    introspection improves the next create
 ```
 
 Grooming makes falsifiable predictions. Introspection grades them. That single

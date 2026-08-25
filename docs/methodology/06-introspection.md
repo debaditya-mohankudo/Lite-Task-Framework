@@ -1,4 +1,4 @@
-# 5. Introspection
+# 6. Introspection
 
 The purpose is not to remember the past. It is to make the **next** execution
 better.

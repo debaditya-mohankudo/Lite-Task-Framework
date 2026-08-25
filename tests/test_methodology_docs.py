@@ -17,7 +17,8 @@ from taskfw import mcp_server as m
 DOCS = Path(__file__).parent.parent / "docs" / "methodology"
 EXPECTED = {
     "README.md", "01-framework.md", "02-create.md",
-    "03-grooming.md", "04-implementation.md", "05-introspection.md",
+    "03-grooming.md", "04-implementation.md", "05-verification.md",
+    "06-introspection.md",
 }
 
 #: Any task-side tool token appearing in prose or code blocks. task_memory__

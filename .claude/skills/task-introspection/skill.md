@@ -1,16 +1,16 @@
 ---
 name: task-introspection
-description: Post-task retrospective that improves the engineering system. Grades grooming's predictions, captures unlogged decisions, and evolves concepts and skills so the next execution is cheaper. Use when the user says /task-introspection or "retrospect on task:<id>".
+description: Post-task retrospective that improves the engineering system. Grades grooming's predictions, captures unlogged decisions, and evolves concepts and skills so the next execution is cheaper. Use when the user says /task-introspection or "retrospect on task:<id>", after /task-verification and tasks__finish.
 user-invocable: true
-updated: 2026-08-08
-doc: docs/methodology/05-introspection.md
+updated: 2026-08-25
+doc: docs/methodology/06-introspection.md
 repo: ~/workspace/task-framework/.claude/skills/task-introspection/skill.md
 deployed: ~/.claude/skills/task-introspection/skill.md
 ---
 
 The purpose is not to remember the past. It is to make the **next** execution better.
 
-The reasoning lives in [05-introspection.md](../../../docs/methodology/05-introspection.md).
+The reasoning lives in [06-introspection.md](../../../docs/methodology/06-introspection.md).
 
 This is the step that closes the loop, and the easiest one to skip — the work is done, the tests pass, and moving on feels like progress. Skipping it is what makes grooming decorative, because ungraded predictions teach nothing.
 
@@ -59,6 +59,8 @@ tasks__log_skill_invocation(skill="task-introspection/step-3-grade-grooming", ta
 ```
 
 **If the task has no `grooming`, skip this step silently.** There is no `groomed_at` flag to check — the presence of the findings is the signal.
+
+This includes any risk [/task-verification](../task-verification/skill.md) added for a test gap it named rather than closed — grade those exactly like any other risk.
 
 For each item in `grooming.risks`, grade what actually happened:
 

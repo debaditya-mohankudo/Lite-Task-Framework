@@ -21,7 +21,7 @@ Where hooks are installed, a one-line pointer names the active task. That is a r
 ## Lifecycle
 
 ```
-create ──▶ groom ──▶ implement ──▶ finish ──▶ introspect
+create ──▶ groom ──▶ implement ──▶ verify ──▶ finish ──▶ introspect
 ```
 
 Two types: **epic** groups (no parent), **task** does work. That is the whole hierarchy — no story, bug, or subtask. If you want a bug distinguished from a feature, use a tag.
@@ -100,10 +100,15 @@ tasks__log_skill_invocation(skill="task-framework/step-6-commit", task_id=task_i
 
 Put `task:<id>` in the commit message. Where the PostToolUse hook is installed the link is recorded automatically; where it is not, `python -m taskfw.backfill` recovers it from git history afterwards.
 
-### 7. Finish, then introspect
+### 7. Verify, finish, then introspect
 
 ```python
-tasks__log_skill_invocation(skill="task-framework/step-7-finish-then-introspect", task_id=task_id)
+tasks__log_skill_invocation(skill="task-framework/step-7-verify-finish-introspect", task_id=task_id)
+```
+
+Run [/task-verification](../task-verification/skill.md) before finishing — it audits whether the checklist is actually backed by unit and integration test coverage, and closes or names the gaps while the task is still open to fix.
+
+```python
 tasks__finish(task_id, reason="what actually shipped")
 ```
 

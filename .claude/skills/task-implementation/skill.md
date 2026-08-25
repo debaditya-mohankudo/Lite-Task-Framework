@@ -1,6 +1,6 @@
 ---
 name: task-implementation
-description: Engineering execution philosophy for active tasks. Stay in scope, log decisions as they happen, remove failure modes rather than policing them, and finish decisively. Use while working, after /task-grooming and before /task-introspection.
+description: Engineering execution philosophy for active tasks. Stay in scope, log decisions as they happen, remove failure modes rather than policing them, and finish decisively. Use while working, after /task-grooming and before /task-verification.
 user-invocable: true
 updated: 2026-08-08
 doc: docs/methodology/04-implementation.md
@@ -13,7 +13,7 @@ Grooming removed the uncertainty. This is about not reintroducing it.
 The reasoning lives in [04-implementation.md](../../../docs/methodology/04-implementation.md).
 
 ```
-/task-grooming  →  implement (this skill)  →  /task-introspection
+/task-grooming  →  implement (this skill)  →  /task-verification  →  /task-introspection
 ```
 
 In effect for any active task. Also reach for it when the user says "just implement it", or when work is drifting — repeated searches, expanding scope, debugging without a hypothesis.
@@ -113,7 +113,7 @@ tasks__log_skill_invocation(skill="task-implementation/finish", task_id=task_id)
 tasks__finish(task_id, reason="what actually shipped")
 ```
 
-The checklist should already be checked off by now (see above) — this call closes the task, it does not reconcile it.
+The checklist should already be checked off by now (see above) — this call closes the task, it does not reconcile it. Run [/task-verification](../task-verification/skill.md) before this call, not after — it audits whether the checklist is backed by real test coverage while the task is still open to fix.
 
 Commit with `task:<id>` in the message, then call `tasks__add_commit(task_id, sha, repo)` yourself — there is no hook that does this automatically, so the link only exists if you make the call. `python -m taskfw.backfill` re-derives it from git history if the call is missed; that is the recovery path, not a substitute for making it.
 

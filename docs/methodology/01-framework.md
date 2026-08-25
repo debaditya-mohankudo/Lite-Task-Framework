@@ -5,7 +5,7 @@ The entry point for any work that will take more than one step.
 ## Lifecycle
 
 ```
-create ──▶ groom ──▶ implement ──▶ finish ──▶ introspect
+create ──▶ groom ──▶ implement ──▶ verify ──▶ finish ──▶ introspect
 ```
 
 Two issue types exist:
@@ -61,11 +61,15 @@ Use `verbosity="summary"` for identity, status, and open checklist items only.
 
 ## Ending work
 
+Run [verification](05-verification.md) first — it audits whether the
+checklist is actually backed by unit and integration test coverage, while the
+task is still open to fix.
+
 ```
 tasks__finish(task_id, reason="what actually shipped")
 ```
 
-Then run [introspection](05-introspection.md). It is the step that makes the
+Then run [introspection](06-introspection.md). It is the step that makes the
 next task cheaper, and the easiest one to skip.
 
 ## When not to use this
