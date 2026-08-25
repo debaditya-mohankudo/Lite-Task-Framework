@@ -6,7 +6,12 @@ the promise stopped holding.
 
 A green suite is not evidence of this by itself. A suite that never exercised
 the changed behaviour passes just as loudly as one that did. Verification is
-the pass that tells the difference before introspection has to.
+the pass that tells the difference.
+
+This is a standalone pass, not a fixed stage wired into implementation or
+finishing. It activates and deactivates its own task the same way grooming
+does, and can be run whenever test completeness needs checking — while a
+task is still open, or well after it closed.
 
 ## The guiding question
 
@@ -25,6 +30,7 @@ Use the supplied `task_id`. If none was given, use the active task instead of
 guessing.
 
 ```python
+tasks__set_active(task_id)
 tasks__context(task_id)
 ```
 
@@ -32,6 +38,14 @@ The checklist, `files`, and any decisions are the audit surface. Reading them
 here is not optional — auditing without them is auditing from memory of what
 the task was supposed to do, which is exactly the assumption verification
 exists to check.
+
+**Verifying presupposes something was built.** Before auditing anything,
+check the bundle for evidence of real implementation — commits, or
+checked-off `resolution` items. If neither exists, the task has nothing to
+verify yet: stop and say so rather than producing an audit of an empty task.
+A task with commits but a checklist unchanged since grooming, or checked-off
+items that resolve to a zero-line diff against the base, is the same
+situation and should stop the pass the same way.
 
 ## Establish what actually changed
 
@@ -147,6 +161,10 @@ fill the shape is worse than reporting none.
 
 ## Finish
 
-Verification does not close the task — that is still `tasks__finish` in
-implementation's hands. This pass only decides whether what is about to be
-finished is actually checked, and records what it found.
+```python
+tasks__clear_active()
+```
+
+Verification does not close the task — `tasks__finish` is a separate call,
+made independently whenever the task is actually ready. This pass only
+decides whether the work is checked, and records what it found.

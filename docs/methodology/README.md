@@ -14,17 +14,21 @@ the thing itself. Package them per host however that host expects.
 | 2 | [Create](02-create.md) | Writing a task worth reading later |
 | 3 | [Grooming](03-grooming.md) | Before implementation begins |
 | 4 | [Implementation](04-implementation.md) | While building |
-| 5 | [Verification](05-verification.md) | Before finishing, after building |
+| 5 | [Verification](05-verification.md) | A standalone audit, run whenever test completeness needs checking |
 | 6 | [Introspection](06-introspection.md) | After a task closes |
 
 ## The loop
 
 ```
-create ──▶ groom ──▶ implement ──▶ verify ──▶ finish ──▶ introspect ──┐
-   ▲                                                                  │
-   └──────────────────────────────────────────────────────────────────┘
-                    introspection improves the next create
+create ──▶ groom ──▶ implement ──▶ finish ──▶ introspect ──┐
+   ▲                                                        │
+   └────────────────────────────────────────────────────────┘
+        introspection improves the next create
 ```
+
+Verification sits outside this sequence rather than as a fixed stage in it —
+like grooming, it activates and deactivates its own task and can be run
+whenever, independent of where a task sits in the loop.
 
 Grooming makes falsifiable predictions. Introspection grades them. That single
 feedback edge is what stops grooming from being decorative — without it,

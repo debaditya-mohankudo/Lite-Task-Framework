@@ -11,8 +11,10 @@ doc: docs/methodology/README.md
 The lifecycle is a chain of five skills, each edited independently:
 
 ```
-task-create → task-framework → task-grooming → task-implementation → task-verification → task-introspection
+task-create → task-framework → task-grooming → task-implementation → task-introspection
 ```
+
+`task-verification` sits outside this chain — a standalone audit skill, like this one, that activates and deactivates its own task rather than being wired into the sequence above.
 
 They reference each other constantly, and they sit on top of two things that move underneath them: [docs/methodology/](../../../docs/methodology/), which owns the reasoning, and `taskfw/mcp_server.py`, which owns the tool surface. Nothing keeps prose in sync with either.
 

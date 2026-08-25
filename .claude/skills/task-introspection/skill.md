@@ -1,6 +1,6 @@
 ---
 name: task-introspection
-description: Post-task retrospective that improves the engineering system. Grades grooming's predictions, captures unlogged decisions, and evolves concepts and skills so the next execution is cheaper. Use when the user says /task-introspection or "retrospect on task:<id>", after /task-verification and tasks__finish.
+description: Post-task retrospective that improves the engineering system. Grades grooming's predictions, captures unlogged decisions, and evolves concepts and skills so the next execution is cheaper. Use when the user says /task-introspection or "retrospect on task:<id>".
 user-invocable: true
 updated: 2026-08-25
 doc: docs/methodology/06-introspection.md

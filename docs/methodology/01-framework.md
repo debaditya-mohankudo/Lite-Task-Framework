@@ -5,8 +5,12 @@ The entry point for any work that will take more than one step.
 ## Lifecycle
 
 ```
-create ──▶ groom ──▶ implement ──▶ verify ──▶ finish ──▶ introspect
+create ──▶ groom ──▶ implement ──▶ finish ──▶ introspect
 ```
+
+[Verification](05-verification.md) is a standalone pass, not a fixed stage
+in this sequence — it activates and deactivates its own task, the same way
+grooming does, and can run whenever, independent of finishing.
 
 Two issue types exist:
 
@@ -60,10 +64,6 @@ indistinguishable from an empty one.
 Use `verbosity="summary"` for identity, status, and open checklist items only.
 
 ## Ending work
-
-Run [verification](05-verification.md) first — it audits whether the
-checklist is actually backed by unit and integration test coverage, while the
-task is still open to fix.
 
 ```
 tasks__finish(task_id, reason="what actually shipped")

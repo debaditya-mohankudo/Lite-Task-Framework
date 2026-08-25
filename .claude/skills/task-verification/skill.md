@@ -1,6 +1,6 @@
 ---
 name: task-verification
-description: Pre-finish audit of test completeness — unit and integration — for an active task. Checks every promised behaviour has a test that would catch its breakage, closes cheap gaps, names the rest. Use after /task-implementation and before finishing, or when the user says /task-verification.
+description: Standalone audit of test completeness — unit and integration — for a task. Checks every promised behaviour has a test that would catch its breakage, closes cheap gaps, names the rest. Run whenever, independent of implementation or finishing. Use when the user says /task-verification.
 user-invocable: true
 updated: 2026-08-25
 doc: docs/methodology/05-verification.md
@@ -12,11 +12,9 @@ Implementation proves the code runs. This is about proving it is checked.
 
 The reasoning lives in [05-verification.md](../../../docs/methodology/05-verification.md).
 
-```
-/task-grooming  →  implement  →  this skill  →  finish  →  /task-introspection
-```
+This is a standalone pass, not a fixed stage wired into implementation or finishing. It activates and deactivates its own task the same way grooming does, and can run whenever test completeness needs checking — while a task is still open, or well after it closed.
 
-A green suite does not prove this pass is unnecessary — it proves the suite that already existed still passes, which says nothing about whether the *new* behaviour is what any of it is checking. Run this between implementation and `tasks__finish`, not after.
+A green suite does not prove this pass is unnecessary — it proves the suite that already existed still passes, which says nothing about whether the *new* behaviour is what any of it is checking.
 
 ## Start
 
@@ -29,6 +27,14 @@ tasks__context(task_id)
 ```
 
 The checklist, `files`, and decisions are the audit surface. Auditing without pulling them is auditing from memory of what the task was supposed to do.
+
+**Prerequisite: something must actually be implemented.** Check the bundle's `commits` and `resolution` before going further — if there are no commits and no checked-off resolution items, there is nothing to audit yet. Stop and say so rather than producing an audit of an empty task:
+
+```
+task:<id> has no implementation to verify — no commits, no checked-off checklist items. Run /task-implementation first.
+```
+
+A task with commits but an all-unchecked checklist is not disqualified by that alone — check items lag real progress (see [04-implementation.md](../../../docs/methodology/04-implementation.md)) — but commits with zero diff against the base, or a checklist that is still exactly as grooming left it, are the same signal and should stop the pass the same way.
 
 ## Step 1 — Find what actually changed
 
@@ -121,9 +127,10 @@ If every promise already had real coverage, say so in one line rather than inven
 
 ## Rules
 
+- **Implementation is a prerequisite, not an assumption.** Confirm commits or checked-off checklist items exist before auditing anything. No evidence of real work means there is nothing to verify yet — stop and say so.
 - **Contract, not implementation.** A test that would need to change on a pure refactor with no behaviour change is a change-detector, not verification. Reword it to assert the promise, or flag it.
 - **Coverage-by-file is not the question.** Ask which test would fail if a specific promise broke.
 - **Silent-failure paths first.** They are the only gaps nothing else will ever catch.
 - **Close cheap gaps now; name expensive ones.** Never invent test scaffolding mid-pass to fill the shape of "done."
 - **No new schema field.** Findings live in `grooming.risks` (open gaps) or `tasks__add_decision` (choices made while closing one) — both already exist for exactly this.
-- **This pass does not finish the task.** `tasks__finish` stays implementation's call, made once verification says ready.
+- **This pass does not finish the task.** `tasks__finish` is a separate, independent call — this skill only reports whether the work looks ready for it.
