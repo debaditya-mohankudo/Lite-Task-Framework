@@ -919,6 +919,30 @@
         "task-phase-derivation"
       ]
     },
+    "ontology-evidence-enforced-by-test": {
+      "confidence": 0.8,
+      "contracts": [
+        "parse_evidence() is the single definition of how an evidence string decodes into (file, symbol) pairs; every evidence-checking test must go through it.",
+        "Symbol checking is a substring match on the cited file's text, not AST resolution -- enough to catch a rename or delete, not a claim of semantic verification."
+      ],
+      "created_at": "2026-08-25T14:10:50.529662+00:00",
+      "description": "Whether ontology/task-domain.json's evidence citations still hold is answered structurally rather than by discipline: this test file fails the suite the moment a term's evidence names a missing file, a symbol no longer found in that file, or a relation whose subject/object is not a defined term (or a declared exception like SourceModule). parse_evidence() decodes the ontology's comma-separated 'path:symbol[, symbol2]' shorthand, where a bare symbol inherits the file of the citation before it.",
+      "evidence": [
+        "tests/test_ontology.py:TestEvidence",
+        "tests/test_ontology.py:TestRelations",
+        "tests/test_ontology.py:parse_evidence"
+      ],
+      "invariants": [
+        "Every term's evidence must cite at least one file that exists in the repo.",
+        "Every cited symbol (or its base name before a '.') must appear as a substring in the file it is cited against.",
+        "Every relation's subject must be a key in ontology['terms']; every relation's object must be a term key or a declared entry in NON_TERM_OBJECTS.",
+        "Every relation must carry a non-empty note -- a relation with no note is a type triple, not domain knowledge."
+      ],
+      "last_validated": "2026-08-25T14:10:50.529731+00:00",
+      "module": "tests/test_ontology.py",
+      "name": "ontology-evidence-enforced-by-test",
+      "related": []
+    },
     "pull-context-bundle": {
       "confidence": 0.95,
       "contracts": [
@@ -1372,6 +1396,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-25T13:41:35.039061+00:00"
+    "updated_at": "2026-08-25T14:10:50.529793+00:00"
   }
 }
