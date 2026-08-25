@@ -1382,7 +1382,7 @@
         "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent",
         "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck"
       ],
-      "last_validated": "2026-08-25T13:41:02.161898+00:00",
+      "last_validated": "2026-08-25T21:51:14.617784+00:00",
       "module": "taskfw/task.py",
       "name": "typed-task-object",
       "related": [
@@ -1396,6 +1396,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-25T14:10:50.529793+00:00"
+    "updated_at": "2026-08-25T21:51:14.617882+00:00"
   }
 }
