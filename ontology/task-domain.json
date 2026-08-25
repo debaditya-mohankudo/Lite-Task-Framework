@@ -25,7 +25,7 @@
       "definition": "One checklist entry (text, done) inside a Task's resolution list. A Task's progress is derived by counting these, never stored as a separate counter.",
       "evidence": "taskfw/task.py:ResolutionItem"
     },
-    "Link": {
+    "TaskEdge": {
       "bounded_context": "Task Tracking",
       "definition": "A directed, typed connection between two Tasks (from_id, to_id, rel), rel drawn from the closed vocabulary TASK_EDGE_RELATIONS. Stored in task_edges, never inside a Task's own JSON blob.",
       "evidence": "taskfw/task.py:TASK_EDGE_RELATIONS, taskfw/store.py:TaskStore.link"
@@ -71,7 +71,7 @@
      "note": "type='epic' is a value on the same Task record, not a separate class or table -- there is no independent Epic to fall out of sync with Task."},
     {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
      "note": "Nested inside task.resolution; no identity or lifecycle of its own outside the Task that holds it."},
-    {"subject": "Link", "predicate": "relates", "object": "Task",
+    {"subject": "TaskEdge", "predicate": "relates", "object": "Task",
      "note": "A task_edges row only exists in relation to two Tasks (from_id, to_id); it is never addressed by an id of its own, and removal (tasks__unlink) is deliberately ungated so a legacy rel can't get stuck."},
     {"subject": "TaskStore", "predicate": "persists", "object": "Task",
      "note": "The Repository for the Task aggregate; persistence and validation stay separable because TaskStore enforces no rules itself."},
