@@ -49,12 +49,6 @@ class ResolutionItem:
 
 
 @dataclass
-class Link:
-    to: str
-    rel: str = "relates_to"
-
-
-@dataclass
 class Task:
     id: str = field(default_factory=new_id)
     type: str = "task"
