@@ -23,7 +23,7 @@ from taskfw import dispatcher, lifecycle
 from taskfw.accuracy import _normalise, _task_grading, grooming_accuracy, loop_debt
 from taskfw.concepts import ConceptStore
 from taskfw.config import DEFAULT_RECALL_LIMIT
-from taskfw.context import build_context, related_candidates
+from taskfw.context import TaskContext
 from taskfw.db.connect import connect
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
@@ -255,10 +255,10 @@ def tasks__context(task_id: str = "", verbosity: str = "full") -> dict[str, Any]
     task_id = task_id or store().get_active(_scope()) or ""
     if not task_id:
         return {"error": "No task_id given and no active task set."}
-    # Pass the shared memory store rather than letting build_context open its
+    # Pass the shared memory store rather than letting TaskContext open its
     # own: MemoryStore.__init__ commits a CREATE VIRTUAL TABLE IF NOT EXISTS,
     # which has no business running on every context read.
-    return build_context(store(), task_id, verbosity, memory=memory())
+    return TaskContext(store(), memory=memory()).bundle(task_id, verbosity)
 
 
 @_tool()
@@ -416,7 +416,7 @@ def tasks__create(
     if store().get_active(scope):
         _clear_and_broadcast(scope)
     result: dict[str, Any] = {"ok": True, "id": task.id, "type": task.type, "status": task.status}
-    candidates = related_candidates(store(), task)
+    candidates = TaskContext(store()).related(task)
     if candidates:
         result["related_candidates"] = candidates
     return result

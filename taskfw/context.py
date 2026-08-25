@@ -205,6 +205,37 @@ def _task_summary(task: Task) -> dict:
     }
 
 
+class TaskContext:
+    """The interface callers depend on instead of build_context/related_candidates
+    directly.
+
+    mcp_server used to import and call those two free functions itself,
+    passing `store` (and `memory`, for the full bundle) into each one
+    individually. That is procedural coupling: every call site has to know
+    which function needs which arguments, so a change to either function's
+    signature is a change at every call site too. Binding `store`/`memory`
+    once, here, and exposing them as named methods means build_context and
+    related_candidates can gain, drop, or reorder parameters — or stop being
+    the implementation entirely — without mcp_server changing at all; it only
+    depends on `.bundle()` and `.related()`.
+
+    Deliberately thin: no behaviour lives here. build_context and
+    related_candidates remain the actual implementation and stay directly
+    testable (tests/test_context.py calls them straight, not through this
+    class) — this only exists to be the stable thing a caller imports.
+    """
+
+    def __init__(self, store: TaskStore, memory: MemoryStore | None = None):
+        self._store = store
+        self._memory = memory
+
+    def bundle(self, task_id: str, verbosity: str = "full") -> dict:
+        return build_context(self._store, task_id, verbosity, memory=self._memory)
+
+    def related(self, task: Task) -> list[dict]:
+        return related_candidates(self._store, task)
+
+
 def build_context(store: TaskStore, task_id: str, verbosity: str = "full",
                   memory: MemoryStore | None = None) -> dict:
     """Assemble the bundle. Returns {"error": ...} for an unknown task.

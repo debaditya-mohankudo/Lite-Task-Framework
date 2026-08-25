@@ -649,20 +649,23 @@
     "mcp-portable-interface": {
       "confidence": 0.93,
       "contracts": [
-        "Every tool returns a dict; a refusal is {'error': reason, 'rule': which_rule}"
+        "Every tool returns a dict; a refusal is {'error': reason, 'rule': which_rule}",
+        "tasks__context and tasks__create's related-candidates lookup reach context assembly only through taskfw.context.TaskContext -- no call site in this module imports build_context or related_candidates directly."
       ],
       "created_at": "2026-08-24T12:02:44.159385+00:00",
-      "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process -- they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store. Three narrower concepts hold this module's detail: [[mcp-tool-registration-and-hooks]] (the _tool decorator and its hook wiring), [[active-task-pointer-lifecycle]] (the single in-memory active-task pointer), and [[task-tool-response-shapes]] (per-tool response contracts).",
+      "description": "The portable interface: MCP is the portability layer, so any MCP host reaches the whole framework through these tools with no neutral abstraction on top. Tools are in-process -- they import the library directly, with no daemon and no transport. Every mutating tool validates through lifecycle before calling store. Three narrower concepts hold this module's detail: [[mcp-tool-registration-and-hooks]] (the _tool decorator and its hook wiring), [[active-task-pointer-lifecycle]] (the single in-memory active-task pointer), and [[task-tool-response-shapes]] (per-tool response contracts). As of task:01fba67f, the two tools that assemble a context bundle (tasks__context, tasks__create's related-candidates lookup) no longer import build_context/related_candidates from taskfw/context.py directly -- both construct a taskfw.context.TaskContext(store, memory=...) and call its .bundle()/.related() methods instead, so mcp_server.py depends on that one class rather than on either function's signature. See [[pull-context-bundle]] for TaskContext's own contract.",
       "evidence": [
         "taskfw/mcp_server.py",
-        "tests/test_mcp_tools.py::TestRegistration"
+        "tests/test_mcp_tools.py::TestRegistration",
+        "taskfw/mcp_server.py:tasks__context",
+        "taskfw/mcp_server.py:tasks__create"
       ],
       "invariants": [
         "No tool enforces a rule itself -- all validation goes through lifecycle.check_*, so a tool cannot enforce a different set than a hook",
         "The store is opened lazily, so importing the module never touches disk",
         "Active-task scope comes from TASKFW_SCOPE or cwd, never from a stored global"
       ],
-      "last_validated": "2026-08-25T13:41:25.481648+00:00",
+      "last_validated": "2026-08-25T22:08:56.824343+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-portable-interface",
       "related": [
@@ -952,10 +955,11 @@
         "graph.edges is capped at MAX_EDGES (5) per direction (outgoing/incoming independently), sliced in _graph(); when either direction is capped, the drop counts are reported in a bundle-level `edges_truncated` dict, e.g. {'outgoing': 3, 'incoming': 2}",
         "related_candidates(store, task) (public, renamed from _related in task:78853657) passes task.title straight through as a plain string to store.search() -- search() itself builds the OR-of-terms FTS5 query AND ranks by _combination_score (tag overlap weighted 3x over body overlap), not bm25 `rank` as of task:f24a88e3. As of task:1f1e48e2 it over-fetches MAX_RELATED*4+1 hits and filters them through _passes_floor before slicing to MAX_RELATED, so ranking alone no longer determines what surfaces.",
         "lessons_for(store, task, memory=None) (public, task:60ebca8e) queries MemoryStore.recall with the same 'title + tags' string related_candidates uses, over-fetching MAX_LESSONS*4 rows (task:1f1e48e2) and filtering through the same _passes_floor before slicing to MAX_LESSONS. Rows that pass are returned unmodified so each lesson carries the `standing` derived in the memory store. It calls recall(count_hit=False): assembling a bundle must not bump hit_count/last_hit, which exist to measure DELIBERATE recall.",
-        "_passes_floor(query_terms, candidate_text) -> bool (task:1f1e48e2) is the ONE relevance-floor predicate shared by both related_candidates and lessons_for, deliberately not reimplemented per call site or per scorer. It requires at least one word of _MIN_TERM_LEN (4) or more letters shared between query and candidate text, via _term_set — a plain lowercase-word-set overlap check, chosen over a score threshold or a cutoff relative to the top hit because it is the one form that works unchanged across store.search()'s _combination_score and memories_fts's bm25, two scores that are neither comparable to each other nor stable as the corpus grows. Purely-numeric tokens (e.g. \"2026\" from a tag like introspection-2026-08-23) are excluded from _term_set so two same-day items don't pass the floor on a meaningless date collision. If the query itself has no word meeting the length floor, _passes_floor returns True (permissive) rather than rejecting everything — there is no vocabulary to test candidates against in that case."
+        "_passes_floor(query_terms, candidate_text) -> bool (task:1f1e48e2) is the ONE relevance-floor predicate shared by both related_candidates and lessons_for, deliberately not reimplemented per call site or per scorer. It requires at least one word of _MIN_TERM_LEN (4) or more letters shared between query and candidate text, via _term_set — a plain lowercase-word-set overlap check, chosen over a score threshold or a cutoff relative to the top hit because it is the one form that works unchanged across store.search()'s _combination_score and memories_fts's bm25, two scores that are neither comparable to each other nor stable as the corpus grows. Purely-numeric tokens (e.g. \"2026\" from a tag like introspection-2026-08-23) are excluded from _term_set so two same-day items don't pass the floor on a meaningless date collision. If the query itself has no word meeting the length floor, _passes_floor returns True (permissive) rather than rejecting everything — there is no vocabulary to test candidates against in that case.",
+        "TaskContext(store, memory=None) (task:01fba67f) is the interface callers depend on instead of build_context/related_candidates directly — deliberately thin, no behaviour of its own. `.bundle(task_id, verbosity)` calls build_context; `.related(task)` calls related_candidates. build_context and related_candidates remain the actual implementation and stay directly testable (tests/test_context.py calls them straight, not through TaskContext)."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "build_context assembles the whole working bundle for a task in one call — the sole replacement for per-turn prompt injection. Fixed section order, a documented trim order dropping whole sections least-useful-first, and a truncated list so an omitted section is distinguishable from an empty one. Independently, several sections also carry a fixed per-section cap (MAX_DECISIONS, MAX_COMMITS, MAX_RELATED, MAX_LESSONS, MAX_EDGES) applied by slicing before CHAR_BUDGET enforcement ever runs — a separate, silent mechanism from the whole-section drop that TRIM_ORDER implements, except for edges: edges' cap is the one case that IS surfaced, via `edges_truncated`. As of task:60ebca8e the bundle has a seventh section, `lessons`, which is the guaranteed read path for loop memory. As of task:1f1e48e2, related and lessons both filter through a shared relevance floor before their caps are applied.",
+      "description": "build_context assembles the whole working bundle for a task in one call — the sole replacement for per-turn prompt injection. Fixed section order, a documented trim order dropping whole sections least-useful-first, and a truncated list so an omitted section is distinguishable from an empty one. Independently, several sections also carry a fixed per-section cap (MAX_DECISIONS, MAX_COMMITS, MAX_RELATED, MAX_LESSONS, MAX_EDGES) applied by slicing before CHAR_BUDGET enforcement ever runs — a separate, silent mechanism from the whole-section drop that TRIM_ORDER implements, except for edges: edges' cap is the one case that IS surfaced, via `edges_truncated`. As of task:60ebca8e the bundle has a seventh section, `lessons`, which is the guaranteed read path for loop memory. As of task:1f1e48e2, related and lessons both filter through a shared relevance floor before their caps are applied. As of task:01fba67f, callers no longer call build_context/related_candidates directly — they go through the thin `TaskContext` class (constructed once per store/memory pair, exposing `.bundle(task_id, verbosity)` and `.related(task)`), so a signature change to either free function is no longer a change at every call site.",
       "evidence": [
         "taskfw/context.py:build_context",
         "taskfw/context.py:_graph",
@@ -979,7 +983,8 @@
         "tests/test_context.py:TestLessons",
         "tests/test_context.py:TestGroomingTrim",
         "tests/test_context.py:TestRelevanceFloorHelper",
-        "tests/test_context.py::test_related_matches_on_partial_word_overlap"
+        "tests/test_context.py::test_related_matches_on_partial_word_overlap",
+        "taskfw/context.py:TaskContext"
       ],
       "invariants": [
         "The task section is NEVER trimmed — a bundle without its task is useless rather than merely large",
@@ -991,9 +996,10 @@
         "related and lessons are the TWO approximate sections and the first two trimmed, in that order (TRIM_ORDER = related, lessons, commits, graph, grooming, decisions). Every other section is an exact lookup — grooming included, despite now being trimmed like an approximate one; its position in TRIM_ORDER and its exactness are unrelated to whether it can be partially rendered.",
         "As of task:1f1e48e2, related and lessons both exclude, not merely rank low, a candidate with no meaningful term overlap — fixing the case where ranking-without-exclusion always filled both sections to their cap with the best-available match, however weak (observed live, task:60ebca8e: a task about loop memory drew 'Remove LLM from certificate renewal flow' as related and three off-topic memories as lessons). The 'title + tags' QUERY SHAPE itself is unchanged and still has the failure mode task:60ebca8e's introspection found: it describes what a task IS about, not what it needs to KNOW, so it can still admit a weak match that happens to share a long word for the wrong reason, and can still miss a strong match whose vocabulary the title/tags don't contain. The floor fixes the exclusion half of that gap, not the query-shape half — that remains open, deliberately deferred rather than silently dropped (task:1f1e48e2 decision).",
         "lessons is always a list, never a dict — so that _enforce_budget's isinstance branch resets it to [] and an omitted lessons section stays distinguishable from a task that simply has no matching memories. grooming is the one section that is a dict, which is exactly why it needed its own trim path (_trim_grooming) rather than reusing the list-based isinstance branch.",
-        "Building a bundle has NO write side effect on loop memory: hit_count and last_hit are untouched by tasks__context, so they keep measuring deliberate task_memory__recall only (pinned by tests/test_context.py::TestLessons::test_assembling_a_bundle_does_not_bump_hit_count)"
+        "Building a bundle has NO write side effect on loop memory: hit_count and last_hit are untouched by tasks__context, so they keep measuring deliberate task_memory__recall only (pinned by tests/test_context.py::TestLessons::test_assembling_a_bundle_does_not_bump_hit_count)",
+        "TaskContext is deliberately thin: it binds store/memory once and forwards to the free functions unchanged, so it introduces no new behaviour, caching, or validation of its own that could diverge from build_context/related_candidates."
       ],
-      "last_validated": "2026-08-23T05:24:54.152128+00:00",
+      "last_validated": "2026-08-25T22:08:32.557810+00:00",
       "module": "taskfw/context.py",
       "name": "pull-context-bundle",
       "related": [
@@ -1396,6 +1402,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-25T21:51:14.617882+00:00"
+    "updated_at": "2026-08-25T22:08:56.824439+00:00"
   }
 }

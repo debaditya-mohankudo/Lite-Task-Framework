@@ -11,6 +11,7 @@ import pytest
 
 from taskfw.context import (
     CHAR_BUDGET, MAX_EDGES, MAX_LESSONS, TRIM_ORDER, _BUNDLE_SKELETON, _size, build_context,
+    related_candidates, TaskContext,
 )
 from taskfw.memory import MemoryStore
 from taskfw.task import ResolutionItem, Task
@@ -444,3 +445,43 @@ class TestLessons:
         c = build_context(store, big.id, memory=memory)
         assert "lessons" in c["truncated"]
         assert c["lessons"] == []
+
+
+class TestTaskContext:
+    """TaskContext (task:01fba67f) is the interface mcp_server depends on
+    instead of build_context/related_candidates directly. It is deliberately
+    thin — these pin the delegation, not new behaviour, plus the decoupling
+    contract itself (concept_store's pull-context-bundle and
+    mcp-portable-interface both now claim mcp_server has no direct import of
+    either function)."""
+
+    def test_bundle_delegates_to_build_context(self, populated):
+        store = populated["store"]
+        tid = populated["task"].id
+        assert TaskContext(store).bundle(tid) == build_context(store, tid, "full", memory=None)
+
+    def test_bundle_passes_verbosity_and_memory_through(self, store):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory = MemoryStore(conn=store.conn)
+        memory.record("migrations-are-additive", task_id=t.id,
+                      text="Sqlite migration steps must be additive; a rewrite loses rows.")
+        via_facade = TaskContext(store, memory=memory).bundle(t.id, "summary")
+        direct = build_context(store, t.id, "summary", memory=memory)
+        assert via_facade == direct
+
+    def test_related_delegates_to_related_candidates(self, populated):
+        store = populated["store"]
+        task = populated["task"]
+        assert TaskContext(store).related(task) == related_candidates(store, task)
+
+    def test_mcp_server_reaches_context_only_through_task_context(self):
+        import inspect
+
+        from taskfw import mcp_server
+        src = inspect.getsource(mcp_server)
+        assert "TaskContext" in src, "mcp_server must reach context assembly through TaskContext"
+        assert "build_context(" not in src, (
+            "mcp_server must call TaskContext(...).bundle(), not build_context() directly — "
+            "see the pull-context-bundle and mcp-portable-interface concepts"
+        )
+        assert "related_candidates(" not in src

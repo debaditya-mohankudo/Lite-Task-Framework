@@ -64,6 +64,11 @@
       "bounded_context": "Loop Memory",
       "definition": "The post-implementation pass that grades how well Grooming's predictions held up and surfaces lessons for Loop Memory. Held as task.introspection, a list appended to on every pass, since each report is evidence about one distinct execution and the series itself is the value.",
       "evidence": "taskfw/task.py:Task.introspection, taskfw/mcp_server.py:tasks__add_introspection"
+    },
+    "TaskContext": {
+      "bounded_context": "Task Tracking",
+      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order. Not persisted anywhere; assembled fresh on every call and gone once returned. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it via tasks__context. As of task:01fba67f, callers no longer assemble it by calling build_context/related_candidates as free functions -- they go through this one class, bound once per store/memory pair.",
+      "evidence": "taskfw/context.py:TaskContext, taskfw/context.py:build_context, taskfw/mcp_server.py:tasks__context"
     }
   },
   "relations": [
@@ -88,6 +93,12 @@
     {"subject": "Introspection", "predicate": "part-of", "object": "Task",
      "note": "Held as task.introspection; an appended list rather than Grooming's replace-in-place dict, reflecting that each pass is a distinct piece of evidence."},
     {"subject": "MemoryRecord", "predicate": "references", "object": "Introspection",
-     "note": "tasks__add_introspection is where a lesson is surfaced into Loop Memory -- a report carrying a lesson with no cited memory triggers dispatcher's non-blocking memory_nudge, so the omission stays visible instead of silent."}
+     "note": "tasks__add_introspection is where a lesson is surfaced into Loop Memory -- a report carrying a lesson with no cited memory triggers dispatcher's non-blocking memory_nudge, so the omission stays visible instead of silent."},
+    {"subject": "TaskContext", "predicate": "describes", "object": "Task",
+     "note": "One bundle is assembled per task_id on demand; it has no identity or storage of its own separate from the Task it was built from."},
+    {"subject": "TaskContext", "predicate": "references", "object": "TaskEdge",
+     "note": "The bundle's graph section pulls a Task's edges fresh via TaskStore.edges() on every call, capped at MAX_EDGES per direction -- edges are read into the bundle, never duplicated into it."},
+    {"subject": "TaskContext", "predicate": "references", "object": "MemoryRecord",
+     "note": "The bundle's lessons section is the guaranteed read path back into Loop Memory (see MemoryRecord's Introspection link for the write side) -- without it, a lesson only reached an agent if it happened to call task_memory__recall on its own."}
   ]
 }
