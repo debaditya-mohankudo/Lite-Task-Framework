@@ -109,6 +109,15 @@ expresses the intended behaviour, then fix the other — and if the design was
 right, add a test that pins the interaction explicitly so the next person does
 not have the same argument.
 
+## Ready for verification
+
+There is no status for this — it is derived, not stored. A task is ready for
+[verification](05-verification.md) the moment `tasks__context`'s
+`progress.done == progress.total` and at least one commit exists: every
+checklist item checked off, against a real diff. That is the same condition
+verification's own prerequisite check reads — nothing new to track, just the
+signal to notice before calling `tasks__finish`.
+
 ## Finish
 
 ```python

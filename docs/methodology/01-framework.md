@@ -10,7 +10,10 @@ create ──▶ groom ──▶ implement ──▶ finish ──▶ introspect
 
 [Verification](05-verification.md) is a standalone pass, not a fixed stage
 in this sequence — it activates and deactivates its own task, the same way
-grooming does, and can run whenever, independent of finishing.
+grooming does, and can run whenever, independent of finishing. Its natural
+place is after implement and before introspect: a gap it finds and can't
+close inline becomes a linked follow-up task, a smaller loop nested inside
+this one.
 
 Two issue types exist:
 

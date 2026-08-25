@@ -8,10 +8,18 @@ A green suite is not evidence of this by itself. A suite that never exercised
 the changed behaviour passes just as loudly as one that did. Verification is
 the pass that tells the difference.
 
-This is a standalone pass, not a fixed stage wired into implementation or
-finishing. It activates and deactivates its own task the same way grooming
-does, and can be run whenever test completeness needs checking — while a
-task is still open, or well after it closed.
+Its natural place is between implementation and introspection — after
+something exists to audit, before the retrospective grades it — but that is
+a recommended position, not a gate: it does not require task-implementation
+to have been invoked as a skill, run immediately after it, or complete
+before `tasks__finish`. It activates and deactivates its own task the same
+way grooming does, and can be run whenever test completeness needs checking
+— while a task is still open, or well after it closed.
+
+Run inside the larger create→groom→implement→finish→introspect loop, it
+forms a smaller loop of its own: a gap this pass finds and cannot close
+inline becomes a linked follow-up task rather than a private note, so it
+re-enters the same loop instead of sitting inert as an unresolved risk.
 
 ## The guiding question
 
@@ -124,12 +132,16 @@ A missing test for a silent-failure path or an untested checklist item is
 usually cheap to add now — add it. A gap that would require substantial new
 test infrastructure is not something to build inline; name it instead, the
 same way introspection prefers recommending a follow-up task over hand-rolling
-a script mid-retrospective.
+a script mid-retrospective. If closing it is real, non-trivial work, create
+that follow-up as a linked task (`tasks__create` + `tasks__link`) rather than
+only a note — that is the smaller loop mentioned above: a verification
+failure re-enters create→groom→implement, instead of ending as an unresolved
+line nobody is on the hook for.
 
 There is no dedicated field for verification findings — the schema does not
-need one. A real gap is exactly the shape of a groomed risk, so it belongs in
-`grooming.risks`, gradable by the same introspection pass that already grades
-every other risk:
+need one. A gap too small to warrant its own task is exactly the shape of a
+groomed risk, so it belongs in `grooming.risks`, gradable by the same
+introspection pass that already grades every other risk:
 
 ```python
 tasks__update(task_id, grooming={

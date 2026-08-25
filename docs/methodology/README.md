@@ -28,7 +28,10 @@ create ──▶ groom ──▶ implement ──▶ finish ──▶ introspect
 
 Verification sits outside this sequence rather than as a fixed stage in it —
 like grooming, it activates and deactivates its own task and can be run
-whenever, independent of where a task sits in the loop.
+whenever, independent of where a task sits in the loop. Its recommended
+position is still after implement and before introspect: a gap it finds and
+can't close inline becomes a linked follow-up task, a smaller loop nested
+inside the one above rather than a note nobody is on the hook for.
 
 Grooming makes falsifiable predictions. Introspection grades them. That single
 feedback edge is what stops grooming from being decorative — without it,

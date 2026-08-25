@@ -1,6 +1,6 @@
 ---
 name: task-verification
-description: Standalone audit of test completeness — unit and integration — for a task. Checks every promised behaviour has a test that would catch its breakage, closes cheap gaps, names the rest. Run whenever, independent of implementation or finishing. Use when the user says /task-verification.
+description: Standalone audit of test completeness — unit and integration — for a task. Checks every promised behaviour has a test that would catch its breakage, closes cheap gaps, names the rest. Run whenever there is implementation to audit, independent of finishing. Use when the user says /task-verification.
 user-invocable: true
 updated: 2026-08-25
 doc: docs/methodology/05-verification.md
@@ -12,7 +12,9 @@ Implementation proves the code runs. This is about proving it is checked.
 
 The reasoning lives in [05-verification.md](../../../docs/methodology/05-verification.md).
 
-This is a standalone pass, not a fixed stage wired into implementation or finishing. It activates and deactivates its own task the same way grooming does, and can run whenever test completeness needs checking — while a task is still open, or well after it closed.
+Its natural place is between implementation and introspection — after something exists to audit, before the retrospective grades it — but that is a recommended position, not a gate: it does not require task-implementation to have been invoked as a skill, run immediately after it, or complete before `tasks__finish`. It activates and deactivates its own task the same way grooming does, and can run whenever test completeness needs checking — while a task is still open, or well after it closed.
+
+Run inside the larger create→groom→implement→finish→introspect loop, it forms a smaller loop of its own: a gap this pass finds and cannot close inline becomes a linked follow-up task rather than a private note (see Step 4), so it re-enters the same loop instead of sitting inert as an unresolved risk.
 
 A green suite does not prove this pass is unnecessary — it proves the suite that already existed still passes, which says nothing about whether the *new* behaviour is what any of it is checking.
 
@@ -90,7 +92,7 @@ tasks__add_decision(task_id, "Added an integration test against a real temp "
                              "because the mock could not see Y.")
 ```
 
-If a gap needs real test infrastructure that doesn't exist yet, don't hand-roll it inline — name it as a risk instead, the same way introspection recommends a follow-up task over improvising one mid-retrospective. There is no dedicated field for verification findings; an unclosed gap is exactly the shape of a groomed risk, so it goes there and rides the same grading introspection already does for everything else:
+If a gap needs real test infrastructure that doesn't exist yet, don't hand-roll it inline. If closing it is real, non-trivial work, create it as a linked follow-up task instead of a note — `tasks__create` + `tasks__link` — so it re-enters create→groom→implement rather than sitting as an unresolved line nobody owns. For a gap too small to warrant its own task, name it as a risk the same way introspection recommends a follow-up task over improvising one mid-retrospective. There is no dedicated field for these smaller findings; an unclosed gap is exactly the shape of a groomed risk, so it goes there and rides the same grading introspection already does for everything else:
 
 ```python
 tasks__update(task_id, grooming={
@@ -119,6 +121,7 @@ Suite            ✓ N passed / ✗ M failed / K skipped
 Gaps closed      - added unit test for X
                  - pinned the fail-open path in Y
 Gaps named       - <risk text>, logged to grooming.risks
+                 - <gap>, spun out as linked task:<new-id>
 Change-detectors - <test> asserts implementation, not contract — reworded / flagged
 Ready to finish  yes / no — <what's blocking>
 ```
@@ -132,5 +135,6 @@ If every promise already had real coverage, say so in one line rather than inven
 - **Coverage-by-file is not the question.** Ask which test would fail if a specific promise broke.
 - **Silent-failure paths first.** They are the only gaps nothing else will ever catch.
 - **Close cheap gaps now; name expensive ones.** Never invent test scaffolding mid-pass to fill the shape of "done."
-- **No new schema field.** Findings live in `grooming.risks` (open gaps) or `tasks__add_decision` (choices made while closing one) — both already exist for exactly this.
+- **Expensive gaps become the smaller loop.** Real follow-up work is a linked task (`tasks__create` + `tasks__link`), not a note that ends the trail — that is what keeps a verification failure inside the loop instead of outside it.
+- **No new schema field.** Findings live in `grooming.risks` (gaps too small for their own task), `tasks__link` (gaps that became one), or `tasks__add_decision` (choices made while closing one) — all already exist for exactly this.
 - **This pass does not finish the task.** `tasks__finish` is a separate, independent call — this skill only reports whether the work looks ready for it.

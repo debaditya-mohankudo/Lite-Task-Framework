@@ -108,6 +108,10 @@ Verify against reality where the cost is small. A real temporary git repository 
 
 Sometimes the test encodes an assumption the design deliberately contradicts. Do not reflexively change the implementation to satisfy it. Ask which one expresses the intended behaviour, then fix the other — and if the design was right, add a test pinning the interaction so the next person does not have the same argument.
 
+## Ready for verification
+
+There is no status for this — it is derived, not stored. A task is ready for [/task-verification](../task-verification/skill.md) the moment `tasks__context`'s `progress.done == progress.total` and at least one commit exists: every checklist item checked off, against a real diff. That is the same condition verification's own prerequisite check reads (see its skill.md) — nothing new to track here, just the signal to notice before calling `tasks__finish`.
+
 ## Finish
 
 ```python
