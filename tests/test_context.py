@@ -10,8 +10,8 @@ from __future__ import annotations
 import pytest
 
 from taskfw.context import (
-    CHAR_BUDGET, MAX_EDGES, MAX_LESSONS, TRIM_ORDER, _BUNDLE_SKELETON, _size, build_context,
-    related_candidates, TaskContext,
+    CHAR_BUDGET, MAX_EDGES, MAX_LESSONS, TRIM_ORDER, _BUNDLE_SKELETON, _size, _build_context,
+    _related_candidates, TaskContext,
 )
 from taskfw.memory import MemoryStore
 from taskfw.task import ResolutionItem, Task
@@ -44,12 +44,12 @@ def populated(store):
 
 class TestMissing:
     def test_unknown_task_returns_error(self, store):
-        assert "error" in build_context(store, "nope")
+        assert "error" in _build_context(store, "nope")
 
 
 class TestSummary:
     def test_summary_has_identity_and_open_items_only(self, populated):
-        c = build_context(populated["store"], populated["task"].id, verbosity="summary")
+        c = _build_context(populated["store"], populated["task"].id, verbosity="summary")
         assert c["task"]["title"] == "Do the thing"
         assert c["task"]["progress"] == {"done": 1, "total": 2}
         assert c["task"]["open_items"] == ["step two"]
@@ -59,40 +59,40 @@ class TestSummary:
     def test_summary_is_much_smaller_than_full(self, populated):
         import json
         tid = populated["task"].id
-        s = len(json.dumps(build_context(populated["store"], tid, "summary"), default=str))
-        f = len(json.dumps(build_context(populated["store"], tid, "full"), default=str))
+        s = len(json.dumps(_build_context(populated["store"], tid, "summary"), default=str))
+        f = len(json.dumps(_build_context(populated["store"], tid, "full"), default=str))
         assert s < f
 
 
 class TestFullBundle:
     def test_every_section_is_present(self, populated):
-        c = build_context(populated["store"], populated["task"].id)
+        c = _build_context(populated["store"], populated["task"].id)
         for section in ("task", "decisions", "grooming", "graph", "commits", "related"):
             assert section in c
 
     def test_section_order_is_part_of_the_contract(self, populated):
-        c = build_context(populated["store"], populated["task"].id)
+        c = _build_context(populated["store"], populated["task"].id)
         keys = [k for k in c if k in ("task", "decisions", "grooming", "graph", "commits")]
         assert keys == ["task", "decisions", "grooming", "graph", "commits"]
 
     def test_only_decisions_appear_in_decisions(self, populated):
-        c = build_context(populated["store"], populated["task"].id)
+        c = _build_context(populated["store"], populated["task"].id)
         texts = [d["text"] for d in c["decisions"]]
         assert "chose X over Y" in texts
         assert "just a note" not in texts
 
     def test_graph_carries_parent_children_and_edges(self, populated):
-        c = build_context(populated["store"], populated["task"].id)
+        c = _build_context(populated["store"], populated["task"].id)
         assert c["graph"]["parent"]["id"] == populated["epic"].id
         assert [ch["id"] for ch in c["graph"]["children"]] == [populated["child"].id]
         assert c["graph"]["edges"]["outgoing"][0]["to_id"] == populated["epic"].id
 
     def test_commits_are_an_exact_per_task_lookup(self, populated):
-        c = build_context(populated["store"], populated["task"].id)
+        c = _build_context(populated["store"], populated["task"].id)
         assert [x["sha"] for x in c["commits"]] == ["abc123"]
 
     def test_task_section_is_complete(self, populated):
-        c = build_context(populated["store"], populated["task"].id)["task"]
+        c = _build_context(populated["store"], populated["task"].id)["task"]
         assert c["motivation"] == "because reasons"
         assert c["files"] == ["a.py"] and c["tags"] == ["x"] and c["notes"] == "a note"
         assert [r["done"] for r in c["resolution"]] == [True, False]
@@ -100,7 +100,7 @@ class TestFullBundle:
     def test_related_excludes_the_task_itself(self, store):
         a = store.save(Task(title="migration runner"))
         store.save(Task(title="migration runner two"))
-        c = build_context(store, a.id)
+        c = _build_context(store, a.id)
         assert a.id not in [r["id"] for r in c["related"]]
 
     def test_related_matches_on_partial_word_overlap(self, store):
@@ -113,7 +113,7 @@ class TestFullBundle:
         """
         a = store.save(Task(title="Add hit_count tracking"))
         b = store.save(Task(title="Add usage tracking to memory"))
-        c = build_context(store, a.id)
+        c = _build_context(store, a.id)
         assert b.id in [r["id"] for r in c["related"]]
 
     def test_related_floor_rejects_a_candidate_with_no_meaningful_overlap(self, store):
@@ -133,13 +133,13 @@ class TestFullBundle:
             tags=["project:acme-certificate-lifecycle-agent", "llm", "renewal",
                   "agent", "deterministic", "certificate", "planner"],
         ))
-        c = build_context(store, a.id)
+        c = _build_context(store, a.id)
         assert c["related"] == []
 
     def test_related_floor_does_not_empty_out_genuine_matches(self, store):
         a = store.save(Task(title="Fix the sqlite migration path"))
         b = store.save(Task(title="Sqlite migration path is broken on restore"))
-        c = build_context(store, a.id)
+        c = _build_context(store, a.id)
         assert b.id in [r["id"] for r in c["related"]]
 
     def test_related_floor_ignores_date_stamped_tag_collisions(self, store):
@@ -147,13 +147,13 @@ class TestFullBundle:
         the floor must not treat the shared digits as overlap."""
         a = store.save(Task(title="Audit the billing export job", tags=["2026-08-23"]))
         store.save(Task(title="Rotate the deploy signing key", tags=["2026-08-23"]))
-        c = build_context(store, a.id)
+        c = _build_context(store, a.id)
         assert c["related"] == []
 
     def test_related_still_matches_an_exact_title_phrase(self, store):
         a = store.save(Task(title="degrade FTS to LIKE"))
         b = store.save(Task(title="degrade FTS to LIKE gracefully"))
-        c = build_context(store, a.id)
+        c = _build_context(store, a.id)
         assert b.id in [r["id"] for r in c["related"]]
 
     def test_keys_match_skeleton_on_a_non_truncating_bundle(self, populated):
@@ -166,13 +166,13 @@ class TestFullBundle:
         are deliberately absent from the skeleton, so an equality assertion
         only holds on a bundle where none of them fired.
         """
-        c = build_context(populated["store"], populated["task"].id)
+        c = _build_context(populated["store"], populated["task"].id)
         assert set(c.keys()) == set(_BUNDLE_SKELETON.keys())
 
 
 class TestBudget:
     def test_small_bundle_is_not_truncated(self, populated):
-        assert "truncated" not in build_context(populated["store"], populated["task"].id)
+        assert "truncated" not in _build_context(populated["store"], populated["task"].id)
 
     def test_oversized_bundle_drops_sections_and_says_so(self, store):
         epic = store.save(Task(title="epic", type="epic"))
@@ -181,20 +181,20 @@ class TestBudget:
             store.add_event(big.id, f"decision {i} " + "y" * 400, kind="decision")
         for i in range(30):
             store.add_commit(big.id, f"sha{i:040d}", "/repo")
-        c = build_context(store, big.id)
+        c = _build_context(store, big.id)
         assert c.get("truncated"), "oversized bundle reported no truncation"
         # Least useful sections go first.
         assert c["truncated"][0] in TRIM_ORDER
 
     def test_the_task_itself_is_never_trimmed(self, store):
         t = store.save(Task(title="huge", motivation="x" * (CHAR_BUDGET * 2)))
-        c = build_context(store, t.id)
+        c = _build_context(store, t.id)
         assert c["task"]["title"] == "huge"
         assert c["task"]["motivation"]
 
     def test_truncated_distinguishes_empty_from_omitted(self, populated):
         """An absent section and a dropped one must not look the same."""
-        c = build_context(populated["store"], populated["task"].id)
+        c = _build_context(populated["store"], populated["task"].id)
         assert c["commits"], "fixture has a commit"
         assert "truncated" not in c
 
@@ -256,14 +256,14 @@ class TestGroomingTrim:
 
     def test_grooming_only_over_budget_keeps_grooming_not_dropped_whole(self, store):
         t = self._oversized_grooming_task(store)
-        c = build_context(store, t.id)
+        c = _build_context(store, t.id)
         assert c["grooming"], "grooming should survive trimmed, not empty"
         assert "grooming" not in c.get("truncated", [])
         assert "grooming_truncated" in c
 
     def test_least_useful_grooming_fields_drop_first(self, store):
         t = self._oversized_grooming_task(store)
-        c = build_context(store, t.id)
+        c = _build_context(store, t.id)
         assert "suggested_improvements" in c["grooming_truncated"]
         # clarifications are the highest-value field; kept if anything is.
         if "clarifications" not in c["grooming_truncated"]:
@@ -271,7 +271,7 @@ class TestGroomingTrim:
 
     def test_grooming_bundle_no_longer_leaves_budget_unspent(self, store):
         t = self._oversized_grooming_task(store)
-        c = build_context(store, t.id)
+        c = _build_context(store, t.id)
         # Whole-section dropping would have zeroed ~8000+ chars of grooming
         # to save a few hundred over budget. Field trimming should land much
         # closer to the ceiling instead of far under it.
@@ -288,7 +288,7 @@ class TestGroomingTrim:
             title="unlisted field", parent=epic.id,
             grooming={"an_unrecognised_field": "x" * (CHAR_BUDGET * 3)},
         ))
-        c = build_context(store, t.id)
+        c = _build_context(store, t.id)
         assert c["grooming"] == {}
         assert "grooming" in c["truncated"]
         assert _size(c) <= CHAR_BUDGET
@@ -299,7 +299,7 @@ class TestGroomingTrim:
             title="unshrinkable", parent=epic.id,
             grooming={"clarifications": ["c" * (CHAR_BUDGET * 3)]},
         ))
-        c = build_context(store, t.id)
+        c = _build_context(store, t.id)
         assert c["grooming"] == {}
         assert "grooming" in c["truncated"]
         assert "grooming_truncated" not in c
@@ -314,13 +314,13 @@ class TestEdgesCap:
         for i in range(MAX_EDGES + 2):
             other = store.save(Task(title=f"blocker {i}"))
             store.link(other.id, task.id, "blocks")
-        c = build_context(store, task.id)
+        c = _build_context(store, task.id)
         assert len(c["graph"]["edges"]["outgoing"]) == MAX_EDGES
         assert len(c["graph"]["edges"]["incoming"]) == MAX_EDGES
         assert c["edges_truncated"] == {"outgoing": 3, "incoming": 2}
 
     def test_no_edges_truncated_field_when_under_cap(self, populated):
-        c = build_context(populated["store"], populated["task"].id)
+        c = _build_context(populated["store"], populated["task"].id)
         assert "edges_truncated" not in c
 
     def test_edges_truncated_cleared_if_graph_dropped_for_budget(self, store):
@@ -331,7 +331,7 @@ class TestEdgesCap:
         for i in range(MAX_EDGES + 3):
             other = store.save(Task(title=f"dep {i}"))
             store.link(big.id, other.id, "depends_on")
-        c = build_context(store, big.id)
+        c = _build_context(store, big.id)
         if "graph" in c.get("truncated", []):
             assert "edges_truncated" not in c
 
@@ -351,14 +351,14 @@ class TestLessons:
         t = store.save(Task(title="Fix the sqlite migration path"))
         memory.record("migrations-are-additive", task_id=t.id, kind="constraint",
                       text="Sqlite migration steps must be additive; a rewrite loses rows.")
-        c = build_context(store, t.id, memory=memory)
+        c = _build_context(store, t.id, memory=memory)
         assert [m["slug"] for m in c["lessons"]] == ["migrations-are-additive"]
 
     def test_no_match_returns_an_empty_section_not_a_missing_one(self, store, memory):
         t = store.save(Task(title="Fix the sqlite migration path"))
         memory.record("unrelated-lesson", task_id=t.id, kind="technique",
                       text="Espresso extraction favours a coarser burr grind setting.")
-        c = build_context(store, t.id, memory=memory)
+        c = _build_context(store, t.id, memory=memory)
         assert c["lessons"] == []
         assert "lessons" in c, "an empty section must still be present"
 
@@ -368,7 +368,7 @@ class TestLessons:
                       text="Sqlite migration steps must be additive; a rewrite loses rows.")
         memory.link("migrations-are-additive", store.save(Task(title="a")).id, "confirmed_by")
         memory.link("migrations-are-additive", store.save(Task(title="b")).id, "contradicted_by")
-        c = build_context(store, t.id, memory=memory)
+        c = _build_context(store, t.id, memory=memory)
         assert c["lessons"][0]["standing"] == "disputed"
 
     def test_superseded_lessons_stay_out(self, store, memory):
@@ -378,7 +378,7 @@ class TestLessons:
         memory.record("new-migration-rule", task_id=t.id,
                       text="Sqlite migration steps are additive and versioned per table.")
         memory.supersede("old-migration-rule", "new-migration-rule")
-        slugs = [m["slug"] for m in build_context(store, t.id, memory=memory)["lessons"]]
+        slugs = [m["slug"] for m in _build_context(store, t.id, memory=memory)["lessons"]]
         assert "old-migration-rule" not in slugs
 
     def test_capped_at_max_lessons(self, store, memory):
@@ -386,7 +386,7 @@ class TestLessons:
         for i in range(MAX_LESSONS + 3):
             memory.record(f"migration-lesson-{i}", task_id=t.id,
                           text=f"Sqlite migration rule number {i}; additive steps only always.")
-        c = build_context(store, t.id, memory=memory)
+        c = _build_context(store, t.id, memory=memory)
         assert len(c["lessons"]) == MAX_LESSONS
 
     def test_assembling_a_bundle_does_not_bump_hit_count(self, store, memory):
@@ -399,8 +399,8 @@ class TestLessons:
         t = store.save(Task(title="Fix the sqlite migration path"))
         memory.record("migrations-are-additive", task_id=t.id,
                       text="Sqlite migration steps must be additive; a rewrite loses rows.")
-        build_context(store, t.id, memory=memory)
-        build_context(store, t.id, memory=memory)
+        _build_context(store, t.id, memory=memory)
+        _build_context(store, t.id, memory=memory)
         assert memory.get("migrations-are-additive")["hit_count"] == 0
         # ...while a deliberate recall still counts.
         memory.recall("sqlite migration")
@@ -410,7 +410,7 @@ class TestLessons:
         t = store.save(Task(title="Fix the sqlite migration path"))
         memory.record("migrations-are-additive", task_id=t.id,
                       text="Sqlite migration steps must be additive; a rewrite loses rows.")
-        assert "lessons" not in build_context(store, t.id, "summary", memory=memory)
+        assert "lessons" not in _build_context(store, t.id, "summary", memory=memory)
 
     def test_lessons_floor_rejects_a_slug_with_no_meaningful_overlap(self, store, memory):
         """Pre-floor, this memory always filled a slot on relevance ranking
@@ -419,14 +419,14 @@ class TestLessons:
         t = store.save(Task(title="Fix the sqlite migration path"))
         memory.record("unrelated-lesson", task_id=t.id, kind="technique",
                       text="Espresso extraction favours a coarser burr grind setting.")
-        c = build_context(store, t.id, memory=memory)
+        c = _build_context(store, t.id, memory=memory)
         assert c["lessons"] == []
 
     def test_lessons_floor_does_not_empty_out_a_genuine_match(self, store, memory):
         t = store.save(Task(title="Fix the sqlite migration path"))
         memory.record("migrations-are-additive", task_id=t.id, kind="constraint",
                       text="Sqlite migration steps must be additive; a rewrite loses rows.")
-        c = build_context(store, t.id, memory=memory)
+        c = _build_context(store, t.id, memory=memory)
         assert [m["slug"] for m in c["lessons"]] == ["migrations-are-additive"]
 
     def test_lessons_is_trimmed_after_related_and_before_commits(self):
@@ -442,7 +442,7 @@ class TestLessons:
                       text="Sqlite migration steps must be additive; a rewrite loses rows.")
         for i in range(40):
             store.add_event(big.id, f"decision {i} " + "y" * 400, kind="decision")
-        c = build_context(store, big.id, memory=memory)
+        c = _build_context(store, big.id, memory=memory)
         assert "lessons" in c["truncated"]
         assert c["lessons"] == []
 
@@ -458,7 +458,7 @@ class TestTaskContext:
     def test_bundle_delegates_to_build_context(self, populated):
         store = populated["store"]
         tid = populated["task"].id
-        assert TaskContext(store).bundle(tid) == build_context(store, tid, "full", memory=None)
+        assert TaskContext(store).bundle(tid) == _build_context(store, tid, "full", memory=None)
 
     def test_bundle_passes_verbosity_and_memory_through(self, store):
         t = store.save(Task(title="Fix the sqlite migration path"))
@@ -466,13 +466,13 @@ class TestTaskContext:
         memory.record("migrations-are-additive", task_id=t.id,
                       text="Sqlite migration steps must be additive; a rewrite loses rows.")
         via_facade = TaskContext(store, memory=memory).bundle(t.id, "summary")
-        direct = build_context(store, t.id, "summary", memory=memory)
+        direct = _build_context(store, t.id, "summary", memory=memory)
         assert via_facade == direct
 
     def test_related_delegates_to_related_candidates(self, populated):
         store = populated["store"]
         task = populated["task"]
-        assert TaskContext(store).related(task) == related_candidates(store, task)
+        assert TaskContext(store).related(task) == _related_candidates(store, task)
 
     def test_mcp_server_reaches_context_only_through_task_context(self):
         import inspect
@@ -480,8 +480,8 @@ class TestTaskContext:
         from taskfw import mcp_server
         src = inspect.getsource(mcp_server)
         assert "TaskContext" in src, "mcp_server must reach context assembly through TaskContext"
-        assert "build_context(" not in src, (
-            "mcp_server must call TaskContext(...).bundle(), not build_context() directly — "
+        assert "_build_context(" not in src, (
+            "mcp_server must call TaskContext(...).bundle(), not _build_context() directly — "
             "see the pull-context-bundle and mcp-portable-interface concepts"
         )
-        assert "related_candidates(" not in src
+        assert "_related_candidates(" not in src

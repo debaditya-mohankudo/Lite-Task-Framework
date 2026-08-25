@@ -108,7 +108,7 @@ GROOMING_TRIM_ORDER = (
 )
 
 #: The shape of a full-verbosity bundle, in section order — see the module
-#: docstring's SECTIONS list. build_context copies this fresh (dict(...)) and
+#: docstring's SECTIONS list. _build_context copies this fresh (dict(...)) and
 #: fills in every field on each call; nothing here is ever mutated or reused
 #: across calls. Deliberately excludes edges_truncated, truncated, and
 #: grooming_truncated: those three are conditional, added only when trimming
@@ -130,7 +130,7 @@ def _query_terms(task: Task) -> str:
     """The words that describe a task, for any full-text lookup about it.
 
     One definition, because both approximate sections of the bundle
-    (related_candidates, lessons_for) search on it. Two copies would drift the
+    (_related_candidates, lessons_for) search on it. Two copies would drift the
     moment either one learned a new term, and the divergence would only ever
     surface as an inconsistent bundle.
     """
@@ -160,9 +160,9 @@ def _term_set(text: str) -> set[str]:
 
 
 def _passes_floor(query_terms: str, candidate_text: str) -> bool:
-    """The relevance floor shared by related_candidates and lessons_for.
+    """The relevance floor shared by _related_candidates and lessons_for.
 
-    related_candidates and lessons_for rank by relevance but never excluded
+    _related_candidates and lessons_for rank by relevance but never excluded
     anything, so both always filled up to their cap with the best available
     match among ALL rows in the store, however weak — confirmed live
     (task:60ebca8e) surfacing candidates with zero title or tag overlap with
@@ -171,7 +171,7 @@ def _passes_floor(query_terms: str, candidate_text: str) -> bool:
 
     TERM-OVERLAP MINIMUM, not a score threshold or a cutoff relative to the
     top hit — chosen because it is the one form that applies unchanged to
-    both call sites. related_candidates ranks via store.search()'s
+    both call sites. _related_candidates ranks via store.search()'s
     _combination_score (tag overlap weighted 3:1 over body); lessons_for
     ranks via memories_fts's plain bm25 over a schema with no tags column at
     all. Neither score is comparable to the other or stable as the store
@@ -206,7 +206,7 @@ def _task_summary(task: Task) -> dict:
 
 
 class TaskContext:
-    """The interface callers depend on instead of build_context/related_candidates
+    """The interface callers depend on instead of _build_context/_related_candidates
     directly.
 
     mcp_server used to import and call those two free functions itself,
@@ -214,15 +214,22 @@ class TaskContext:
     individually. That is procedural coupling: every call site has to know
     which function needs which arguments, so a change to either function's
     signature is a change at every call site too. Binding `store`/`memory`
-    once, here, and exposing them as named methods means build_context and
-    related_candidates can gain, drop, or reorder parameters — or stop being
+    once, here, and exposing them as named methods means _build_context and
+    _related_candidates can gain, drop, or reorder parameters — or stop being
     the implementation entirely — without mcp_server changing at all; it only
     depends on `.bundle()` and `.related()`.
 
-    Deliberately thin: no behaviour lives here. build_context and
-    related_candidates remain the actual implementation and stay directly
+    Deliberately thin: no behaviour lives here. _build_context and
+    _related_candidates remain the actual implementation and stay directly
     testable (tests/test_context.py calls them straight, not through this
     class) — this only exists to be the stable thing a caller imports.
+
+    Both free functions are private (leading underscore) on purpose, not just
+    by convention: TaskContext is now their only caller outside this module
+    (task:01fba67f), so there is no longer a second public name a future
+    caller could import and call directly, silently reintroducing the exact
+    coupling this class exists to remove. Deleting the failure mode rather
+    than adding another test to police it.
     """
 
     def __init__(self, store: TaskStore, memory: MemoryStore | None = None):
@@ -230,13 +237,13 @@ class TaskContext:
         self._memory = memory
 
     def bundle(self, task_id: str, verbosity: str = "full") -> dict:
-        return build_context(self._store, task_id, verbosity, memory=self._memory)
+        return _build_context(self._store, task_id, verbosity, memory=self._memory)
 
     def related(self, task: Task) -> list[dict]:
-        return related_candidates(self._store, task)
+        return _related_candidates(self._store, task)
 
 
-def build_context(store: TaskStore, task_id: str, verbosity: str = "full",
+def _build_context(store: TaskStore, task_id: str, verbosity: str = "full",
                   memory: MemoryStore | None = None) -> dict:
     """Assemble the bundle. Returns {"error": ...} for an unknown task.
 
@@ -276,7 +283,7 @@ def build_context(store: TaskStore, task_id: str, verbosity: str = "full",
         "grooming": task.grooming or {},
         "graph": graph,
         "commits": store.commits(task_id)[:MAX_COMMITS],
-        "related": related_candidates(store, task),
+        "related": _related_candidates(store, task),
         "lessons": lessons_for(store, task, memory),
     })
     if edges_dropped:
@@ -307,14 +314,13 @@ def _graph(store: TaskStore, task: Task) -> dict:
     return graph, dropped
 
 
-def related_candidates(store: TaskStore, task: Task) -> list[dict]:
+def _related_candidates(store: TaskStore, task: Task) -> list[dict]:
     """Full-text neighbours, excluding the task itself.
 
-    Public rather than a module-private helper: build_context is not the only
-    caller — mcp_server.tasks__create uses this too, to surface candidates at
-    creation time. A leading-underscore name reached from outside its own
-    module is a signal the behaviour deserves a shared name, not a private one
-    imported across the boundary anyway.
+    Was public (task:78853657) because mcp_server.tasks__create called it
+    directly, alongside build_context. As of task:01fba67f, both call sites
+    reach this only through TaskContext.related(), so the reason for a shared
+    name no longer holds — private again, so there is exactly one way in.
 
     The only approximate section of tasks__context's bundle, and the first to
     be trimmed there. Everything else in the bundle is an exact lookup — this
@@ -351,10 +357,10 @@ def lessons_for(store: TaskStore, task: Task,
     The bundle's second approximate section, and the read path that makes loop
     memory load-bearing rather than write-only.
 
-    QUERY SHAPE comes from _query_terms, shared with related_candidates so the
+    QUERY SHAPE comes from _query_terms, shared with _related_candidates so the
     notion of "what is this task about" has one definition. The justification does not
     transfer intact, though, and pretending otherwise would be the kind of
-    unexamined premise this project treats as the hazard: related_candidates
+    unexamined premise this project treats as the hazard: _related_candidates
     leans on store.search() weighting tag overlap 3:1 over body text, whereas
     memories_fts indexes only `slug text` — it has no tags column — and ranks by
     plain bm25. So tags are a weighted, hand-curated signal on the related side
@@ -372,7 +378,7 @@ def lessons_for(store: TaskStore, task: Task,
     here — standing is derived in the memory store and has one home.
 
     RELEVANCE FLOOR (task:1f1e48e2): the same _passes_floor used by
-    related_candidates, applied here too rather than reimplemented — one
+    _related_candidates, applied here too rather than reimplemented — one
     definition of the floor per the same reasoning _query_terms already
     gives for the query shape. MAX_LESSONS was originally set below
     MAX_RELATED as a stand-in brake on relevance; task:60ebca8e's

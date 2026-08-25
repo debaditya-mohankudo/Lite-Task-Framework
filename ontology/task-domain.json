@@ -67,8 +67,8 @@
     },
     "TaskContext": {
       "bounded_context": "Task Tracking",
-      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order. Not persisted anywhere; assembled fresh on every call and gone once returned. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it via tasks__context. As of task:01fba67f, callers no longer assemble it by calling build_context/related_candidates as free functions -- they go through this one class, bound once per store/memory pair.",
-      "evidence": "taskfw/context.py:TaskContext, taskfw/context.py:build_context, taskfw/mcp_server.py:tasks__context"
+      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order. Not persisted anywhere; assembled fresh on every call and gone once returned. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it via tasks__context. As of task:01fba67f, callers no longer assemble it by calling build_context/related_candidates as free functions -- they go through this one class, bound once per store/memory pair; both free functions were renamed private (_build_context, _related_candidates) in the same task, since TaskContext became their only caller outside taskfw/context.py.",
+      "evidence": "taskfw/context.py:TaskContext, taskfw/context.py:_build_context, taskfw/mcp_server.py:tasks__context"
     }
   },
   "relations": [
