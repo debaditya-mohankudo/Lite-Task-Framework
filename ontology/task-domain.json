@@ -62,6 +62,11 @@
       "definition": "The pre-implementation pass that records a task's current best understanding as falsifiable risks/findings before work starts. Recorded as part of the Task and replaced wholesale each pass -- unlike Introspection, only the latest pass is kept, because grooming is a current-belief snapshot, not a history.",
       "evidence": "taskfw/task.py:Task.grooming"
     },
+    "Risk": {
+      "bounded_context": "Loop Memory",
+      "definition": "One falsifiable prediction inside a Grooming pass -- the one part of Grooming that is NOT wholesale-replaced. A Risk has its own id and an optional 'graded' verdict (introspection's judgment on whether it held); re-grooming unions risks by id instead of overwriting them, so a graded risk -- the loop's primary evidence -- is never silently dropped just because a later pass omitted it.",
+      "evidence": "taskfw/mcp_server.py:_merge_grooming_risks"
+    },
     "Introspection": {
       "bounded_context": "Loop Memory",
       "definition": "The post-implementation pass that grades how well Grooming's predictions held up and surfaces lessons for Loop Memory. Recorded as part of the Task as an appended series rather than Grooming's replace-in-place snapshot, since each report is evidence about one distinct execution and the series itself is the value.",
@@ -94,7 +99,7 @@
     {"subject": "Task", "predicate": "part-of", "object": "Epic",
      "note": "Cardinality: one Epic groups zero or more Tasks; each Task has at most one parent (Task.parent, self-referential, not a TaskEdge). 'parent_of' was deliberately excluded from TASK_EDGE_RELATIONS because it would just duplicate this field -- the hierarchy has exactly one home."},
     {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
-     "note": "Nested inside task.resolution; no identity or lifecycle of its own outside the Task that holds it."},
+     "note": "Nested inside task.resolution; no identity or lifecycle of its own outside the Task that holds it. Cardinality: zero or more -- resolution defaults to an empty list and nothing enforces a minimum, matching the framework's 'nothing is required' stance."},
     {"subject": "TaskEdge", "predicate": "relates", "object": "Task",
      "note": "A TaskEdge only exists in relation to two Tasks; it is never addressed by an id of its own, and removing one is deliberately ungated so a legacy relation type can't get stuck."},
     {"subject": "TaskStore", "predicate": "persists", "object": "Task",
@@ -109,6 +114,8 @@
      "note": "Carries an optional reference, but it is unvalidated and one-directional -- a Task has no field or list that points back to the skills invoked against it."},
     {"subject": "Grooming", "predicate": "part-of", "object": "Task",
      "note": "Recorded as part of the Task; not a separate table or class, and never addressed by an id of its own."},
+    {"subject": "Risk", "predicate": "part-of", "object": "Grooming",
+     "note": "The one exception to Grooming's wholesale-replace rule: risks merge by id across re-groom passes so a graded verdict is never silently lost, while every other Grooming field still replaces in place."},
     {"subject": "Introspection", "predicate": "part-of", "object": "Task",
      "note": "Recorded as part of the Task; an appended series rather than Grooming's replace-in-place snapshot, reflecting that each pass is a distinct piece of evidence."},
     {"subject": "MemoryRecord", "predicate": "references", "object": "Introspection",
