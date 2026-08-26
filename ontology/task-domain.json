@@ -137,6 +137,8 @@
     {"subject": "TaskContext", "predicate": "references", "object": "Commit",
      "note": "The bundle's commits section pulls a Task's recorded commits fresh on every call, matching TaskContext's own definition -- without this relation the definition named a section the ontology did not otherwise back with a term."},
     {"subject": "TaskContext", "predicate": "references", "object": "Decision",
-     "note": "The bundle's decisions section pulls a Task's decision-kind events fresh on every call, matching TaskContext's own definition -- without this relation the definition named a section the ontology did not otherwise back with a term."}
+     "note": "The bundle's decisions section pulls a Task's decision-kind events fresh on every call, matching TaskContext's own definition -- without this relation the definition named a section the ontology did not otherwise back with a term."},
+    {"subject": "TaskContext", "predicate": "references", "object": "Task",
+     "note": "Distinct from 'describes': the bundle also embeds full Task summaries beyond the one it was built for -- parent/children in the graph section and full-text neighbours in the related section -- both approximate/derived, never the same Task the bundle describes."}
   ]
 }
