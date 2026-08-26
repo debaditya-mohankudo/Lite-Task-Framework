@@ -91,6 +91,8 @@
   "relations": [
     {"subject": "Epic", "predicate": "is-a", "object": "Task",
      "note": "type='epic' is a value on the same Task record, not a separate class or table -- there is no independent Epic to fall out of sync with Task."},
+    {"subject": "Task", "predicate": "part-of", "object": "Epic",
+     "note": "Cardinality: one Epic groups zero or more Tasks; each Task has at most one parent (Task.parent, self-referential, not a TaskEdge). 'parent_of' was deliberately excluded from TASK_EDGE_RELATIONS because it would just duplicate this field -- the hierarchy has exactly one home."},
     {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
      "note": "Nested inside task.resolution; no identity or lifecycle of its own outside the Task that holds it."},
     {"subject": "TaskEdge", "predicate": "relates", "object": "Task",
