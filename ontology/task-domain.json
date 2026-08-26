@@ -13,7 +13,9 @@
     "Task": {
       "bounded_context": "Task Tracking",
       "definition": "One unit of work: id, type, status, resolution (checklist), tags, notes, grooming findings, introspection reports. The single typed object the whole domain is built around.",
-      "evidence": "taskfw/task.py:Task"
+      "evidence": "taskfw/task.py:Task",
+      "lifecycle": "A Task is walked through four skills, each with one intention: task-create to open it, task-grooming to remove uncertainty before work starts, task-implementation to do the work, task-introspection to grade how well grooming predicted it and feed Loop Memory. None is mandatory, but skipping one leaves a Nudge behind.",
+      "lifecycle_evidence": "skills: task-create, task-grooming, task-implementation, task-introspection"
     },
     "Epic": {
       "bounded_context": "Task Tracking",
