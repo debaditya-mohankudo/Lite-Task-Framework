@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 #: subtask, so there is no hierarchy matrix to enforce — see taskfw.lifecycle.
 TASK_TYPES = ("epic", "task")
 
-STATUSES = ("open", "blocked", "done", "abandoned")
+TASK_STATUSES = ("open", "blocked", "done", "abandoned")
 
 #: Closed vocabulary for task_edges.rel, enforced by lifecycle.check_link_rel.
 #: depends_on/blocks/relates_to/duplicates trace to Jira's issue-link-type

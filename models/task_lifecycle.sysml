@@ -1,7 +1,8 @@
 package TaskLifecycle {
     doc /* State machine for a task, transcribed directly from
-         * taskfw/lifecycle.py (STATUSES, TRANSITIONS, TERMINAL,
-         * check_transition). Ground truth, not inferred.
+         * taskfw/task.py (TASK_STATUSES — the state names) and
+         * taskfw/lifecycle.py (TRANSITIONS, TERMINAL, check_transition —
+         * the edges). Ground truth, not inferred.
          *
          * New tasks start in openState. doneState and abandonedState are
          * terminal — both map to the empty set in TRANSITIONS. Any

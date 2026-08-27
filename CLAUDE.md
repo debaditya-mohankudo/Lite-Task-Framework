@@ -216,9 +216,13 @@ term routinely spans several modules while a module can define several
 terms. Forcing the ontology into concept_store's per-file schema would have
 meant either a fake module anchor for a cross-cutting idea or silently
 bending the coverage test's guarantee — so it gets its own file and its own,
-looser shape instead. Unlike concept_store, nothing currently tests it
-against the code, so treat it as a map that can drift, not a claim that's
-checked.
+looser shape instead. tests/test_ontology.py does check it against the
+code, but only shallowly: every term's `evidence` file must exist and the
+cited symbol must appear in it as a substring, and every relation must
+join two defined terms with a note. Definitions, `note` prose, and the
+accuracy of a relation's direction are not checked — so treat it as a map
+that is caught drifting only on a rename or a deleted file, not a claim
+that's verified.
 
 None of the three is instructions for using it — the introspection
 methodology and the tool schemas cover that. What is worth knowing here is

@@ -118,10 +118,10 @@ class TestParts:
 
 class TestLifecycleMatchesCode:
     def test_modelled_states_match_the_implementation(self):
-        from taskfw.task import STATUSES
+        from taskfw.task import TASK_STATUSES
 
         text = (MODELS / "task_lifecycle.sysml").read_text()
-        for status in STATUSES:
+        for status in TASK_STATUSES:
             assert f"state {status}State" in text, f"{status} missing from the state model"
 
     def test_modelled_transitions_match_the_implementation(self):

@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from taskfw.log import get_logger
-from taskfw.task import STATUSES, TASK_EDGE_RELATIONS, TASK_TYPES, Task
+from taskfw.task import TASK_EDGE_RELATIONS, TASK_STATUSES, TASK_TYPES, Task
 
 log = get_logger(__name__)
 
@@ -93,8 +93,8 @@ def _fmt(ctx: dict) -> str:
 # ---------------------------------------------------------------------------
 
 def check_status(status: str) -> Decision:
-    if status not in STATUSES:
-        return _deny("status", f"Unknown status {status!r}. Valid: {', '.join(STATUSES)}.",
+    if status not in TASK_STATUSES:
+        return _deny("status", f"Unknown status {status!r}. Valid: {', '.join(TASK_STATUSES)}.",
                      status=status)
     return _allow("status", status=status)
 

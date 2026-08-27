@@ -22,6 +22,20 @@
       "definition": "Not a distinct kind of thing -- a Task whose type field is 'epic', used to group other Tasks under it. There is no separate Epic class, table, or lifecycle.",
       "evidence": "taskfw/task.py:TASK_TYPES"
     },
+    "TaskType": {
+      "bounded_context": "Task Tracking",
+      "definition": "The kind of a Task, drawn from a fixed, closed set of exactly two values (epic, task). Not a separate class -- a single string field on the Task record. 'task' does the work; 'epic' only groups other Tasks. The set is kept at two deliberately: every extra type is a decision someone must make on every task forever, so there is no story / bug / subtask and thus no hierarchy matrix to enforce -- only the one rule that an epic has no parent.",
+      "evidence": "taskfw/task.py:TASK_TYPES",
+      "lifecycle": "Set once at creation and rarely changed. Validated in exactly one place -- taskfw/lifecycle.py:check_type -- and the single type-dependent rule (an epic cannot have a parent) lives in check_parent, never in a caller.",
+      "lifecycle_evidence": "taskfw/lifecycle.py:check_type, taskfw/lifecycle.py:check_parent"
+    },
+    "TaskStatus": {
+      "bounded_context": "Task Tracking",
+      "definition": "The lifecycle state of a Task, drawn from a fixed, closed set of four values (open, blocked, done, abandoned). Not a separate class -- a single string field on the Task record, whose legal values and legal transitions between them are the one state machine the domain enforces. 'done' and 'abandoned' are terminal.",
+      "evidence": "taskfw/task.py:TASK_STATUSES",
+      "lifecycle": "New tasks start 'open'. Non-terminal states may move to 'abandoned' directly; other transitions are checked against a table transcribed from the state model. Enforcement lives in exactly one place -- taskfw/lifecycle.py:check_status / check_transition -- never in a caller.",
+      "lifecycle_evidence": "taskfw/lifecycle.py:TRANSITIONS, models/task_lifecycle.sysml"
+    },
     "ResolutionItem": {
       "bounded_context": "Task Tracking",
       "definition": "One checklist entry (text, done) inside a Task's resolution list. A Task's progress is derived by counting these, never stored as a separate counter.",
@@ -98,6 +112,12 @@
      "note": "type='epic' is a value on the same Task record, not a separate class or table -- there is no independent Epic to fall out of sync with Task."},
     {"subject": "Task", "predicate": "part-of", "object": "Epic",
      "note": "Cardinality: one Epic groups zero or more Tasks; each Task has at most one parent (Task.parent, self-referential, not a TaskEdge). 'parent_of' was deliberately excluded from TASK_EDGE_RELATIONS because it would just duplicate this field -- the hierarchy has exactly one home."},
+    {"subject": "TaskType", "predicate": "part-of", "object": "Task",
+     "note": "A single string field on the Task record, not a separate class or table. Closed vocabulary (TASK_TYPES) of two values, validated only in taskfw/lifecycle.py:check_type. The lone type-dependent rule -- an epic has no parent -- lives in check_parent and nowhere else."},
+    {"subject": "Epic", "predicate": "is-a", "object": "TaskType",
+     "note": "Epic is not a class but the 'epic' value of TaskType; the Epic term and this relation describe the same field from two angles -- what a type=='epic' Task is (the Epic term) and where that value comes from (this closed set)."},
+    {"subject": "TaskStatus", "predicate": "part-of", "object": "Task",
+     "note": "A single string field on the Task record, not a separate class or table -- like TaskType, the domain models a value on Task rather than a thing beside it. Its closed vocabulary (TASK_STATUSES) and its legal transitions are enforced only in taskfw/lifecycle.py, so no caller can validate status differently from another."},
     {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
      "note": "Nested inside task.resolution; no identity or lifecycle of its own outside the Task that holds it. Cardinality: zero or more -- resolution defaults to an empty list and nothing enforces a minimum, matching the framework's 'nothing is required' stance."},
     {"subject": "TaskEdge", "predicate": "relates", "object": "Task",

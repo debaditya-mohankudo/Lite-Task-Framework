@@ -855,7 +855,7 @@
         "Re-running changes nothing: save() upserts by id and side tables use INSERT OR IGNORE against their natural keys",
         "Parents are saved before children; a row whose parent is missing or cyclic is reported as unplaceable, never silently reparented",
         "Every source row is accounted for in the Report — migrated, empty, or orphaned — so a dropped row is never indistinguishable from one that never existed",
-        "No status outside STATUSES is ever written; an unrecognised one becomes open and is tagged with what it was"
+        "No status outside TASK_STATUSES is ever written; an unrecognised one becomes open and is tagged with what it was"
       ],
       "last_validated": "2026-08-01T02:51:02.589879+00:00",
       "module": "taskfw/migrate_hooks.py",

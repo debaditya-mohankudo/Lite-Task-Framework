@@ -19,8 +19,7 @@ from taskfw.lifecycle import (
     check_transition,
     check_type,
 )
-from taskfw.task import TASK_EDGE_RELATIONS
-from taskfw.task import STATUSES, Task
+from taskfw.task import TASK_EDGE_RELATIONS, TASK_STATUSES, Task
 
 
 class TestDecision:
@@ -67,7 +66,7 @@ class TestTransitions:
         assert "open" in d.reason  # tells the caller the way out
 
     def test_same_status_is_always_allowed(self):
-        for s in STATUSES:
+        for s in TASK_STATUSES:
             assert check_transition(s, s)
 
     def test_unknown_status_is_rejected(self):
@@ -75,7 +74,7 @@ class TestTransitions:
         assert not check_transition("sideways", "open")
 
     def test_transition_table_covers_every_status(self):
-        assert set(TRANSITIONS) == set(STATUSES)
+        assert set(TRANSITIONS) == set(TASK_STATUSES)
 
 
 class TestParentRule:

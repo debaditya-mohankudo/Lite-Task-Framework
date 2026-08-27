@@ -42,7 +42,7 @@ from pathlib import Path
 
 from taskfw.db import connect
 from taskfw.log import get_logger
-from taskfw.task import STATUSES, ResolutionItem, Task
+from taskfw.task import TASK_STATUSES, ResolutionItem, Task
 from taskfw.store import TaskStore
 
 log = get_logger(__name__)
@@ -156,7 +156,7 @@ def to_task(row: sqlite3.Row, report: Report) -> Task:
         report.review_remapped += 1
         if "was-review" not in tags:
             tags.append("was-review")
-    elif status not in STATUSES:
+    elif status not in TASK_STATUSES:
         report.status_unknown += 1
         if f"was-{status}" not in tags:
             tags.append(f"was-{status}")
