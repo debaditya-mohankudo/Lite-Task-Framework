@@ -2,7 +2,7 @@
 name: commit
 description: Commit changes in task-framework — the gate, the message shape, and what must be true before committing. Use when the user says /commit or asks to commit work in this repo.
 user-invocable: true
-updated: 2026-08-01
+updated: 2026-08-27
 doc: docs/methodology/04-implementation.md
 ---
 
@@ -42,6 +42,13 @@ uv run pytest -q
 **If it fails, say so and stop.** Do not commit, and do not describe the failure
 as a pre-existing condition without checking whether it is. A summary that
 overstates what landed is worse than no summary, because it will be believed.
+
+One carve-out: if the diff touches **only `ontology/task-domain.json`** and no
+`.py` file, run just `uv run pytest -q tests/test_ontology.py` instead. The
+ontology JSON is inert data with no importers — the coverage tests that justify
+the full run bind to *code* modules, and the one test an ontology-only edit can
+break is `test_ontology.py` (file-exists + symbol-substring check). Any diff
+that also touches a `.py` file gets the full suite.
 
 ## Every commit cites a task
 
