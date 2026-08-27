@@ -20,8 +20,6 @@ from typing import Any
 
 from taskfw.dispatcher.phase import is_groomed, is_implemented, is_introspected
 
-_DRIFT_NUDGE_INTERVAL = 8
-
 
 def _lesson_texts(report: dict) -> list[str]:
     """Every lesson-shaped entry in an introspection report, across both shapes in use.
@@ -67,69 +65,6 @@ def introspection_nudge(report: dict, task_id: str, conn: sqlite3.Connection) ->
     )
 
 
-def drift_reflection_nudge(
-    active_task_id: str, active_task_title: str = "", active_task_phase: str = "",
-    active_task_next_item: str = "", call_count: int | None = None,
-    active_task_completed_items: list[str] | None = None,
-) -> str | None:
-    """Stateless awareness nudge for the active task, or None when there isn't one.
-
-    Originally a throttled port of claude-hooks' _maybe_drift_reflection_nudge
-    (task:f1d46386), firing every Nth call under an active task. Simplified to
-    fire on every call instead (task:8be768df): the interval existed only to
-    keep a nudge wired onto taskfw's own MCP tools from nagging on every one of
-    them, but the trigger has since moved to a taskfw-owned PostToolUse hook
-    (taskfw/drift_hook.py) that sees every tool call in the session — Bash,
-    Read, Write, Edit included, not just taskfw's own. A counter tied to
-    taskfw-tool-call volume was never the right throttle for that wider
-    surface, and removing it also removes the only piece of cross-process
-    state this module held, which the hook (a fresh subprocess per call) could
-    never have shared with a live MCP server session anyway. No active task
-    means nothing to remind about.
-
-    Every-call firing on that wider surface turned out too noisy in practice,
-    so task:1c8f0815 reintroduces the throttle — but sourced differently, since
-    this function still can't hold cross-process state itself. claude-hooks'
-    dispatcher.py runs as a long-running per-session process (unlike this
-    hook's fresh-subprocess-per-call shape) and already tracks an analogous
-    per-session counter for its own context-size nudge, so it now counts
-    PostToolUse calls and passes the raw count in via drift_hook.py's stdin
-    payload. The %N==0 decision stays here, in taskfw, keeping this module the
-    sole owner of whether the nudge fires — claude-hooks supplies data, not
-    policy. call_count of None (no counter supplied, e.g. a manual/non-
-    claude-hooks caller) fires on every call, matching pre-task:1c8f0815
-    behavior for callers that never opted into the counter.
-
-    AN AWARENESS NUDGE, NOT A DETECTION MECHANISM. This function has no view
-    into what happened during the call it's attached to — it cannot tell drift
-    from a stretch of perfectly on-task work, because it isn't given anything
-    to compare against. What it does is put the task label back in front of
-    the caller on every qualifying call, so awareness has to be re-established
-    continuously rather than fading silently after the one-time announcement
-    at activation. Whether that re-established awareness catches anything is
-    left entirely to whoever reads it; the mechanism's job ends at making the
-    check-in happen, not at judging its outcome.
-    """
-    if not active_task_id:
-        return None
-    if call_count is not None and call_count % _DRIFT_NUDGE_INTERVAL != 0:
-        return None
-    label = f"task:{active_task_id}" + (f" ({active_task_title})" if active_task_title else "")
-    if active_task_phase:
-        label += f" [{active_task_phase}]"
-    if active_task_completed_items:
-        done_list = "; ".join(active_task_completed_items)
-        label += f" — done: {done_list}"
-    if active_task_next_item:
-        label += f' — next: "{active_task_next_item}"'
-    return (
-        f"{label} is active. Notice — does this call still serve the task's stated "
-        "intent, or has it drifted into something adjacent? Accuracy matters more "
-        "than speed here: verify each step rather than batching changes and hoping "
-        "they land."
-    )
-
-
 def finish_nudge(task) -> str | None:
     """Advisory nudge for tasks__finish, or None when there's nothing to say.
 
@@ -146,12 +81,11 @@ def finish_nudge(task) -> str | None:
 def finish_reminder_nudge(task) -> str | None:
     """Advisory nudge for tasks__check_item/tasks__update, or None when there's nothing to say.
 
-    Stateless by design, unlike drift_reflection_nudge's call counter: this
-    checks the task's current resolution/status on every qualifying save
-    rather than firing once and remembering it fired, because check_item and
-    update are called far less often per task than the mutating tools
-    drift_reflection_nudge throttles, so re-firing on a later save that still
-    finds the task 100%-done-but-open costs little and needs no extra state.
+    Stateless by design: this checks the task's current resolution/status on
+    every qualifying save rather than firing once and remembering it fired.
+    check_item and update are called infrequently per task, so re-firing on a
+    later save that still finds the task 100%-done-but-open costs little and
+    needs no extra state.
 
     A checklist reaching 4/4 is not the same as the task being finished
     (task:a6fb9f45 sat open at 4/4 until an unrelated review pass caught it,
@@ -172,8 +106,8 @@ def stale_memory_nudge(memory: dict[str, Any]) -> str | None:
     link that caused the transition. An idempotent re-link against an
     already-disputed memory re-fires this, same as finish_reminder_nudge
     re-fires on a later save that still finds a task 100%-done-but-open —
-    task_memory__link is an infrequent call, not a hot path that needs
-    drift_reflection_nudge-style throttling.
+    task_memory__link is an infrequent call, not a hot path that would need
+    any firing-once-and-remembering throttle.
 
     Fires only on 'disputed' or 'contradicted' standing, never 'superseded':
     a superseded memory is already flagged by definition, and re-nudging

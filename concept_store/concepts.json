@@ -35,7 +35,6 @@
       "confidence": 0.8,
       "contracts": [
         "introspection_nudge(report, task_id, conn) -> str | None; fires only when the report has an unpromoted lesson (via _lesson_texts, covering both new_knowledge and legacy surprises[].lesson shapes) AND the task has never cited any memory (via _cited_in_memory).",
-        "drift_reflection_nudge(active_task_id, active_task_title='', active_task_phase='', active_task_next_item='', call_count=None, active_task_completed_items=None) -> str | None; fires every _DRIFT_NUDGE_INTERVAL calls when call_count is supplied, else every call. Invoked from taskfw/drift_hook.py's PostToolUse hook, which resolves scope itself via TaskStore before calling; active_task_next_item and active_task_completed_items are derived fresh from task.resolution by the caller each time, never stored.",
         "finish_nudge(task) -> str | None; fires only when task.introspection is empty, at tasks__finish.",
         "finish_reminder_nudge(task) -> str | None; fires when is_implemented(task) is True AND task.status == 'open', at tasks__check_item/tasks__update, before finish is called.",
         "stale_memory_nudge(memory: dict) -> str | None; fires when memory['standing'] is 'disputed' or 'contradicted' (never 'superseded', already flagged by definition), wired onto task_memory__link.",
@@ -49,7 +48,6 @@
         "taskfw/dispatcher/nudges.py:_lesson_texts",
         "taskfw/dispatcher/nudges.py:_cited_in_memory",
         "taskfw/dispatcher/nudges.py:introspection_nudge",
-        "taskfw/dispatcher/nudges.py:drift_reflection_nudge",
         "taskfw/dispatcher/nudges.py:finish_nudge",
         "taskfw/dispatcher/nudges.py:finish_reminder_nudge",
         "taskfw/dispatcher/nudges.py:stale_memory_nudge",
@@ -57,13 +55,11 @@
         "taskfw/dispatcher/nudges.py:loop_debt_nudge",
         "taskfw/dispatcher/nudges.py:task_debt_nudge",
         "taskfw/accuracy.py:loop_debt",
-        "taskfw/mcp_server.py:_loop_debt_hook, _drift_reflection_hook, _finish_reminder_hook, _finish_hook, _introspection_hook, _stale_memory_hook, _ungroomed_progress_hook",
-        "taskfw/drift_hook.py",
+        "taskfw/mcp_server.py:_loop_debt_hook, _finish_reminder_hook, _finish_hook, _introspection_hook, _stale_memory_hook, _ungroomed_progress_hook",
         "tests/test_dispatcher.py::TestLoopDebtNudge",
         "tests/test_dispatcher.py::TestTaskDebtNudge",
         "tests/test_dispatcher.py::TestStaleMemoryNudge",
         "tests/test_dispatcher.py::TestUngroomedProgressNudge",
-        "tests/test_dispatcher.py::TestDriftReflectionNudge",
         "tests/test_mcp_tools.py::TestLoopDebtNudge",
         "tests/test_mcp_tools.py::TestStaleMemoryNudge",
         "tests/test_mcp_tools.py:TestUpdate",
@@ -72,13 +68,13 @@
       "invariants": [
         "loop_debt_nudge and task_debt_nudge surface at tasks__set_active, not inside tasks__context's bundle and not on tasks__create — set_active is the earlier of the two documented lifecycle entry points, and tasks__context is already budget-constrained around per-task relevance.",
         "Both loop_debt_nudge and task_debt_nudge derive their counts from taskfw.accuracy._task_grading/loop_debt — the same classification tasks__grooming_accuracy itself uses — so none of the three can disagree about what counts as ungraded or skipped.",
-        "loop_debt_nudge/task_debt_nudge are not throttled by a call counter (unlike drift_reflection_nudge) — tasks__set_active is called far less often per session than every MCP tool call.",
+        "loop_debt_nudge/task_debt_nudge are stateless and unthrottled — tasks__set_active is called far less often per session than every MCP tool call, so recomputing the debt on each call costs little.",
         "loop_debt is computed over the whole shared task store, not scoped to the calling project — Task has no project/scope field, so a debt count surfaced while working in one repo can be driven by unrelated finished tasks in another (task:07f9270c's grooming, a known, accepted risk).",
         "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires AFTER tasks__finish when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called (task:a6fb9f45 sat open at 4/4 until an unrelated review pass caught it).",
         "stale_memory_nudge never calls supersede()/forget() itself — advisory only, consistent with task-introspection's 'never unilaterally delete stale memories' rule.",
-        "finish_reminder_nudge, stale_memory_nudge, and ungroomed_progress_nudge are all stateless by design (unlike drift_reflection_nudge's throttled counter): each checks current state on every qualifying call rather than firing once and remembering it fired, because check_item/update/link are infrequent enough that re-firing costs little.",
+        "finish_reminder_nudge, stale_memory_nudge, and ungroomed_progress_nudge are all stateless by design: each checks current state on every qualifying call rather than firing once and remembering it fired, because check_item/update/link are infrequent enough that re-firing costs little.",
         "ungroomed_progress_nudge and finish_nudge call task-phase-derivation's is_groomed/is_introspected (task:5a5fde0d) rather than testing task.grooming/task.introspection directly, so they and task_phase() (see [[task-phase-derivation]]) can never disagree about what those words mean.",
-        "drift_reflection_nudge is an awareness nudge, not a detection mechanism: it has no view into what happened during the call it's attached to, so it cannot tell drift from on-task work — it only puts the task label back in front of the caller on every qualifying call. The %N==0 throttle decision lives here in taskfw (call_count is supplied data from claude-hooks' own per-session counter via drift_hook.py's stdin payload); claude-hooks supplies data, not policy.",
+        "Every nudge here rides on the response of the taskfw call it comments on — none is wired onto a host hook or fires on calls taskfw does not own (task:00d9483f removed the one exception, drift_reflection_nudge, and its PostToolUse trigger).",
         "nudges.py imports is_groomed, is_implemented, and is_introspected from phase.py (one-directional, task:5a5fde0d) and imports nothing from chassis.py — every nudge here is a plain function returning str | None, wiring onto tool_called/apply_nudge happens only at the mcp_server.py call site, not inside this module."
       ],
       "last_validated": "2026-08-23T13:13:11.419146+00:00",
@@ -372,57 +368,6 @@
         "nudge-dispatch-chassis"
       ]
     },
-    "drift-hook-call-count-plumbing-pinned": {
-      "confidence": 0.8,
-      "contracts": [],
-      "created_at": "2026-08-23T15:11:12.761512+00:00",
-      "description": "Pins the stdin-to-gating plumbing of taskfw/drift_hook.py separately from the throttling logic itself (which belongs to dispatcher.drift_reflection_nudge and is tested in test_dispatcher.py). build_nudge must pass call_count through to the dispatcher unchanged, and main() must fail open -- treating a missing or non-int _taskfw_drift_call_count field, or fully malformed stdin JSON, as no counter at all rather than erroring.",
-      "evidence": [
-        "tests/test_drift_hook.py:TestBuildNudge",
-        "tests/test_drift_hook.py:TestMainStdinParsing"
-      ],
-      "invariants": [
-        "build_nudge(store, scope, call_count) forwards call_count to dispatcher.drift_reflection_nudge without transformation.",
-        "A missing '_taskfw_drift_call_count' key, a non-int value for it, or unparseable stdin JSON must all be treated as call_count=None (fires every call) and main() must still return 0, never raise."
-      ],
-      "last_validated": "2026-08-23T15:11:12.761554+00:00",
-      "module": "tests/test_drift_hook.py",
-      "name": "drift-hook-call-count-plumbing-pinned",
-      "related": [
-        "drift-hook-posttooluse-entrypoint"
-      ]
-    },
-    "drift-hook-posttooluse-entrypoint": {
-      "confidence": 0.8,
-      "contracts": [
-        "build_nudge(store, scope, call_count) returns None if no active task for scope, else dispatcher.drift_reflection_nudge(...)'s result, passing call_count through unchanged and also passing next_open_item(active_task) and completed_items(active_task) (task:1d23eb67) computed fresh from the active task's resolution on every call",
-        "main() reads JSON from stdin; a malformed/empty payload is treated as {} rather than raising",
-        "main() reads payload.get('_taskfw_drift_call_count'); a missing or non-int value is normalized to None, which makes drift_reflection_nudge fire on every call (pre-task:1c8f0815 behavior)",
-        "main() fails open on any exception from build_nudge (log.exception, return 0) — a crashing hook must never block the tool call it's attached to",
-        "main() emits nothing on stdout (not even an empty JSON object) when there's no nudge — PostToolUse reads silence as 'nothing to add'",
-        "_scope() mirrors mcp_server._scope(): TASKFW_SCOPE env var if set, else os.getcwd()"
-      ],
-      "created_at": "2026-08-15T19:44:25.908079+00:00",
-      "description": "A standalone PostToolUse hook Claude Code (via claude-hooks' dispatcher.py) invokes as a fresh subprocess on every tool call in a session — not just taskfw's own MCP tools. Reads a JSON hook payload from stdin, looks up the active task for the calling scope via TaskStore, and if one exists, calls dispatcher.drift_reflection_nudge to build an awareness-nudge string, writing it back as PostToolUse hookSpecificOutput.additionalContext on stdout. Genuinely stateless: since it's a fresh subprocess per call, it cannot hold a cross-call counter itself (task:8be768df); claude-hooks' own dispatcher.py counts PostToolUse calls and passes the raw count in via stdin as \"_taskfw_drift_call_count\", forwarded unchanged. This module never decides whether to nudge or what to include — it only wires the stdin payload, the active-task lookup (including next_open_item and completed_items), and the stdout hook-output shape together.",
-      "evidence": [
-        "taskfw/drift_hook.py:build_nudge",
-        "taskfw/drift_hook.py:main",
-        "taskfw/drift_hook.py:_scope",
-        "tests/test_drift_hook.py"
-      ],
-      "invariants": [
-        "No relay through claude-hooks and no new daemon — registers as one more independent PostToolUse hook entry alongside claude-hooks' own client.py and concept_store/diff_hook.py",
-        "task-framework remains sole owner of the active-task/drift decision even though claude-hooks supplies the raw call count — this module and dispatcher.drift_reflection_nudge are the only place that decides whether a given call fires"
-      ],
-      "last_validated": "2026-08-19T06:20:30.223951+00:00",
-      "module": "taskfw/drift_hook.py",
-      "name": "drift-hook-posttooluse-entrypoint",
-      "related": [
-        "advisory-nudge-policies",
-        "task-phase-derivation",
-        "taskstore-data-access-only"
-      ]
-    },
     "grooming-accuracy-aggregate": {
       "confidence": 0.92,
       "contracts": [
@@ -685,12 +630,11 @@
       "evidence": [
         "taskfw/mcp_server.py:_tool",
         "taskfw/mcp_server.py:_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook",
-        "taskfw/drift_hook.py",
         "tests/test_mcp_tools.py::TestToolCallLogging"
       ],
       "invariants": [
         "No tool is missing the _tool wrapper and none is double-wrapped -- pinned by tests/test_mcp_tools.py::TestToolCallLogging, which enumerates the live m.mcp.list_tools() registry rather than a hand-maintained list, so a new tool that forgets the decorator fails this test rather than silently going unlogged",
-        "There is no drift-reflection hook left in this module (task:8be768df removed _drift_reflection_hook entirely) -- drift-reflection awareness now lives solely in taskfw/drift_hook.py, a standalone PostToolUse hook Claude Code invokes directly on every tool call in the session, independent of any MCP tool call.",
+        "There is no drift-reflection or active-task nudge in this module or anywhere in taskfw -- an MCP-tool-wrapper trigger (task:8be768df) and then a PostToolUse hook (task:1c8f0815) were both tried and removed (task:00d9483f); the active task is announced once at tasks__set_active and not re-surfaced.",
         "_introspection_hook checks dispatcher.is_introspected(task) rather than the raw task.introspection truthy test it used before (task:f6be04bf's audit) -- consolidating on task-phase-derivation's single-source predicate rather than re-testing the field, matching finish_nudge/ungroomed_progress_nudge's own consolidation in nudges.py."
       ],
       "last_validated": "2026-08-24T12:02:56.521133+00:00",
@@ -710,13 +654,11 @@
       "created_at": "2026-08-23T15:12:40.112348+00:00",
       "description": "Protects the property that MCP tools carry no rule logic of their own -- every check a tool result reflects (transition validity, parent rules, relation closed-set) is delegated to taskfw.lifecycle, so a tool cannot silently enforce a different rule set than a hook or the migration path does. Tools are exercised by calling the decorated functions directly (MCPServer's decorator returns them unchanged), which reaches the same code path a real host transport does without standing up JSON-RPC.",
       "evidence": [
-        "tests/test_mcp_tools.py:TestDriftReflectionWiring",
         "tests/test_mcp_tools.py:TestCreate"
       ],
       "invariants": [
         "Every rule-shaped refusal returned by a tasks__ tool traces back to a taskfw.lifecycle Decision, not to logic duplicated in mcp_server.py.",
-        "Calling a registered tool function directly (bypassing any transport) exercises the identical code path a real MCP host would invoke through the decorator.",
-        "drift_reflection_nudge never appears as a key on any mcp_server tool result -- its trigger lives solely in taskfw/drift_hook.py's separate PostToolUse hook, so the two paths cannot silently coexist and disagree."
+        "Calling a registered tool function directly (bypassing any transport) exercises the identical code path a real MCP host would invoke through the decorator."
       ],
       "last_validated": "2026-08-23T15:12:40.112377+00:00",
       "module": "tests/test_mcp_tools.py",
@@ -1131,32 +1073,23 @@
       "confidence": 0.8,
       "contracts": [
         "task_phase(task) -> {groomed, implemented, introspected} (all bool), fully derived every call, never stored — exposed via mcp_server.tasks__phase.",
-        "phase_label(phase: dict[str,bool]) -> str collapses task_phase's three independent booleans into a single word — 'grooming' | 'implementation' | 'introspection' | 'done' — by returning the first stage not yet reached in that order.",
         "is_implemented(task) -> bool is the pure predicate (task.progress total>0 and done==total), status-independent — extracted so finish_reminder_nudge and task_phase share one place computing '100% done' instead of two copies that could drift.",
-        "next_open_item(task) -> str | None returns the text of the first unchecked resolution item, recomputed from task.resolution on every call.",
-        "completed_items(task) -> list[str] returns every checked resolution item's text in checklist order, same non-stored-derivation pattern as next_open_item and is_implemented.",
         "is_groomed(task) -> bool and is_introspected(task) -> bool (task:5a5fde0d) are single-source predicates for task_phase's 'groomed'/'introspected' keys, matching is_implemented's existing precedent — task_phase composes all three rather than re-testing task.grooming/task.introspection inline."
       ],
       "created_at": "2026-08-23T10:14:25.394994+00:00",
       "description": "Pure, fully-derived task-state helpers shared by [[advisory-nudge-policies]] and mcp_server.py's tasks__phase tool, so neither can disagree about where a task stands in the grooming -> implementation -> introspection loop. Extracted from the flat taskfw/dispatcher.py into taskfw/dispatcher/phase.py; re-exported unchanged from taskfw/dispatcher/__init__.py.",
       "evidence": [
         "taskfw/dispatcher/phase.py:task_phase",
-        "taskfw/dispatcher/phase.py:phase_label",
         "taskfw/dispatcher/phase.py:is_implemented",
-        "taskfw/dispatcher/phase.py:next_open_item",
-        "taskfw/dispatcher/phase.py:completed_items",
         "taskfw/mcp_server.py:tasks__phase",
-        "tests/test_dispatcher.py::TestPhaseLabel",
-        "tests/test_dispatcher.py::TestCompletedItems",
+        "tests/test_dispatcher.py::TestTaskPhase",
         "taskfw/dispatcher/phase.py:is_groomed",
         "taskfw/dispatcher/phase.py:is_introspected"
       ],
       "invariants": [
         "task_phase's 'groomed' has no separate groomed_at flag — a task is groomed exactly when task.grooming is non-empty, matching task-grooming/skill.md's own definition, so this and ungroomed_progress_nudge can never disagree about what counts as groomed.",
         "is_implemented deliberately excludes finish_reminder_nudge's own status=='open' gate: that gate is about whether to nudge someone to call tasks__finish (pointless once the task is already done), not about whether the work itself is complete — a done task with a full checklist is still implemented.",
-        "phase_label makes an ordering call the three booleans themselves don't (a task can be re-groomed after being implemented, introspected without every checklist item done, etc.) — only a caller wanting a single display label (drift_reflection_nudge) needs this; tasks__phase keeps returning the raw booleans so it never disagrees with task_phase itself.",
-        "phase_label never throws on a real Task's task_phase() output: grooming/introspection are dataclass fields with default_factory (never None) and progress is a derived property, so the dict it reads is always well-formed (task:afd462e3).",
-        "A stored 'current item' pointer could disagree with the checklist the moment an item gets checked off elsewhere; a value recomputed from task.resolution itself cannot, which is why next_open_item and completed_items are never cached.",
+        "tasks__phase returns the three raw booleans rather than any collapsed single-word label, so it can never disagree with task_phase itself (task:00d9483f removed phase_label, next_open_item, and completed_items along with their only caller, the drift nudge).",
         "phase.py has zero imports from chassis.py or nudges.py — it operates only on a Task's own fields, which is what makes it safe for nudges.py to import from without any risk of a cycle.",
         "nudges.py's finish_nudge and ungroomed_progress_nudge call is_introspected(task)/is_groomed(task) rather than testing task.introspection/task.grooming directly (task:5a5fde0d) — every phase-boolean check is coupled to these single predicates, so a future redefinition of what 'groomed' or 'introspected' means changes one function in phase.py instead of requiring every call site to be found and updated independently."
       ],
@@ -1410,6 +1343,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-27T07:26:06.050837+00:00"
+    "updated_at": "2026-08-27T16:55:00.546890+00:00"
   }
 }

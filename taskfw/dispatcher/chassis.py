@@ -30,9 +30,8 @@ def apply_nudge(result: dict[str, Any], key: str, nudge: str | None) -> None:
 
     One shared wrapper for every nudge function's result — call the nudge
     function yourself first (its own signature is the real variation between
-    introspection_nudge/drift_reflection_nudge/finish_nudge/
-    finish_reminder_nudge; there is nothing left to template once the "if
-    truthy, set the key" step is factored out).
+    introspection_nudge/finish_nudge/finish_reminder_nudge; there is nothing
+    left to template once the "if truthy, set the key" step is factored out).
 
     Logs the firing here, not in each nudge function, so every nudge is
     observable in the `logs` table by construction — a nudge type added
@@ -119,7 +118,7 @@ def combine(*hooks: Callable[[dict[str, Any]], None]) -> Callable[[dict[str, Any
     Callable[[dict], None] shape as any single one.
 
     Lets a tool that needs several nudges (e.g. tasks__update wants both
-    drift_reflection_nudge and finish_reminder_nudge) compose them at its
+    finish_reminder_nudge and ungroomed_progress_nudge) compose them at its
     own call site instead of tool_called or mcp_server.py's `_tool` needing
     to know the difference between one hook and several (task:58782207).
     Each hook mutates the same `result` dict in place via apply_nudge, so

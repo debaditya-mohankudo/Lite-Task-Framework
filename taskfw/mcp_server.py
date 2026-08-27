@@ -132,16 +132,15 @@ def _tool(hook: Callable[[dict[str, Any]], None] | None = None):
     return decorator
 
 
-# The drift-reflection MCP-tool-wrapper trigger (_drift_reflection_hook, wired
-# onto 7 of this module's tools via _tool(hook=...)/combine(...)) was removed
-# here (task:8be768df). It only ever saw taskfw's own MCP tool calls, so a
-# stretch of Bash/Read/Write/Edit turns with no taskfw tool call never
-# advanced it. The trigger moved to taskfw/drift_hook.py, a PostToolUse hook
-# Claude Code invokes directly on every tool call in the session — dropping
-# this wrapper removes the second, narrower counting path rather than leaving
-# two triggers that could disagree. dispatcher.drift_reflection_nudge itself
-# stayed (now stateless, called only from drift_hook.py); do not re-wire it
-# back onto mcp_server.py's own tools.
+# There is no active-task / drift-reflection nudge anywhere in taskfw
+# (task:00d9483f). An MCP-tool-wrapper trigger (_drift_reflection_hook, wired
+# onto 7 of this module's tools) was tried and removed (task:8be768df) because
+# it only saw taskfw's own calls; a PostToolUse hook (taskfw/drift_hook.py,
+# task:1c8f0815) that saw every tool call was tried and removed too — it dragged
+# in a cross-repo, cross-process call-count contract to re-print a label taskfw
+# already announces once at tasks__set_active. The active task is announced
+# there and not re-surfaced, matching "context is pulled, never pushed". Do not
+# re-add a periodic active-task reminder in any form.
 
 
 def _refetch(result: dict[str, Any]) -> Task | None:
@@ -568,8 +567,7 @@ def _auto_activate_on_checklist_progress(task_id: str, task_title: str) -> None:
     failure mode at its source instead of relying on the caller to remember a
     separate step (task:718204e5's grooming in bee-bug-hunter surfaced this:
     a task was groomed, implemented, and finished without set_active ever
-    being called, so taskfw's PostToolUse drift-reflection nudge stayed silent
-    for the whole implementation).
+    being called, so nothing tied the work to a tracked task).
 
     Sets task_id as the active task (task:f5ace343) unconditionally -- active
     status is a single ephemeral pointer, not a stack, so checking an item on

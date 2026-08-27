@@ -27,9 +27,7 @@ this split is purely internal organisation, not a change in what's callable.
 from __future__ import annotations
 
 from taskfw.dispatcher.chassis import apply_nudge, combine, tool_called
-from taskfw.dispatcher.nudges import _DRIFT_NUDGE_INTERVAL  # noqa: F401 — re-exported for test_drift_hook
 from taskfw.dispatcher.nudges import (
-    drift_reflection_nudge,
     finish_nudge,
     finish_reminder_nudge,
     introspection_nudge,
@@ -39,12 +37,9 @@ from taskfw.dispatcher.nudges import (
     ungroomed_progress_nudge,
 )
 from taskfw.dispatcher.phase import (
-    completed_items,
     is_groomed,
     is_implemented,
     is_introspected,
-    next_open_item,
-    phase_label,
     task_phase,
 )
 
@@ -52,7 +47,6 @@ __all__ = [
     "apply_nudge",
     "combine",
     "tool_called",
-    "drift_reflection_nudge",
     "finish_nudge",
     "finish_reminder_nudge",
     "introspection_nudge",
@@ -60,11 +54,8 @@ __all__ = [
     "stale_memory_nudge",
     "task_debt_nudge",
     "ungroomed_progress_nudge",
-    "completed_items",
     "is_groomed",
     "is_implemented",
     "is_introspected",
-    "next_open_item",
-    "phase_label",
     "task_phase",
 ]

@@ -13,15 +13,11 @@ import pytest
 
 from taskfw.dispatcher import (
     combine,
-    completed_items,
-    drift_reflection_nudge,
     finish_nudge,
     finish_reminder_nudge,
     introspection_nudge,
     is_implemented,
     loop_debt_nudge,
-    next_open_item,
-    phase_label,
     stale_memory_nudge,
     task_debt_nudge,
     task_phase,
@@ -264,127 +260,6 @@ class TestTaskPhase:
         )
         tasks.save(t)
         assert task_phase(t) == {"groomed": True, "implemented": True, "introspected": True}
-
-
-class TestDriftReflectionNudge:
-    """Stateless — this function still holds no counter itself (task:8be768df,
-    task:1c8f0815). Without a call_count, it fires on every call, same as
-    task:8be768df's simplification. With a call_count (sourced from
-    claude-hooks' own per-session counter and passed through
-    taskfw/drift_hook.py's stdin payload, since a fresh subprocess per call
-    has nothing to count with), it throttles to every _DRIFT_NUDGE_INTERVAL-th
-    call — the gating decision stays in taskfw even though the raw count
-    comes from elsewhere.
-    """
-
-    def test_none_without_an_active_task(self):
-        assert drift_reflection_nudge("", "") is None
-
-    def test_fires_on_a_single_call(self):
-        result = drift_reflection_nudge("t1", "Some task")
-        assert result is not None
-        assert "task:t1" in result
-
-    def test_fires_every_call_without_a_counter(self):
-        results = [drift_reflection_nudge("t1", "Some task") for _ in range(5)]
-        assert all(r is not None for r in results)
-
-    def test_throttles_to_every_eighth_call_with_a_counter(self):
-        results = [drift_reflection_nudge("t1", "Some task", call_count=n) for n in range(1, 17)]
-        assert [r is not None for r in results] == [
-            False, False, False, False, False, False, False, True,
-            False, False, False, False, False, False, False, True,
-        ]
-
-    def test_title_is_optional(self):
-        result = drift_reflection_nudge("t1", "")
-        assert result is not None
-        assert "task:t1" in result
-
-    def test_includes_phase_when_given(self):
-        result = drift_reflection_nudge("t1", "Some task", "implementation")
-        assert result is not None
-        assert "[implementation]" in result
-
-    def test_phase_is_optional(self):
-        result = drift_reflection_nudge("t1", "Some task")
-        assert result is not None
-        assert "[" not in result
-
-    def test_includes_next_item_when_given(self):
-        result = drift_reflection_nudge("t1", "Some task", "implementation", "Write the thing")
-        assert result is not None
-        assert 'next: "Write the thing"' in result
-
-    def test_next_item_is_optional(self):
-        result = drift_reflection_nudge("t1", "Some task")
-        assert result is not None
-        assert "next:" not in result
-
-    def test_includes_completed_items_when_given(self):
-        result = drift_reflection_nudge(
-            "t1", "Some task", "implementation", "Write the thing",
-            active_task_completed_items=["Groom it", "Design it"],
-        )
-        assert result is not None
-        assert "done: Groom it; Design it" in result
-
-    def test_completed_items_is_optional(self):
-        result = drift_reflection_nudge("t1", "Some task")
-        assert result is not None
-        assert "done:" not in result
-
-
-class TestCompletedItems:
-    def test_empty_when_no_resolution(self):
-        task = Task(id="t1", type="task", title="x")
-        assert completed_items(task) == []
-
-    def test_only_done_items_in_order(self):
-        task = Task(
-            id="t1", type="task", title="x",
-            resolution=[
-                ResolutionItem(text="a", done=True),
-                ResolutionItem(text="b", done=False),
-                ResolutionItem(text="c", done=True),
-            ],
-        )
-        assert completed_items(task) == ["a", "c"]
-
-
-class TestNextOpenItem:
-    def test_none_when_no_resolution(self):
-        task = Task(id="t1", type="task", title="x")
-        assert next_open_item(task) is None
-
-    def test_none_when_all_done(self):
-        task = Task(id="t1", type="task", title="x", resolution=[
-            ResolutionItem(text="a", done=True),
-            ResolutionItem(text="b", done=True),
-        ])
-        assert next_open_item(task) is None
-
-    def test_returns_first_undone_item(self):
-        task = Task(id="t1", type="task", title="x", resolution=[
-            ResolutionItem(text="a", done=True),
-            ResolutionItem(text="b", done=False),
-            ResolutionItem(text="c", done=False),
-        ])
-        assert next_open_item(task) == "b"
-
-
-class TestPhaseLabel:
-    def test_ungroomed_is_grooming(self):
-        assert phase_label({"groomed": False, "implemented": False, "introspected": False}) == "grooming"
-
-    def test_groomed_not_implemented_is_implementation(self):
-        assert phase_label({"groomed": True, "implemented": False, "introspected": False}) == "implementation"
-
-    def test_implemented_not_introspected_is_introspection(self):
-        assert phase_label({"groomed": True, "implemented": True, "introspected": False}) == "introspection"
-
-    def test_all_true_is_done(self):
-        assert phase_label({"groomed": True, "implemented": True, "introspected": True}) == "done"
 
 
 class TestToolCalled:

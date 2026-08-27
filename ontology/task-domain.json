@@ -115,11 +115,6 @@
       "definition": "Not a distinct class or stored record -- a nudge is a transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time and never persisted anywhere. It never blocks the action or changes what gets stored; it only points back at context the caller already has (this task, this memory, this report) and asks it to be looked at again. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
       "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge"
     },
-    "PostToolUseHook": {
-      "bounded_context": "Task Tracking",
-      "definition": "The host's standard post-tool-call hook event -- a Claude Code mechanism, not taskfw's invention -- which fires once after every tool call in a session, not just taskfw's own MCP tools. taskfw registers one entry on it so that exactly one Nudge, drift_reflection_nudge, is delivered on the host's schedule rather than riding on a taskfw response: this is the one place a Nudge's timing is not the caller's choice, and it exists so awareness of the active Task is re-established across long stretches of non-taskfw work. Every other Nudge rides on the response of the taskfw call it comments on. The every-Nth-call throttle is decided inside taskfw; the hook fails open, so a crash or unusable output can never block the tool call it is attached to.",
-      "evidence": "taskfw/drift_hook.py:build_nudge, PostToolUse"
-    },
     "TaskContext": {
       "bounded_context": "Task Tracking",
       "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order. Not persisted anywhere; assembled fresh on every call and gone once returned. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it.",
@@ -199,8 +194,6 @@
      "note": "A nudge speaks only about the one task or memory the triggering call already touched, never some other record the caller didn't ask about -- it rides on a response, it does not fetch or add a fact of its own."},
     {"subject": "Nudge", "predicate": "references", "object": "Introspection",
      "note": "One nudge checks whether a just-recorded Introspection report's lessons have been promoted to a MemoryRecord yet, without itself writing to Loop Memory."},
-    {"subject": "Nudge", "predicate": "relates", "object": "PostToolUseHook",
-     "note": "All but one Nudge is composed inside the response to the taskfw call it comments on. drift_reflection_nudge is the exception: its text still lives with the other nudge policies, but it is invoked from the PostToolUseHook entry so it fires after every tool call in the session rather than only taskfw's own. Only the timing crosses out of taskfw's hands -- the nudge still pushes no fact the caller didn't already pull, and the every-Nth-call throttle decision stays in taskfw even though the raw call count is supplied by the host."},
     {"subject": "Commit", "predicate": "relates", "object": "Task",
      "note": "A Commit only exists in relation to the task it was recorded against, keyed by (task_id, sha) with an idempotent insert -- same shape as TaskEdge, never addressed by an id of its own."},
     {"subject": "Decision", "predicate": "relates", "object": "Task",

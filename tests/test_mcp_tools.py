@@ -630,27 +630,6 @@ class _DummyResponse:
         pass
 
 
-class TestDriftReflectionWiring:
-    """The nudge (taskfw.dispatcher.drift_reflection_nudge) is unit-tested on its
-    own in test_dispatcher.py. It is NOT wired onto mcp_server.py's tools as of
-    task:8be768df — the trigger moved to taskfw/drift_hook.py, a stateless
-    PostToolUse hook Claude Code invokes directly on every tool call in the
-    session, not just taskfw's own. This class now only pins that mcp_server's
-    tool results carry no drift_reflection_nudge key at all, so the two
-    trigger paths can't silently coexist and disagree.
-    """
-
-    def test_no_nudge_on_any_tool_result(self):
-        t = create()
-        m.tasks__set_active(t["id"])
-        for result in (
-            m.tasks__get(t["id"]),
-            m.tasks__context(t["id"]),
-            m.tasks__add_decision(t["id"], "a decision"),
-        ):
-            assert "drift_reflection_nudge" not in result
-
-
 class TestDecisions:
     def test_decision_surfaces_in_context(self):
         t = create()

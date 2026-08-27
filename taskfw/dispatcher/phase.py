@@ -46,30 +46,6 @@ def is_implemented(task) -> bool:
     return total > 0 and done == total
 
 
-def next_open_item(task) -> str | None:
-    """Text of the first unchecked resolution item, or None if there isn't one.
-
-    Derived from task.resolution on every call, same reasoning as is_implemented
-    and task_phase: a stored "current item" pointer could disagree with the
-    checklist the moment an item gets checked off elsewhere, but a value
-    recomputed from the list itself cannot.
-    """
-    for item in task.resolution:
-        if not item.done:
-            return item.text
-    return None
-
-
-def completed_items(task) -> list[str]:
-    """Text of every checked resolution item, in checklist order.
-
-    Same derivation as next_open_item: recomputed from task.resolution on
-    every call rather than tracked separately, so it can never disagree with
-    the checklist itself.
-    """
-    return [item.text for item in task.resolution if item.done]
-
-
 def task_phase(task) -> dict[str, bool]:
     """Where a task stands in the grooming -> implementation -> introspection loop.
 
@@ -86,24 +62,3 @@ def task_phase(task) -> dict[str, bool]:
         "implemented": is_implemented(task),
         "introspected": is_introspected(task),
     }
-
-
-def phase_label(phase: dict[str, bool]) -> str:
-    """Collapse task_phase's three independent booleans into the single word a
-    reader expects — "grooming", "implementation", "introspection", or "done".
-
-    task_phase deliberately stays three booleans (a task can be re-groomed
-    after being implemented, introspected without every checklist item done,
-    etc.) so this makes an ordering call the booleans themselves don't: the
-    first stage not yet reached, in grooming -> implementation ->
-    introspection order. Only a caller that wants a single label for display
-    (drift_reflection_nudge) needs this; tasks__phase keeps returning the raw
-    booleans so it never disagrees with task_phase itself.
-    """
-    if not phase["groomed"]:
-        return "grooming"
-    if not phase["implemented"]:
-        return "implementation"
-    if not phase["introspected"]:
-        return "introspection"
-    return "done"

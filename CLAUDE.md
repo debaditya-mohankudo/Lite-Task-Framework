@@ -80,16 +80,18 @@ answer says so. Silent truncation is the one thing a pull interface cannot
 afford, because the caller has no other way to find out whether nothing was
 there or something was cut.
 
-Advisory nudges riding on a tool response (taskfw/dispatcher.py) are not an
+Advisory nudges riding on a tool response (taskfw/dispatcher/) are not an
 exception to this. A nudge pushes no new fact — it only points back at
 context the agent already pulled, asking it to look again (e.g. "this
-memory is stale," "this task has no linked lessons"). It fires solely inside
-the response to a call the agent already made, and only about the record
-that call just touched, never about some other task or memory the caller
-didn't ask about. Only the timing is not the caller's choice:
-`drift_reflection_nudge` is invoked from a separate PostToolUse hook
-(`taskfw/drift_hook.py`) that watches every tool call in the session, though
-the function composing its text still lives in dispatcher.py.
+memory is stale," "this task has no linked lessons"). Every nudge fires
+solely inside the response to a call the agent already made, and only about
+the record that call just touched, never about some other task or memory the
+caller didn't ask about — the timing is the caller's choice in every case.
+An earlier active-task reminder that rode on the host's PostToolUse event
+instead (`drift_reflection_nudge`, via a `taskfw/drift_hook.py` subprocess)
+was removed (task:00d9483f): it fired on calls that touched nothing taskfw
+owned, and dragged a cross-repo call-count contract along to do it. The
+active task is announced once at `tasks__set_active` and not re-surfaced.
 
 ## Structure only where it earns its keep
 

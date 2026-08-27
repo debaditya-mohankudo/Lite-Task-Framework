@@ -56,8 +56,7 @@ package TaskFrameworkSystem {
             "taskfw/dispatcher/__init__.py",
             "taskfw/dispatcher/chassis.py",
             "taskfw/dispatcher/phase.py",
-            "taskfw/dispatcher/nudges.py",
-            "taskfw/drift_hook.py"
+            "taskfw/dispatcher/nudges.py"
         );
     }
 
@@ -104,11 +103,6 @@ package TaskFrameworkSystem {
              *   - introspection_nudge (tasks__add_introspection): an
              *     introspection report cites a lesson but the task has never
              *     promoted one to loop memory.
-             *   - drift_reflection_nudge (every PostToolUse call, via
-             *     taskfw/drift_hook.py, throttled to every Nth call): puts the
-             *     active task's label, completed checklist items, and next
-             *     item back in front of the caller as a stateless awareness
-             *     check-in, not a detector.
              *   - finish_nudge (tasks__finish): a task closed with no
              *     introspection report yet.
              *   - finish_reminder_nudge (tasks__check_item / tasks__update):
