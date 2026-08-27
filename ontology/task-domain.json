@@ -56,9 +56,14 @@
       "definition": "Which task_id is currently 'active' for a scope. A single in-memory value, not persisted, not a stack -- gone on process restart. Not a field on Task itself.",
       "evidence": "taskfw/mcp_server.py:tasks__set_active"
     },
+    "Lesson": {
+      "bounded_context": "Loop Memory",
+      "definition": "The narrative name for what the loop exists to accumulate: a durable takeaway -- a constraint, a technique, or a recurring pitfall -- that grooming's falsifiable predictions and introspection's grades produced, and that nothing in Task Tracking can hold. Not a distinct class or table: a Lesson's only persisted form is a MemoryRecord, and everything true of one (a derived 'standing', a mandatory citation to the task it came from, a closed 'kind' vocabulary) is spelled out under that term. 'Lesson' names the idea; 'MemoryRecord' names the row it lives in.",
+      "evidence": "taskfw/memory.py:MemoryStore"
+    },
     "MemoryRecord": {
       "bounded_context": "Loop Memory",
-      "definition": "A lesson introspection produced: a constraint, technique, or recurring pitfall that nothing else in Task Tracking can hold. Has a derived 'standing' (confirmed/contradicted/disputed/superseded), computed fresh from its links on every read, never stored.",
+      "definition": "The persisted form of a Lesson -- the only form there is. A row recording a constraint, technique, or recurring pitfall that nothing else in Task Tracking can hold. Has a derived 'standing' (confirmed/contradicted/disputed/superseded), computed fresh from its links on every read, never stored.",
       "evidence": "taskfw/memory.py:MemoryStore"
     },
     "MemoryKind": {
@@ -138,6 +143,8 @@
      "note": "The Repository for the Task aggregate; persistence and validation stay separable because TaskStore enforces no rules itself."},
     {"subject": "ActiveTaskPointer", "predicate": "references", "object": "Task",
      "note": "Names the currently-active task_id per scope; ephemeral and non-persisted, never a property stored on Task."},
+    {"subject": "MemoryRecord", "predicate": "is-a", "object": "Lesson",
+     "note": "A MemoryRecord is the persisted form of a Lesson and the only form there is -- the split is narrative, not structural. 'Lesson' is how CLAUDE.md and doc 05 name the thing the loop accumulates; 'MemoryRecord' is the row taskfw/memory.py actually stores, with its derived standing and its 'learned_from' citation. Nothing is a Lesson without being a MemoryRecord."},
     {"subject": "MemoryRecord", "predicate": "references", "object": "Task",
      "note": "Cited to the task it was learned from -- a pointer into Task Tracking from a different bounded context, never reachable by walking Task's own fields. The citation is one MemoryRelationship row ('learned_from'); see that term for the other two."},
     {"subject": "MemoryKind", "predicate": "part-of", "object": "MemoryRecord",
