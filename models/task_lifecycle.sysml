@@ -24,8 +24,8 @@ package TaskLifecycle {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "a92e0956a6a00838f6f35997c290c43bcecfde8f";
-        derivedAt = "2026-08-23";
+        derivedFromCommit = "0cec609f63d975ad3ed3a9fd39c0527ef2b77037";
+        derivedAt = "2026-08-27";
         modelledPaths = (
             "taskfw/lifecycle.py"
         );
