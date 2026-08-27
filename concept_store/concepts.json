@@ -934,7 +934,7 @@
         "Symbol checking is a substring match on the cited file's text, not AST resolution -- enough to catch a rename or delete, not a claim of semantic verification."
       ],
       "created_at": "2026-08-25T14:10:50.529662+00:00",
-      "description": "Whether ontology/task-domain.json's evidence citations still hold is answered structurally rather than by discipline: this test file fails the suite the moment a term's evidence names a missing file, a symbol no longer found in that file, or a relation whose subject/object is not a defined term (or a declared exception like SourceModule). parse_evidence() decodes the ontology's comma-separated 'path:symbol[, symbol2]' shorthand, where a bare symbol inherits the file of the citation before it.",
+      "description": "Whether ontology/task-domain.json's evidence citations still hold is answered structurally rather than by discipline: this test file fails the suite the moment a term's evidence names a missing file, a symbol no longer found in that file, or a relation whose subject/object is not a defined term (or a declared exception like SourceModule). parse_evidence() decodes the ontology's comma-separated 'path:symbol[, symbol2]' shorthand, where a bare symbol inherits the file of the citation before it. The cited file need not be code: it is only Path-checked for existence and substring-scanned for the symbol, so a docs/ path with a heading as its 'symbol' is valid (first such: the Methodology term, evidence docs/methodology/01-framework.md:Lifecycle, added task:557e5aad).",
       "evidence": [
         "tests/test_ontology.py:TestEvidence",
         "tests/test_ontology.py:TestRelations",
@@ -944,9 +944,10 @@
         "Every term's evidence must cite at least one file that exists in the repo.",
         "Every cited symbol (or its base name before a '.') must appear as a substring in the file it is cited against.",
         "Every relation's subject must be a key in ontology['terms']; every relation's object must be a term key or a declared entry in NON_TERM_OBJECTS.",
-        "Every relation must carry a non-empty note -- a relation with no note is a type triple, not domain knowledge."
+        "Every relation must carry a non-empty note -- a relation with no note is a type triple, not domain knowledge.",
+        "Evidence paths are not required to be code -- a docs/ file cited with a heading substring passes the same file-exists + substring check, so terms embodied in docs or skills rather than a taskfw/*.py symbol can still be evidence-anchored."
       ],
-      "last_validated": "2026-08-25T14:10:50.529731+00:00",
+      "last_validated": "2026-08-27T07:26:06.050769+00:00",
       "module": "tests/test_ontology.py",
       "name": "ontology-evidence-enforced-by-test",
       "related": []
@@ -1409,6 +1410,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-26T13:31:15.526229+00:00"
+    "updated_at": "2026-08-27T07:26:06.050837+00:00"
   }
 }
