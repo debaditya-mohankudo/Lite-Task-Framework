@@ -110,6 +110,11 @@
       "definition": "Not a distinct class or stored record -- a nudge is a transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time and never persisted anywhere. It never blocks the action or changes what gets stored; it only points back at context the caller already has (this task, this memory, this report) and asks it to be looked at again. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
       "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge"
     },
+    "PostToolUseHook": {
+      "bounded_context": "Task Tracking",
+      "definition": "Claude Code's standard PostToolUse hook event -- a host mechanism, not taskfw's invention -- which fires once after every tool call in a session (Bash, Read, Write, Edit included, not just taskfw's own MCP tools). taskfw registers taskfw/drift_hook.py as one entry in the host's PostToolUse array, run as a fresh subprocess in taskfw's own venv with no relay through any other hook and no new daemon. It is the one place a Nudge's timing is not the caller's choice: exactly one nudge -- drift_reflection_nudge -- is delivered this way, so that awareness of the active task is re-established across long stretches of non-taskfw work; every other Nudge rides on the response of the taskfw MCP call it comments on. The subprocess holds no state, so the every-Nth-call throttle is driven by a counter the host's long-running session process passes in on the stdin payload ('_taskfw_drift_call_count'); the %N==0 gating decision itself still lives in taskfw. Fails open -- a crash or garbage output must never block the tool call it is attached to, and empty stdout is how the host reads 'nothing to add'.",
+      "evidence": "taskfw/drift_hook.py:build_nudge, PostToolUse"
+    },
     "TaskContext": {
       "bounded_context": "Task Tracking",
       "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order. Not persisted anywhere; assembled fresh on every call and gone once returned. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it.",
@@ -173,6 +178,8 @@
      "note": "A nudge speaks only about the one task or memory the triggering call already touched, never some other record the caller didn't ask about -- it rides on a response, it does not fetch or add a fact of its own."},
     {"subject": "Nudge", "predicate": "references", "object": "Introspection",
      "note": "One nudge checks whether a just-recorded Introspection report's lessons have been promoted to a MemoryRecord yet, without itself writing to Loop Memory."},
+    {"subject": "Nudge", "predicate": "relates", "object": "PostToolUseHook",
+     "note": "All but one Nudge is composed inside the response to the taskfw MCP call it comments on, via taskfw.dispatcher.chassis. drift_reflection_nudge is the exception: its text still lives in taskfw.dispatcher.nudges, but it is invoked from taskfw/drift_hook.py, registered on the host's PostToolUse event so it fires after every tool call in the session rather than only taskfw's own. Only the timing crosses out of taskfw's hands -- the nudge still pushes no fact the caller didn't already pull, and the %N throttle decision stays in taskfw even though the raw call count is supplied by the host."},
     {"subject": "Commit", "predicate": "relates", "object": "Task",
      "note": "A Commit only exists in relation to the task it was recorded against, keyed by (task_id, sha) with an idempotent insert -- same shape as TaskEdge, never addressed by an id of its own."},
     {"subject": "Decision", "predicate": "relates", "object": "Task",
