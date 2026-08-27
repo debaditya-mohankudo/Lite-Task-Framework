@@ -90,6 +90,11 @@
       "definition": "A record that a named skill (e.g. commit, task-grooming) ran, optionally against a Task. Deliberately just a lightweight log entry, not a stored, referentially-integral record -- the task reference is not validated. Exists for skill-usage observability only, scoped narrowly so it can't become a second home for decisions or notes.",
       "evidence": "taskfw/mcp_server.py:tasks__log_skill_invocation"
     },
+    "Methodology": {
+      "bounded_context": "Loop Memory",
+      "definition": "The practice the whole framework exists to make cheap: the four-skill loop -- create, groom, implement, introspect -- together with the docs/methodology/ documents that specify it. Not a code object and not a stored record; it has no artifact of its own, only what each pass writes onto a Task and into Loop Memory. CLAUDE.md calls it 'the asset' and the storage/validation/serving code 'plumbing' subordinate to it: the ontology names every moving part (Grooming, Risk, Introspection, Lesson) but this term names the thing they add up to. Its evidence is the first in this file to cite a docs/ file rather than a taskfw/*.py symbol, because the methodology is embodied in the skills and the methodology docs, not in code.",
+      "evidence": "docs/methodology/01-framework.md:Lifecycle"
+    },
     "Grooming": {
       "bounded_context": "Loop Memory",
       "definition": "The pre-implementation pass that records a task's current best understanding as falsifiable risks/findings before work starts. Recorded as part of the Task and replaced wholesale each pass -- unlike Introspection, only the latest pass is kept, because grooming is a current-belief snapshot, not a history.",
@@ -160,6 +165,12 @@
      "note": "Keyed by module path, not by task_id -- Architectural Knowledge shares no term with Task Tracking or Loop Memory; the only connection between the three bounded contexts is this ontology file itself."},
     {"subject": "SkillInvocation", "predicate": "references", "object": "Task",
      "note": "Carries an optional reference, but it is unvalidated and one-directional -- a Task has no field or list that points back to the skills invoked against it."},
+    {"subject": "Methodology", "predicate": "describes", "object": "Task",
+     "note": "One Task is walked through the loop; the Methodology has no record of its own, only what each pass writes onto the Task (grooming, introspection, decisions, commits) and into Loop Memory (lessons). 'describes' rather than 'part-of' because the practice is the larger thing and the Task is what it operates on -- the Task exists without ever being groomed, the loop does not exist without a Task to run against."},
+    {"subject": "Grooming", "predicate": "part-of", "object": "Methodology",
+     "note": "The falsifiable-claims half of the one feedback edge that separates this from a paperwork ritual (CLAUDE.md: 'Grooming makes falsifiable claims. Introspection grades them.'). Grooming is also 'part-of Task' -- the pass belongs to the Methodology, its recorded output belongs to the Task."},
+    {"subject": "Introspection", "predicate": "part-of", "object": "Methodology",
+     "note": "The grading half of the feedback edge, and the step CLAUDE.md names as the first to rot because skipping it always feels like progress. Like Grooming it is also 'part-of Task': the pass is the Methodology's, the appended report series is the Task's."},
     {"subject": "Grooming", "predicate": "part-of", "object": "Task",
      "note": "Recorded as part of the Task; not a separate table or class, and never addressed by an id of its own."},
     {"subject": "Risk", "predicate": "part-of", "object": "Grooming",
