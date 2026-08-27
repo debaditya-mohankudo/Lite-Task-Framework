@@ -19,7 +19,7 @@
     },
     "Epic": {
       "bounded_context": "Task Tracking",
-      "definition": "Not a distinct kind of thing -- a Task whose type field is 'epic', used to group other Tasks under it. There is no separate Epic class, table, or lifecycle.",
+      "definition": "Not a distinct kind of thing -- the 'epic' value of TaskType, i.e. a Task whose type field is 'epic', used to group other Tasks under it. There is no separate Epic class, table, or lifecycle.",
       "evidence": "taskfw/task.py:TASK_TYPES"
     },
     "TaskType": {
@@ -108,14 +108,12 @@
     }
   },
   "relations": [
-    {"subject": "Epic", "predicate": "is-a", "object": "Task",
-     "note": "type='epic' is a value on the same Task record, not a separate class or table -- there is no independent Epic to fall out of sync with Task."},
     {"subject": "Task", "predicate": "part-of", "object": "Epic",
      "note": "Cardinality: one Epic groups zero or more Tasks; each Task has at most one parent (Task.parent, self-referential, not a TaskEdge). 'parent_of' was deliberately excluded from TASK_EDGE_RELATIONS because it would just duplicate this field -- the hierarchy has exactly one home."},
     {"subject": "TaskType", "predicate": "part-of", "object": "Task",
      "note": "A single string field on the Task record, not a separate class or table. Closed vocabulary (TASK_TYPES) of two values, validated only in taskfw/lifecycle.py:check_type. The lone type-dependent rule -- an epic has no parent -- lives in check_parent and nowhere else."},
     {"subject": "Epic", "predicate": "is-a", "object": "TaskType",
-     "note": "Epic is not a class but the 'epic' value of TaskType; the Epic term and this relation describe the same field from two angles -- what a type=='epic' Task is (the Epic term) and where that value comes from (this closed set)."},
+     "note": "Epic is not a Task and not a class -- it is the 'epic' value of TaskType, a value on the same Task record with no independent object to fall out of sync with Task. The Epic term and this relation describe that field from two angles: what a type=='epic' Task is (the Epic term) and where the value comes from (this closed set)."},
     {"subject": "TaskStatus", "predicate": "part-of", "object": "Task",
      "note": "A single string field on the Task record, not a separate class or table -- like TaskType, the domain models a value on Task rather than a thing beside it. Its closed vocabulary (TASK_STATUSES) and its legal transitions are enforced only in taskfw/lifecycle.py, so no caller can validate status differently from another."},
     {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
