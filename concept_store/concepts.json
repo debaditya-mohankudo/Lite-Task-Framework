@@ -868,20 +868,25 @@
     },
     "model-provenance-stamp-enforced-by-test": {
       "confidence": 0.8,
-      "contracts": [],
+      "contracts": [
+        "test_prose_cited_paths_still_resolve scans each model file's doc /* ... */ comment blocks (not the whole file, so it never re-checks modelledPaths) for taskfw/*.py- and tests/*.py-shaped tokens and asserts each resolves on disk"
+      ],
       "created_at": "2026-08-23T15:12:08.438711+00:00",
-      "description": "Enforces the @ModelProvenance stamps every models/*.sysml package carries: each declares modelledPaths (the code it describes) and derivedFromCommit (the commit it was last read against), and this test checks both against git so a failure means the model has not been re-read since the modelled code moved -- not that the model is wrong. Bumping derivedFromCommit without re-reading the package would convert a useful drift signal into a lie, which the test's own docstring calls out as worse than having no stamp.",
+      "description": "Enforces the @ModelProvenance stamps every models/*.sysml package carries: each declares modelledPaths (the code it describes) and derivedFromCommit (the commit it was last read against), and this test checks both against git so a failure means the model has not been re-read since the modelled code moved -- not that the model is wrong. Bumping derivedFromCommit without re-reading the package would convert a useful drift signal into a lie, which the test's own docstring calls out as worse than having no stamp. As of task:4e2d5f28, a fourth check also catches drift in freeform doc-comment prose -- a file named in running text but never declared in modelledPaths, which the first three checks cannot see.",
       "evidence": [
         "tests/test_model_provenance.py:test_stamp_matches_last_commit_touching_modelled_code",
-        "tests/test_model_provenance.py:test_modelled_paths_still_resolve"
+        "tests/test_model_provenance.py:test_modelled_paths_still_resolve",
+        "tests/test_model_provenance.py:test_prose_cited_paths_still_resolve",
+        "tests/test_model_provenance.py:_prose_cited_paths"
       ],
       "invariants": [
         "Every models/*.sysml file has an @ModelProvenance stamp with a derivedFromCommit of at least 7 hex characters and a non-empty modelledPaths list.",
         "Every path in modelledPaths must exist in the working tree -- a cited path that was deleted is drift the commit-comparison check alone cannot catch, since git log over a deleted path still resolves and may match the stamp.",
         "derivedFromCommit must equal (or be an ancestor consistent with) the last commit that touched any of modelledPaths, per `git log -1 -- <paths>`; a mismatch means the model is stale relative to the code, not necessarily wrong.",
-        "Checks skip gracefully (not fail) when not in a git checkout, when git log returns nothing for the paths, or when the stamped commit isn't present in a shallow clone's history."
+        "Checks skip gracefully (not fail) when not in a git checkout, when git log returns nothing for the paths, or when the stamped commit isn't present in a shallow clone's history.",
+        "modelledPaths (declared list) and doc-comment prose citations (freeform) are two distinct citation mechanisms enforced by separate checks -- test_prose_cited_paths_still_resolve is scoped to doc-comment text only, to avoid duplicating test_modelled_paths_still_resolve."
       ],
-      "last_validated": "2026-08-23T15:12:08.438725+00:00",
+      "last_validated": "2026-08-26T13:31:02.751431+00:00",
       "module": "tests/test_model_provenance.py",
       "name": "model-provenance-stamp-enforced-by-test",
       "related": [
@@ -1113,7 +1118,7 @@
         "A calc def or state def with no matching TestXMatchesCode test is an unenforced restatement of the same claim the prose already made — not acceptable per this task's motivation.",
         "Test risk text and grading must stay byte-identical to grooming's `risks` entries for tasks__grooming_accuracy recurrence tracking to work."
       ],
-      "last_validated": "2026-08-23T15:07:26.197659+00:00",
+      "last_validated": "2026-08-26T13:31:15.526185+00:00",
       "module": "tests/test_sysml.py",
       "name": "sysml-doc-only-model-enforcement",
       "related": [
@@ -1404,6 +1409,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-25T22:37:17.076727+00:00"
+    "updated_at": "2026-08-26T13:31:15.526229+00:00"
   }
 }
