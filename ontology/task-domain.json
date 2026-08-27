@@ -61,6 +61,20 @@
       "definition": "A lesson introspection produced: a constraint, technique, or recurring pitfall that nothing else in Task Tracking can hold. Has a derived 'standing' (confirmed/contradicted/disputed/superseded), computed fresh from its links on every read, never stored.",
       "evidence": "taskfw/memory.py:MemoryStore"
     },
+    "MemoryKind": {
+      "bounded_context": "Loop Memory",
+      "definition": "The kind of a MemoryRecord, drawn from a fixed, closed set of exactly three values (constraint, technique, pitfall). Not a separate class -- a single string field on the memory row. Doc 05 names 'constraint' and 'technique' outright; 'pitfall' earns its place from the accuracy signals, where a recurring 'wrong' or 'missed' grade is a lesson about the loop itself. The set is kept at three deliberately: a longer taxonomy is a decision to make on every capture.",
+      "evidence": "taskfw/memory.py:MEMORY_KINDS",
+      "lifecycle": "Set when the memory is recorded (defaults to 'constraint') and validated in exactly one place -- taskfw/memory.py:MemoryStore.record raises Rejected for any value outside the set. There is no transition machine; re-recording a slug may change its kind.",
+      "lifecycle_evidence": "taskfw/memory.py:MemoryStore.record"
+    },
+    "MemoryRelationship": {
+      "bounded_context": "Loop Memory",
+      "definition": "The label on one row of memory_links, drawn from a fixed, closed set of exactly three values (learned_from, confirmed_by, contradicted_by). Each row joins a MemoryRecord to a Task: 'learned_from' is the mandatory citation every memory carries, 'confirmed_by' and 'contradicted_by' are grades a later task adds. Not a separate class -- a string column on the link row. A MemoryRecord's 'standing' is derived from the counts of the confirming and contradicting rows, never stored.",
+      "evidence": "taskfw/memory.py:MEMORY_RELATIONSHIPS",
+      "lifecycle": "Written by MemoryStore.record ('learned_from', implicitly) and MemoryStore.link (any of the three, idempotently); validated in exactly one place -- link raises Rejected for a value outside the set. Rows are never updated or deleted except by forget(), which cascades. Standing is recomputed from the surviving rows on every read.",
+      "lifecycle_evidence": "taskfw/memory.py:MemoryStore.link, taskfw/memory.py:MemoryStore._hydrate"
+    },
     "Concept": {
       "bounded_context": "Architectural Knowledge",
       "definition": "A durable summary of what one source module promises and what must stay true of it -- description, contracts, invariants, evidence. Keyed by module path, enforced 1:1 against the real file tree.",
@@ -125,7 +139,11 @@
     {"subject": "ActiveTaskPointer", "predicate": "references", "object": "Task",
      "note": "Names the currently-active task_id per scope; ephemeral and non-persisted, never a property stored on Task."},
     {"subject": "MemoryRecord", "predicate": "references", "object": "Task",
-     "note": "Cited to the task it was learned from -- a pointer into Task Tracking from a different bounded context, never reachable by walking Task's own fields."},
+     "note": "Cited to the task it was learned from -- a pointer into Task Tracking from a different bounded context, never reachable by walking Task's own fields. The citation is one MemoryRelationship row ('learned_from'); see that term for the other two."},
+    {"subject": "MemoryKind", "predicate": "part-of", "object": "MemoryRecord",
+     "note": "A single string field on the memory row, not a separate class or table. Closed vocabulary (MEMORY_KINDS) of three values, validated only in taskfw/memory.py:MemoryStore.record. Mirrors how TaskType/TaskStatus model a value on Task rather than a thing beside it."},
+    {"subject": "MemoryRelationship", "predicate": "part-of", "object": "MemoryRecord",
+     "note": "The closed label (MEMORY_RELATIONSHIPS, three values) on each memory_links row; those rows are what 'MemoryRecord references Task' is built from, and the counts of the 'confirmed_by' / 'contradicted_by' rows are what MemoryRecord's derived 'standing' is computed from on every read. Validated only in taskfw/memory.py:MemoryStore.link."},
     {"subject": "Concept", "predicate": "describes", "object": "SourceModule",
      "note": "Keyed by module path, not by task_id -- Architectural Knowledge shares no term with Task Tracking or Loop Memory; the only connection between the three bounded contexts is this ontology file itself."},
     {"subject": "SkillInvocation", "predicate": "references", "object": "Task",

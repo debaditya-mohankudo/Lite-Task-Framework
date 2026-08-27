@@ -60,9 +60,12 @@ log = get_logger(__name__)
 #: than this is a decision to make on every capture, and doc 05 names only two
 #: of these outright. `pitfall` earns its place from the accuracy signals:
 #: a recurring `wrong` or `missed` grade is a lesson about the loop itself.
-KINDS = ("constraint", "technique", "pitfall")
+MEMORY_KINDS = ("constraint", "technique", "pitfall")
 
-RELATIONS = ("learned_from", "confirmed_by", "contradicted_by")
+#: The closed vocabulary for a row in memory_links: `learned_from` is the
+#: mandatory citation every memory carries, `confirmed_by` / `contradicted_by`
+#: are the grades a later task adds, and standing is derived from their counts.
+MEMORY_RELATIONSHIPS = ("learned_from", "confirmed_by", "contradicted_by")
 
 #: A memory whose text is shorter than this is a label, not a lesson.
 MIN_TEXT = 20
@@ -115,8 +118,8 @@ class MemoryStore:
         """
         if not _SLUG.match(slug or ""):
             raise Rejected(f"slug {slug!r} must be kebab-case: lowercase words joined by hyphens.")
-        if kind not in KINDS:
-            raise Rejected(f"Unknown kind {kind!r}. Valid: {', '.join(KINDS)}.")
+        if kind not in MEMORY_KINDS:
+            raise Rejected(f"Unknown kind {kind!r}. Valid: {', '.join(MEMORY_KINDS)}.")
         if len(text.strip()) < MIN_TEXT:
             raise Rejected(
                 f"Text is {len(text.strip())} characters; a memory needs at least {MIN_TEXT}. "
@@ -147,8 +150,8 @@ class MemoryStore:
 
     def link(self, slug: str, task_id: str, relation: str) -> bool:
         """Record that a task confirmed or contradicted a memory. Idempotent."""
-        if relation not in RELATIONS:
-            raise Rejected(f"Unknown relation {relation!r}. Valid: {', '.join(RELATIONS)}.")
+        if relation not in MEMORY_RELATIONSHIPS:
+            raise Rejected(f"Unknown relation {relation!r}. Valid: {', '.join(MEMORY_RELATIONSHIPS)}.")
         if self.get(slug, include_superseded=True) is None:
             raise Rejected(f"No memory {slug!r}.")
         with transaction(self.conn):
@@ -304,7 +307,7 @@ class MemoryStore:
             "SELECT task_id, relation FROM memory_links WHERE slug=? ORDER BY created_at",
             (row["slug"],),
         ).fetchall()
-        by_relation: dict[str, list[str]] = {r: [] for r in RELATIONS}
+        by_relation: dict[str, list[str]] = {r: [] for r in MEMORY_RELATIONSHIPS}
         for link in links:
             by_relation.setdefault(link["relation"], []).append(link["task_id"])
 

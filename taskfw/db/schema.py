@@ -134,7 +134,7 @@ MEMORIES = Table(
         # The slug IS the identity. A memory you cannot name in a sentence is
         # not yet a lesson, so there is no surrogate id to hide behind.
         Column("slug", "TEXT PRIMARY KEY"),
-        # 'constraint' | 'technique' | 'pitfall' — see taskfw/memory.py:KINDS.
+        # 'constraint' | 'technique' | 'pitfall' — see taskfw/memory.py:MEMORY_KINDS.
         Column("kind", "TEXT NOT NULL DEFAULT 'constraint'"),
         Column("text", "TEXT NOT NULL DEFAULT ''"),
         # Slug of the memory that replaced this one. Empty means live.
@@ -156,7 +156,8 @@ MEMORY_LINKS = Table(
     columns=(
         Column("slug", "TEXT NOT NULL"),
         Column("task_id", "TEXT NOT NULL"),
-        # 'learned_from' | 'confirmed_by' | 'contradicted_by'.
+        # 'learned_from' | 'confirmed_by' | 'contradicted_by'
+        # — see taskfw/memory.py:MEMORY_RELATIONSHIPS.
         Column("relation", "TEXT NOT NULL DEFAULT 'learned_from'"),
         Column("created_at", "TEXT NOT NULL DEFAULT (datetime('now'))"),
     ),

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from taskfw.memory import KINDS, MIN_TEXT, MemoryStore, Rejected
+from taskfw.memory import MEMORY_KINDS, MIN_TEXT, MemoryStore, Rejected
 from taskfw.task import Task
 from taskfw.store import TaskStore
 
@@ -65,7 +65,7 @@ class TestRecord:
         with pytest.raises(Rejected, match=str(MIN_TEXT)):
             stores[1].record("a-slug", "be careful", task)
 
-    @pytest.mark.parametrize("kind", KINDS)
+    @pytest.mark.parametrize("kind", MEMORY_KINDS)
     def test_every_declared_kind_is_accepted(self, stores, task, kind):
         assert stores[1].record(f"slug-{kind}", LESSON, task, kind=kind)["kind"] == kind
 
