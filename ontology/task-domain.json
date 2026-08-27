@@ -134,6 +134,11 @@
       "bounded_context": "Task Tracking",
       "definition": "Not a distinct stored record -- a Decision is one kind of a generic timestamped Event logged against a Task (store.add_event(task_id, text, kind='decision')), the same mechanism status changes use (kind='status'). There is no separate decisions table or class; what makes an Event a Decision is only the kind label on an otherwise uniform log entry.",
       "evidence": "taskfw/store.py:TaskStore.add_event"
+    },
+    "GroomingAccuracy": {
+      "bounded_context": "Loop Memory",
+      "definition": "The Methodology's feedback edge read in aggregate: how well a Grooming pass's Risks predicted, gathered across many finished Tasks instead of one. Introspection grades each Risk against a single Task; GroomingAccuracy is what those grades amount to once collected -- the loop's report on itself. Computed from the graded Risks on every read, never stored.",
+      "evidence": "taskfw/accuracy.py:grooming_accuracy"
     }
   },
   "relations": [
@@ -200,6 +205,10 @@
     {"subject": "TaskContext", "predicate": "references", "object": "Decision",
      "note": "The bundle's decisions section pulls a Task's decision-kind events fresh on every call, matching TaskContext's own definition -- without this relation the definition named a section the ontology did not otherwise back with a term."},
     {"subject": "TaskContext", "predicate": "references", "object": "Task",
-     "note": "Distinct from 'describes': the bundle also embeds full Task summaries beyond the one it was built for -- parent/children in the graph section and full-text neighbours in the related section -- both approximate/derived, never the same Task the bundle describes."}
+     "note": "Distinct from 'describes': the bundle also embeds full Task summaries beyond the one it was built for -- parent/children in the graph section and full-text neighbours in the related section -- both approximate/derived, never the same Task the bundle describes."},
+    {"subject": "GroomingAccuracy", "predicate": "references", "object": "Risk",
+     "note": "The per-Risk 'graded' verdicts across finished tasks are the sole source; the grooming_accuracy tally in an introspection report is recomputed from them every call and only cross-checked, never read back as truth. Same derive-don't-store reason as progress-from-checklist and standing-from-links -- a stored aggregate can drift from its own evidence."},
+    {"subject": "GroomingAccuracy", "predicate": "part-of", "object": "Methodology",
+     "note": "The aggregate form of the one feedback edge (CLAUDE.md: 'Grooming makes falsifiable claims. Introspection grades them.'). Risk carries that edge for a single task; GroomingAccuracy closes it for the loop itself -- repeated 'wrong' grades mean grooming asks the wrong questions, repeated 'missed' grades mean it asks too few, and both are signals to change grooming rather than note the miss."}
   ]
 }
