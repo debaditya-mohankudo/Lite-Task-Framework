@@ -31,6 +31,21 @@ answer different questions:
   explaining *why* the relationship has the shape it does, not just that it
   exists.
 
+## Writing a definition: closed vocabulary
+
+A term's definition must express what the thing *is* using only other defined
+terms — the vocabulary is a closed topology. Keep implementation detail out:
+no grade-string literals, no "computed on every call", no internal function
+names. Anything like that belongs in a relation `note` or in
+`concept_store/concepts.json`, not the definition.
+
+The payoff is twofold. The obvious one: definitions stay legible to a domain
+reader and don't rot when code moves. The more useful one: **if you cannot
+state a term's intention in domain terms, that is a signal the implementation
+smells** — the code is carrying a concept the ubiquitous language has no room
+for. A definition you can't write cleanly is a design finding, not just a
+wording problem; fix the concept before forcing the term.
+
 ## What this file is not
 
 It is not a schema, an API reference, or a data model — no types, no
