@@ -110,6 +110,11 @@
       "definition": "The post-implementation pass that grades how well Grooming's predictions held up and surfaces lessons for Loop Memory. Recorded as part of the Task as an appended series rather than Grooming's replace-in-place snapshot, since each report is evidence about one distinct execution and the series itself is the value.",
       "evidence": "taskfw/task.py:Task.introspection"
     },
+    "Implementation": {
+      "bounded_context": "Loop Memory",
+      "definition": "The third pass of the Methodology: doing the work a groomed Task describes, once Grooming has removed enough uncertainty to begin. It is where the plan becomes a change, and where the outcome that Introspection later grades each Risk against is produced. Not a code object or a stored record -- like Grooming and Introspection it has no artifact of its own, only what it writes onto the Task as it goes: Decisions logged when the choice is made, Commits, and ResolutionItems checked off as they land. Its one intention is to not reintroduce the uncertainty Grooming removed -- staying in scope, and recording reasoning as it happens rather than reconstructing it after.",
+      "evidence": "docs/methodology/04-implementation.md:Implementation"
+    },
     "Nudge": {
       "bounded_context": "Task Tracking",
       "definition": "Not a distinct class or stored record -- a nudge is a transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time and never persisted anywhere. It never blocks the action or changes what gets stored; it only points back at context the caller already has (this task, this memory, this report) and asks it to be looked at again. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
@@ -142,10 +147,10 @@
     },
     "GroomingGrade": {
       "bounded_context": "Loop Memory",
-      "definition": "The verdict Introspection assigns to one predicted Risk, drawn from a fixed, closed set of exactly three values (materialized, avoided, wrong). Not a separate class -- a single label on a Risk's 'graded' field, absent until Introspection fills it in. 'missed' is deliberately outside the set: it labels a surprise no Risk predicted, so it is not a grade ON a prediction and is counted from an Introspection report's missed_surprises instead. The set is kept at three because the only distinction GroomingAccuracy's signals need is a bad prediction ('wrong') from an absent one ('missed') -- a finer taxonomy would be a judgement to make on every grade forever. Mirrors how MemoryKind and TaskStatus model a closed-vocabulary label on a record rather than a thing beside it.",
+      "definition": "The verdict Introspection passes on a single predicted Risk, graded against what the Implementation pass actually did: did predicting this help -- did it come true with its mitigation ready, or force the change that avoided it -- or was the pass spent on noise. Not a distinct class -- a label carried on the Risk, the way MemoryKind is a label on a MemoryRecord, and absent until Introspection assigns it. A surprise that no Risk predicted is deliberately not a GroomingGrade: with no prediction beneath it there is nothing for a verdict to be about, so it stays part of Introspection's account of what Grooming missed. One GroomingGrade is Introspection closing the Methodology's feedback edge for a single prediction; GroomingAccuracy is what those verdicts amount to across many finished Tasks.",
       "evidence": "taskfw/accuracy.py:GROOMING_GRADES",
-      "lifecycle": "Written once per pass by Introspection, which re-passes the whole grooming object with 'graded' filled in; a Risk carries its grade forward across re-grooming passes, merged by risk id so a graded verdict is never silently dropped. Validated in exactly one place -- grooming_accuracy buckets any value outside the set as 'unrecognised' and reports it rather than discarding it, because a vanished grade would be an omission indistinguishable from an absence.",
-      "lifecycle_evidence": "taskfw/accuracy.py:grooming_accuracy, docs/methodology/05-introspection.md"
+      "lifecycle": "Assigned by a single Introspection pass, after Implementation, and carried by its Risk from then on. Re-grooming the same Task keeps the verdict rather than discarding it, so a judgement Introspection has already made is never lost.",
+      "lifecycle_evidence": "docs/methodology/05-introspection.md, docs/methodology/04-implementation.md"
     }
   },
   "relations": [
@@ -183,6 +188,10 @@
      "note": "The falsifiable-claims half of the one feedback edge that separates this from a paperwork ritual (CLAUDE.md: 'Grooming makes falsifiable claims. Introspection grades them.'). Grooming is also 'part-of Task' -- the pass belongs to the Methodology, its recorded output belongs to the Task."},
     {"subject": "Introspection", "predicate": "part-of", "object": "Methodology",
      "note": "The grading half of the feedback edge, and the step CLAUDE.md names as the first to rot because skipping it always feels like progress. Like Grooming it is also 'part-of Task': the pass is the Methodology's, the appended report series is the Task's."},
+    {"subject": "Implementation", "predicate": "part-of", "object": "Methodology",
+     "note": "The pass between Grooming and Introspection -- create, groom, implement, introspect -- and the only one that changes the codebase. It owns no store of its own: its outputs are Decisions, Commits, and checked ResolutionItems on the Task, exactly as Grooming's output is the Task's grooming and Introspection's is the report series. Named as its own term so GroomingGrade can be defined as a verdict on what this pass did, rather than leaving 'implement' an unnamed step inside Methodology's definition."},
+    {"subject": "Introspection", "predicate": "references", "object": "Implementation",
+     "note": "Introspection grades every Risk against what Implementation actually did; a GroomingGrade is that comparison for one prediction. Before Implementation was a term the feedback edge had a verdict (Introspection), a thing predicted (Risk) and an aggregate (GroomingAccuracy), but no name for the reality the prediction was about."},
     {"subject": "Grooming", "predicate": "part-of", "object": "Task",
      "note": "Recorded as part of the Task; not a separate table or class, and never addressed by an id of its own."},
     {"subject": "Risk", "predicate": "part-of", "object": "Grooming",
