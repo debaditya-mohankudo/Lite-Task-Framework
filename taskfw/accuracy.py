@@ -41,10 +41,10 @@ from taskfw.store import TaskStore
 
 log = get_logger(__name__)
 
-#: Grades a PREDICTED risk can carry. `missed` is deliberately not here: it
-#: describes a surprise nothing predicted, so it cannot be a grade ON a
-#: prediction. It is counted from `missed_surprises` instead.
-GRADES = ("materialized", "avoided", "wrong")
+#: Grades a PREDICTED grooming risk can carry. `missed` is deliberately not
+#: here: it describes a surprise nothing predicted, so it cannot be a grade ON
+#: a prediction. It is counted from `missed_surprises` instead.
+GROOMING_GRADES = ("materialized", "avoided", "wrong")
 
 #: A prediction earns its keep if it came true or changed the plan. `wrong` is
 #: the only grade that represents a pass spent on noise.
@@ -203,7 +203,7 @@ def _reported_totals(task: Task) -> dict[str, int]:
     totals: Counter[str] = Counter()
     for report in task.introspection or []:
         for grade, count in (report.get("grooming_accuracy") or {}).items():
-            if isinstance(count, int) and grade in GRADES:
+            if isinstance(count, int) and grade in GROOMING_GRADES:
                 totals[grade] += count
     return dict(totals)
 
@@ -262,7 +262,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
             grouper.add(risk, task.id, grade)
             if grade is None or grade == "":
                 continue
-            if grade in GRADES:
+            if grade in GROOMING_GRADES:
                 tallies[grade] += 1
                 graded_here[grade] += 1
             else:
@@ -294,7 +294,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
         "tasks_with_grooming": with_grooming,
         "risks": {
             "total": risks_seen,
-            **{g: tallies.get(g, 0) for g in GRADES},
+            **{g: tallies.get(g, 0) for g in GROOMING_GRADES},
             "ungraded": ungraded,
             "unrecognised": dict(unrecognised),
         },

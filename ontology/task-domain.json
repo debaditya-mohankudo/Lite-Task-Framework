@@ -139,6 +139,13 @@
       "bounded_context": "Loop Memory",
       "definition": "The Methodology's feedback edge read in aggregate: how well a Grooming pass's Risks predicted, gathered across many finished Tasks instead of one. Introspection grades each Risk against a single Task; GroomingAccuracy is what those grades amount to once collected -- the loop's report on itself. Computed from the graded Risks on every read, never stored.",
       "evidence": "taskfw/accuracy.py:grooming_accuracy"
+    },
+    "GroomingGrade": {
+      "bounded_context": "Loop Memory",
+      "definition": "The verdict Introspection assigns to one predicted Risk, drawn from a fixed, closed set of exactly three values (materialized, avoided, wrong). Not a separate class -- a single label on a Risk's 'graded' field, absent until Introspection fills it in. 'missed' is deliberately outside the set: it labels a surprise no Risk predicted, so it is not a grade ON a prediction and is counted from an Introspection report's missed_surprises instead. The set is kept at three because the only distinction GroomingAccuracy's signals need is a bad prediction ('wrong') from an absent one ('missed') -- a finer taxonomy would be a judgement to make on every grade forever. Mirrors how MemoryKind and TaskStatus model a closed-vocabulary label on a record rather than a thing beside it.",
+      "evidence": "taskfw/accuracy.py:GROOMING_GRADES",
+      "lifecycle": "Written once per pass by Introspection, which re-passes the whole grooming object with 'graded' filled in; a Risk carries its grade forward across re-grooming passes, merged by risk id so a graded verdict is never silently dropped. Validated in exactly one place -- grooming_accuracy buckets any value outside the set as 'unrecognised' and reports it rather than discarding it, because a vanished grade would be an omission indistinguishable from an absence.",
+      "lifecycle_evidence": "taskfw/accuracy.py:grooming_accuracy, docs/methodology/05-introspection.md"
     }
   },
   "relations": [
@@ -211,6 +218,10 @@
     {"subject": "GroomingAccuracy", "predicate": "references", "object": "Risk",
      "note": "The per-Risk 'graded' verdicts across finished tasks are the sole source; the grooming_accuracy tally in an introspection report is recomputed from them every call and only cross-checked, never read back as truth. Same derive-don't-store reason as progress-from-checklist and standing-from-links -- a stored aggregate can drift from its own evidence."},
     {"subject": "GroomingAccuracy", "predicate": "part-of", "object": "Methodology",
-     "note": "The aggregate form of the one feedback edge (CLAUDE.md: 'Grooming makes falsifiable claims. Introspection grades them.'). Risk carries that edge for a single task; GroomingAccuracy closes it for the loop itself -- repeated 'wrong' grades mean grooming asks the wrong questions, repeated 'missed' grades mean it asks too few, and both are signals to change grooming rather than note the miss."}
+     "note": "The aggregate form of the one feedback edge (CLAUDE.md: 'Grooming makes falsifiable claims. Introspection grades them.'). Risk carries that edge for a single task; GroomingAccuracy closes it for the loop itself -- repeated 'wrong' grades mean grooming asks the wrong questions, repeated 'missed' grades mean it asks too few, and both are signals to change grooming rather than note the miss."},
+    {"subject": "GroomingGrade", "predicate": "part-of", "object": "Risk",
+     "note": "A single label on a Risk's 'graded' field, not a separate class or table. Closed vocabulary (GROOMING_GRADES) of three values, absent until Introspection assigns it and merged forward by risk id across re-grooming passes so a graded verdict is never silently lost. Mirrors how MemoryKind labels a MemoryRecord and TaskStatus labels a Task -- the value lives on the record, not beside it."},
+    {"subject": "GroomingAccuracy", "predicate": "references", "object": "GroomingGrade",
+     "note": "GroomingGrade is the unit GroomingAccuracy counts: its tallies, predictive_value, and the 'wrong'-share signal are all counts of GroomingGrade values across finished Tasks, where the sibling 'references Risk' edge is about which Risks it reads rather than what it tallies. A value outside GROOMING_GRADES is bucketed as 'unrecognised' and still reported, never dropped, so the grade count can never silently disagree with the risks seen."}
   ]
 }

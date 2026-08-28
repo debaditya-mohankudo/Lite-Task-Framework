@@ -175,10 +175,10 @@ class TestDerivedValuesMatchCode:
             assert standing in text, f"{standing} missing from MemoryStandingValue"
 
     def test_grooming_accuracy_grades_match_the_implementation(self, text):
-        from taskfw.accuracy import GRADES
+        from taskfw.accuracy import GROOMING_GRADES
 
         assert "calc def GroomingAccuracyTally" in text
-        for grade in GRADES:
+        for grade in GROOMING_GRADES:
             assert grade in text, f"{grade} missing from GroomingAccuracyTally"
 
 
