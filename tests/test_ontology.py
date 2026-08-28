@@ -30,6 +30,14 @@ ONTOLOGY = ROOT / "ontology" / "task-domain.json"
 #: term with its own definition -- see Concept's "describes" relation.
 NON_TERM_OBJECTS = {"SourceModule"}
 
+#: The closed `form` vocabulary every term must draw its `form` value from --
+#: what shape of thing the term is (a stored row, a section inside one, a
+#: label on one, a computed-only value, or a practice). See ontology/README.md
+#: "Shape" for the one-line meaning of each. Membership is checked here;
+#: whether a term's assigned form is *correct* is not -- the README prose is
+#: the only guard against a later editor reclassifying a boundary term.
+FORMS = {"record", "part", "attribute", "transient", "process"}
+
 
 @pytest.fixture(scope="module")
 def ontology() -> dict:
@@ -57,9 +65,9 @@ def parse_evidence(evidence: str) -> list[tuple[str, str]]:
 
 
 class TestShape:
-    def test_every_term_has_bounded_context_definition_and_evidence(self, ontology):
+    def test_every_term_has_the_required_fields(self, ontology):
         for name, term in ontology["terms"].items():
-            for field in ("bounded_context", "definition", "evidence"):
+            for field in ("bounded_context", "form", "definition", "evidence"):
                 assert field in term, f"{name} is missing {field}"
 
     def test_every_term_bounded_context_is_declared(self, ontology):
@@ -67,6 +75,12 @@ class TestShape:
         for name, term in ontology["terms"].items():
             assert term["bounded_context"] in contexts, (
                 f"{name} claims undeclared bounded context {term['bounded_context']!r}"
+            )
+
+    def test_every_term_form_is_in_the_closed_vocabulary(self, ontology):
+        for name, term in ontology["terms"].items():
+            assert term["form"] in FORMS, (
+                f"{name} claims undeclared form {term['form']!r} (allowed: {sorted(FORMS)})"
             )
 
 

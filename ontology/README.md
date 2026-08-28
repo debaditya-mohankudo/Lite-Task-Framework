@@ -22,9 +22,31 @@ answer different questions:
   (e.g. Task Tracking vs. Loop Memory), each with a one-line description of
   what separates it from the others.
 - **`terms`** — one entry per domain noun: which bounded context it belongs
-  to, and a plain-language definition of what it is (including things that
-  are *not* distinct things — e.g. an Epic is just a Task with a certain
-  field set, not a separate class).
+  to, its `form` (see below), and a plain-language definition of what it is
+  (including things that are *not* distinct things — e.g. an Epic is just a
+  Task with a certain field set, not a separate class).
+- **`form`** — one value per term, from a closed set of five, naming what
+  *shape* of thing the term is:
+  - `record` — persisted as its own row/entry, with its own identity and
+    storage, independent of any other term.
+  - `part` — a structured section that lives inside another record and is
+    written, replaced, or appended together with it; never stored or
+    addressed on its own.
+  - `attribute` — a value carried on another term: a flag, or a label from a
+    closed set. Not a thing in its own right (e.g. `Decision` is an `Event`
+    whose `kind` is "decision"; `Epic` is the `epic` boolean on `Task`).
+  - `transient` — a value that exists only for the duration of a call or a
+    process: computed on read, or held in memory, never written to the
+    database.
+  - `process` — a practice, pass, or capability that acts but stores no data
+    of its own — the behaviour, not a record of it.
+
+  `tests/test_ontology.py` checks that every term's `form` is one of these
+  five; it does **not** check that the assigned value is *right*. The prose
+  above is the only guard against a later editor reclassifying a boundary
+  term (e.g. `Risk` is a `part`, not a `record` — it has identity but its
+  storage is embedded in `Task.grooming`; `TaskStore` is a `process`, not a
+  sixth "component" value).
 - **`relations`** — typed, directional statements connecting two terms, using
   a small fixed vocabulary of predicates: `is-a`, `part-of`, `relates`,
   `persists`, `references`, `describes`. Each relation carries a note
@@ -54,10 +76,15 @@ function signatures, no storage details. Those live in the code and in
 concept, and how does it relate to the other concepts" — technical detail
 belongs elsewhere.
 
-It is also a map, not a checked claim: nothing currently tests it against the
-code (unlike `concept_store/concepts.json`, which is enforced 1:1 against the
-file tree). Treat it as a durable but driftable snapshot of the domain
-vocabulary, kept only as accurate as whoever last updated it made it.
+It is also mostly a map rather than a checked claim. `tests/test_ontology.py`
+enforces the shallow, mechanical parts — every term's `evidence` cites a file
+that exists and a symbol still found in it, every relation joins two defined
+terms and carries a note, every term's `form` is one of the five allowed
+values — which catches a rename, a deleted file, or a typo'd `form`. It does
+*not* check that a definition is accurate, that a relation's direction is
+right, or that a term's `form` is the correct one. Treat the definitions and
+`form` assignments as a durable but driftable snapshot, kept only as accurate
+as whoever last updated it made it.
 
 See the root `CLAUDE.md` ("Three things worth knowing exist") for how this
 file relates to `concept_store/concepts.json` and `models/*.sysml`.

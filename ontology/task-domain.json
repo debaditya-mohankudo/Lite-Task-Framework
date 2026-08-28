@@ -12,6 +12,7 @@
   "terms": {
     "Task": {
       "bounded_context": "Task Tracking",
+      "form": "record",
       "definition": "One unit of work: id, epic flag, status, resolution (checklist), tags, notes, grooming findings, introspection reports. The single typed object the whole domain is built around.",
       "evidence": "taskfw/task.py:Task",
       "lifecycle": "A Task is walked through four skills, each with one intention: task-create to open it, task-grooming to remove uncertainty before work starts, task-implementation to do the work, task-introspection to grade how well grooming predicted it and feed Loop Memory. None is mandatory, but skipping one leaves a Nudge behind.",
@@ -19,11 +20,13 @@
     },
     "Epic": {
       "bounded_context": "Task Tracking",
+      "form": "attribute",
       "definition": "Not a distinct kind of thing -- a Task whose 'epic' boolean field is True, used to group other Tasks under it via their parent. There is no separate Epic class, table, or lifecycle; 'epic' is one boolean on the Task record, defaulting to False. It replaced a two-value 'type' string (epic / task): with only 'epic' carrying a rule and 'task' meaning merely 'not an epic', the enum and its runtime validator were a bad state that could be made unrepresentable -- a boolean cannot be malformed, so the type vocabulary and its check ceased to exist. The single rule the flag drives is that an epic cannot have a parent.",
       "evidence": "taskfw/task.py:Task, taskfw/lifecycle.py:check_parent"
     },
     "TaskStatus": {
       "bounded_context": "Task Tracking",
+      "form": "attribute",
       "definition": "The lifecycle state of a Task, drawn from a fixed, closed set of four values (open, blocked, done, abandoned). Not a separate class -- a single string field on the Task record, whose legal values and legal transitions between them are the one state machine the domain enforces. 'done' and 'abandoned' are terminal.",
       "evidence": "taskfw/task.py:TASK_STATUSES",
       "lifecycle": "New tasks start 'open'. Non-terminal states may move to 'abandoned' directly; other transitions are checked against a table transcribed from the state model. Enforcement lives in exactly one place -- the lifecycle layer's status check and transition table -- never in a caller.",
@@ -31,36 +34,43 @@
     },
     "ResolutionItem": {
       "bounded_context": "Task Tracking",
+      "form": "part",
       "definition": "One checklist entry (text, done) inside a Task's resolution list. A Task's progress is derived by counting these, never stored as a separate counter.",
       "evidence": "taskfw/task.py:ResolutionItem"
     },
     "TaskEdge": {
       "bounded_context": "Task Tracking",
+      "form": "record",
       "definition": "A directed, typed connection between two Tasks, with a relation drawn from a fixed, closed vocabulary. Stored separately from Tasks, never inside a Task's own record.",
       "evidence": "taskfw/task.py:TASK_EDGE_RELATIONS"
     },
     "TaskStore": {
       "bounded_context": "Task Tracking",
+      "form": "process",
       "definition": "The Repository for Task: reads and writes tasks, edges, and commits. Deliberately does no rule-checking of its own -- validation lives entirely in a separate layer.",
       "evidence": "taskfw/store.py:TaskStore"
     },
     "ActiveTaskPointer": {
       "bounded_context": "Task Tracking",
+      "form": "transient",
       "definition": "Which task_id is currently 'active' for a scope. A single in-memory value, not persisted, not a stack -- gone on process restart. Not a field on Task itself.",
       "evidence": "taskfw/mcp_server.py:tasks__set_active"
     },
     "Lesson": {
       "bounded_context": "Loop Memory",
+      "form": "record",
       "definition": "The narrative name for what the loop exists to accumulate: a durable takeaway -- a constraint, a technique, or a recurring pitfall -- that Grooming's falsifiable predictions and Introspection's grades produced, and that nothing in Task Tracking can hold. Not a distinct class: a Lesson's only persisted form is a MemoryRecord, and everything true of one (a derived 'standing', a mandatory citation to the Task it came from, a closed 'kind' vocabulary) is spelled out under that term. 'Lesson' names the idea; 'MemoryRecord' names the record it lives in.",
       "evidence": "taskfw/memory.py:MemoryStore"
     },
     "MemoryRecord": {
       "bounded_context": "Loop Memory",
+      "form": "record",
       "definition": "The persisted form of a Lesson -- the only form there is. A durable record of a constraint, technique, or recurring pitfall that nothing in Task Tracking can hold. Its 'standing' (confirmed/contradicted/disputed/superseded) is derived from its confirming and contradicting links to later Tasks, never a value it holds in its own right.",
       "evidence": "taskfw/memory.py:MemoryStore"
     },
     "MemoryKind": {
       "bounded_context": "Loop Memory",
+      "form": "attribute",
       "definition": "The kind of a MemoryRecord, drawn from a fixed, closed set of exactly three values (constraint, technique, pitfall). Not a separate class -- a single label on the MemoryRecord. Doc 05 names 'constraint' and 'technique' outright; 'pitfall' earns its place from the accuracy signals, where a recurring 'wrong' or 'missed' grade is a lesson about the loop itself. The set is kept at three deliberately: a longer taxonomy is a decision to make on every capture.",
       "evidence": "taskfw/memory.py:MEMORY_KINDS",
       "lifecycle": "Set when the MemoryRecord is recorded (defaults to 'constraint') and validated in exactly one place -- the memory record path raises Rejected for any value outside the set. There is no transition machine; re-recording a slug may change its kind.",
@@ -68,6 +78,7 @@
     },
     "MemoryRelationship": {
       "bounded_context": "Loop Memory",
+      "form": "attribute",
       "definition": "The label on one link joining a MemoryRecord to a Task, drawn from a fixed, closed set of exactly three values (learned_from, confirmed_by, contradicted_by). 'learned_from' is the mandatory citation every MemoryRecord carries; 'confirmed_by' and 'contradicted_by' are grades a later Task adds. Not a separate class -- a single label on the link. A MemoryRecord's 'standing' is derived from how many confirming and contradicting links it has, never stored.",
       "evidence": "taskfw/memory.py:MEMORY_RELATIONSHIPS",
       "lifecycle": "Written when a MemoryRecord is recorded ('learned_from', implicitly) and when it is linked to a Task (any of the three, idempotently); validated in exactly one place -- the link path raises Rejected for a value outside the set. Links are never updated or deleted except by a forget, which cascades. Standing is recomputed from the surviving links on every read.",
@@ -75,71 +86,85 @@
     },
     "Concept": {
       "bounded_context": "Architectural Knowledge",
+      "form": "record",
       "definition": "A durable summary of what one source module promises and what must stay true of it -- description, contracts, invariants, evidence. Keyed by module path, enforced 1:1 against the real file tree.",
       "evidence": "taskfw/concepts.py:ConceptStore"
     },
     "SkillInvocation": {
       "bounded_context": "Loop Memory",
+      "form": "record",
       "definition": "A record that a named skill (e.g. commit, task-grooming) ran, optionally against a Task. Deliberately just a lightweight log entry, not a stored, referentially-integral record -- the task reference is not validated. Exists for skill-usage observability only, scoped narrowly so it can't become a second home for decisions or notes.",
       "evidence": "taskfw/mcp_server.py:tasks__log_skill_invocation"
     },
     "Methodology": {
       "bounded_context": "Loop Memory",
+      "form": "process",
       "definition": "The practice the whole framework exists to make cheap: the four-skill loop -- create, groom, implement, introspect -- together with the docs/methodology/ documents that specify it. Not a code object and not a stored record; it has no artifact of its own, only what each pass writes onto a Task and into Loop Memory. CLAUDE.md calls it 'the asset' and the storage/validation/serving code 'plumbing' subordinate to it: the ontology names every moving part (Grooming, Risk, Introspection, Lesson) but this term names the thing they add up to. Its evidence is the first in this file to cite a docs/ file rather than a taskfw/*.py symbol, because the methodology is embodied in the skills and the methodology docs, not in code.",
       "evidence": "docs/methodology/01-framework.md:Lifecycle"
     },
     "Grooming": {
       "bounded_context": "Loop Memory",
+      "form": "part",
       "definition": "The pre-implementation pass that records a task's current best understanding as falsifiable risks/findings before work starts. Recorded as part of the Task and replaced wholesale each pass -- unlike Introspection, only the latest pass is kept, because grooming is a current-belief snapshot, not a history.",
       "evidence": "taskfw/task.py:Task.grooming"
     },
     "Risk": {
       "bounded_context": "Loop Memory",
+      "form": "part",
       "definition": "One falsifiable prediction inside a Grooming pass, and the one part of Grooming that is not wholesale-replaced. A Risk has its own identity and an optional 'graded' verdict that Introspection assigns on whether it held; across re-grooming passes Risks are carried forward and merged by that identity, so a graded Risk -- the loop's primary evidence -- is never silently dropped because a later pass omitted it.",
       "evidence": "taskfw/mcp_server.py:tasks__update"
     },
     "Introspection": {
       "bounded_context": "Loop Memory",
+      "form": "part",
       "definition": "The post-implementation pass that grades how well Grooming's predictions held up and surfaces lessons for Loop Memory. Recorded as part of the Task as an appended series rather than Grooming's replace-in-place snapshot, since each report is evidence about one distinct execution and the series itself is the value.",
       "evidence": "taskfw/task.py:Task.introspection"
     },
     "Implementation": {
       "bounded_context": "Loop Memory",
+      "form": "process",
       "definition": "The third pass of the Methodology: doing the work a groomed Task describes, once Grooming has removed enough uncertainty to begin. It is where the plan becomes a change, and where the outcome that Introspection later grades each Risk against is produced. Not a code object or a stored record -- like Grooming and Introspection it has no artifact of its own, only what it writes onto the Task as it goes: Decisions logged when the choice is made, Commits, and ResolutionItems checked off as they land. Its one intention is to not reintroduce the uncertainty Grooming removed -- staying in scope, and recording reasoning as it happens rather than reconstructing it after.",
       "evidence": "docs/methodology/04-implementation.md:Implementation"
     },
     "Nudge": {
       "bounded_context": "Task Tracking",
+      "form": "transient",
       "definition": "Not a distinct class or stored record -- a nudge is a transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time and never persisted anywhere. It never blocks the action or changes what gets stored; it only points back at context the caller already has (this task, this memory, this report) and asks it to be looked at again. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
       "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge"
     },
     "TaskContext": {
       "bounded_context": "Task Tracking",
+      "form": "transient",
       "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order. Not persisted anywhere; assembled fresh on every call and gone once returned. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it.",
       "evidence": "taskfw/context.py:TaskContext"
     },
     "Commit": {
       "bounded_context": "Task Tracking",
+      "form": "record",
       "definition": "A record that a specific commit (sha, repo) was made against a Task. Stored apart from Task itself, keyed by (task_id, sha), with an idempotent insert -- recording the same sha against the same task twice is a no-op, not an error. Same shape as TaskEdge: never addressed by an id of its own, only reachable through the task it was recorded against.",
       "evidence": "taskfw/store.py:TaskStore.add_commit"
     },
     "Event": {
       "bounded_context": "Task Tracking",
+      "form": "record",
       "definition": "One entry on a Task's append-only activity log: a timestamped piece of text carrying a kind label from a small closed set. A Decision is one kind of Event; a status change is another. Not a distinct class per kind -- the kind label is the only thing that tells two Events apart -- and the log is never addressed by an id of its own, only read back through the Task it belongs to.",
       "evidence": "taskfw/store.py:TaskStore.add_event"
     },
     "Decision": {
       "bounded_context": "Task Tracking",
+      "form": "attribute",
       "definition": "One kind of Event recorded against a Task: the design-reasoning entry, set down at the moment a real choice was made. Not a distinct stored record or class -- what makes an Event a Decision is only its kind label, on an otherwise uniform log entry, and there is no separate decisions store to hold it.",
       "evidence": "taskfw/store.py:TaskStore.add_event"
     },
     "GroomingAccuracy": {
       "bounded_context": "Loop Memory",
+      "form": "transient",
       "definition": "The Methodology's feedback edge read in aggregate: how well a Grooming pass's Risks predicted, gathered across many finished Tasks instead of one. Introspection grades each Risk against a single Task; GroomingAccuracy is what those grades amount to once collected -- the loop's report on itself. Computed from the graded Risks on every read, never stored.",
       "evidence": "taskfw/accuracy.py:grooming_accuracy"
     },
     "GroomingGrade": {
       "bounded_context": "Loop Memory",
+      "form": "attribute",
       "definition": "The verdict Introspection passes on a single predicted Risk, graded against what the Implementation pass actually did: did predicting this help -- did it come true with its mitigation ready, or force the change that avoided it -- or was the pass spent on noise. Not a distinct class -- a label carried on the Risk, the way MemoryKind is a label on a MemoryRecord, and absent until Introspection assigns it. A surprise that no Risk predicted is deliberately not a GroomingGrade: with no prediction beneath it there is nothing for a verdict to be about, so it stays part of Introspection's account of what Grooming missed. One GroomingGrade is Introspection closing the Methodology's feedback edge for a single prediction; GroomingAccuracy is what those verdicts amount to across many finished Tasks.",
       "evidence": "taskfw/accuracy.py:GROOMING_GRADES",
       "lifecycle": "Assigned by a single Introspection pass, after Implementation, and carried by its Risk from then on. Re-grooming the same Task keeps the verdict rather than discarding it, so a judgement Introspection has already made is never lost.",
