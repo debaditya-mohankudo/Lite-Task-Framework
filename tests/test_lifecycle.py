@@ -17,7 +17,6 @@ from taskfw.lifecycle import (
     check_save,
     check_status,
     check_transition,
-    check_type,
 )
 from taskfw.task import TASK_EDGE_RELATIONS, TASK_STATUSES, Task
 
@@ -79,23 +78,18 @@ class TestTransitions:
 
 class TestParentRule:
     def test_epic_cannot_have_a_parent(self):
-        d = check_parent("epic", Task(type="epic"))
+        d = check_parent(True, Task(epic=True))
         assert not d and d.rule == "parent"
 
     def test_epic_without_parent_is_fine(self):
-        assert check_parent("epic", None)
+        assert check_parent(True, None)
 
     def test_task_may_have_a_parent_or_not(self):
-        assert check_parent("task", Task(type="epic"))
-        assert check_parent("task", None)
+        assert check_parent(False, Task(epic=True))
+        assert check_parent(False, None)
 
 
-class TestTypeAndStatus:
-    def test_only_two_types(self):
-        assert check_type("epic") and check_type("task")
-        assert not check_type("story")
-        assert not check_type("subtask")
-
+class TestStatus:
     def test_status_validation(self):
         assert check_status("open")
         assert not check_status("in_progress")
@@ -119,10 +113,6 @@ class TestCheckSave:
     def test_accepts_a_plain_new_task(self):
         assert check_save(Task(title="t"))
 
-    def test_rejects_bad_type_before_anything_else(self):
-        d = check_save(Task(title="t", type="story"))
-        assert not d and d.rule == "type"
-
     def test_rejects_self_parenting(self):
         t = Task(title="t")
         t.parent = t.id
@@ -144,6 +134,6 @@ class TestCheckSave:
         assert check_save(nxt, previous=prev)
 
     def test_epic_with_parent_is_rejected(self):
-        e = Task(title="e", type="epic")
+        e = Task(title="e", epic=True)
         e.parent = "someid"
-        assert not check_save(e, parent=Task(type="epic"))
+        assert not check_save(e, parent=Task(epic=True))

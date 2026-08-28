@@ -61,11 +61,11 @@ class TestRoundTrip:
         assert t.id == "x"
 
     def test_scalar_columns_track_the_blob(self, store):
-        t = make(title="t", type="epic")
+        t = make(title="t", epic=True)
         t.status = "blocked"
         store.save(t)
-        row = store.conn.execute("SELECT type, status, title FROM tasks WHERE id=?", (t.id,)).fetchone()
-        assert (row["type"], row["status"], row["title"]) == ("epic", "blocked", "t")
+        row = store.conn.execute("SELECT epic, status, title FROM tasks WHERE id=?", (t.id,)).fetchone()
+        assert (row["epic"], row["status"], row["title"]) == (1, "blocked", "t")
 
 
 class TestProgress:
@@ -89,11 +89,13 @@ class TestListing:
         store.save(d)
         assert [t.title for t in store.list()] == ["o"]
 
-    def test_filter_by_type_and_parent(self, store):
-        e = make(title="epic", type="epic")
+    def test_filter_by_epic_and_parent(self, store):
+        e = make(title="epic", epic=True)
         store.save(e)
         store.save(make(title="child", parent=e.id))
-        assert len(store.list(type="epic")) == 1
+        assert len(store.list(epic=True)) == 1
+        assert len(store.list(epic=False)) == 1
+        assert len(store.list(epic=None)) == 2
         assert [t.title for t in store.children(e.id)] == ["child"]
 
 

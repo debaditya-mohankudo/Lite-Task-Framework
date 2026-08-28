@@ -7,7 +7,7 @@ so a task that saves is well-formed by construction.
 ```python
 tasks__create(
     title="Short, specific, and readable in a list",
-    type="task",                      # or "epic"
+    epic=False,                       # True groups other tasks; default False
     parent="<epic id>",               # optional
     motivation="Why this is worth doing, and what breaks without it.",
     resolution=["first step", "second step"],

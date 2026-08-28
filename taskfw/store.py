@@ -55,8 +55,8 @@ class TaskStore:
         task.updated_at = utcnow()
         prior = self.conn.execute("SELECT status FROM tasks WHERE id=?", (task.id,)).fetchone()
         if prior is None:
-            log.info("save task=%s CREATE type=%s status=%s title=%r",
-                     task.id, task.type, task.status, task.title[:60])
+            log.info("save task=%s CREATE epic=%s status=%s title=%r",
+                     task.id, task.epic, task.status, task.title[:60])
         elif prior["status"] != task.status:
             # A status change is the single most useful thing to see in a log
             # when reconstructing what happened to a task.
@@ -65,12 +65,12 @@ class TaskStore:
             log.debug("save task=%s UPDATE status=%s", task.id, task.status)
         with transaction(self.conn):
             self.conn.execute(
-                """INSERT INTO tasks (id, type, status, parent, title, data, created_at, updated_at)
+                """INSERT INTO tasks (id, epic, status, parent, title, data, created_at, updated_at)
                    VALUES (?,?,?,?,?,?,?,?)
                    ON CONFLICT(id) DO UPDATE SET
-                     type=excluded.type, status=excluded.status, parent=excluded.parent,
+                     epic=excluded.epic, status=excluded.status, parent=excluded.parent,
                      title=excluded.title, data=excluded.data, updated_at=excluded.updated_at""",
-                (task.id, task.type, task.status, task.parent, task.title,
+                (task.id, int(task.epic), task.status, task.parent, task.title,
                  task.to_json(), task.created_at, task.updated_at),
             )
             if self.fts:
@@ -88,7 +88,7 @@ class TaskStore:
         self,
         *,
         status: str | tuple[str, ...] | None = ("open", "blocked"),
-        type: str | None = None,
+        epic: bool | None = None,
         parent: str | None = None,
         limit: int = 200,
     ) -> list[Task]:
@@ -97,9 +97,9 @@ class TaskStore:
             statuses = (status,) if isinstance(status, str) else tuple(status)
             where.append(f"status IN ({','.join('?' * len(statuses))})")
             params.extend(statuses)
-        if type:
-            where.append("type=?")
-            params.append(type)
+        if epic is not None:
+            where.append("epic=?")
+            params.append(int(epic))
         if parent is not None:
             where.append("parent=?")
             params.append(parent)

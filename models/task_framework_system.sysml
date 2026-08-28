@@ -12,8 +12,9 @@ package TaskFrameworkSystem {
          * BEFORE DESIGNING A FIX FOR A COUPLING, CHECK WHETHER THE COUPLED
          * THING NEEDS TO EXIST. This decomposition began with three such split
          * requirements and solved none of them by splitting harder: after
-         * simplification one became trivial (with two issue types, the
-         * hierarchy rule is "an epic has no parent"), one stopped being a rule
+         * simplification one became trivial (with the issue "type" reduced to a
+         * single `epic` boolean, the hierarchy rule is "an epic has no
+         * parent"), one stopped being a rule
          * at all (with no pre-commit gate, commit linkage was observation, not
          * enforcement), and the third — the HostAdapter part that used to sit
          * here, injecting a one-line active-task pointer on every prompt — was

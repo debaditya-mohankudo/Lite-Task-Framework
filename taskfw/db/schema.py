@@ -51,15 +51,17 @@ TASKS = Table(
     name="tasks",
     columns=(
         Column("id", "TEXT PRIMARY KEY"),
-        # Two issue types only: 'epic' groups, 'task' does work. No story /
-        # bug / subtask, so no hierarchy matrix — see taskfw/lifecycle.py.
-        Column("type", "TEXT NOT NULL DEFAULT 'task'"),
+        # A grouping epic or a task that does work — one boolean, not a
+        # two-value 'type' string, because only 'epic' ever carried a rule
+        # (see taskfw/lifecycle.py). The old `type` TEXT column is left in the
+        # DB as an orphan by migrate() rather than dropped.
+        Column("epic", "INTEGER NOT NULL DEFAULT 0"),
         Column("status", "TEXT NOT NULL DEFAULT 'open'"),
         Column("parent", "TEXT DEFAULT NULL"),
         Column("title", "TEXT NOT NULL DEFAULT ''"),
         # The full typed task object as JSON. Authoritative for every field
         # that is not a scalar column above; the scalars exist only so the
-        # common filters (status, type, parent) are indexable without
+        # common filters (status, epic, parent) are indexable without
         # json_extract on every row. TaskStore.save() is the sole writer of
         # both, which is what keeps them from drifting.
         Column("data", "TEXT NOT NULL DEFAULT '{}'"),
@@ -234,6 +236,26 @@ def migrate(conn: sqlite3.Connection) -> dict[str, list[str]]:
 
     conn.commit()
     return {"created": created, "added": added, "orphaned": orphaned}
+
+
+def backfill_epic_scalar(conn: sqlite3.Connection) -> int:
+    """Populate the `epic` scalar from the orphaned `type` column, once.
+
+    A DB migrated from before the type->epic change (task:50183b29) has an
+    `epic` column freshly ADDed at its DEFAULT 0 and a still-present `type`
+    column holding the real value. ALTER TABLE ADD COLUMN cannot backfill, so
+    this does — kept out of migrate() so that function stays a pure
+    CREATE/ADD emitter. Idempotent: the `epic = 0` guard means a second run
+    matches nothing, and a fresh DB (no `type` column) is skipped entirely.
+    The `data` JSON still carries the legacy "type" key; Task.from_dict reads
+    it, so the blobs need no rewrite. Returns rows updated.
+    """
+    cols = _columns_of(conn, "tasks")
+    if "type" not in cols or "epic" not in cols:
+        return 0
+    cur = conn.execute("UPDATE tasks SET epic = 1 WHERE type = 'epic' AND epic = 0")
+    conn.commit()
+    return cur.rowcount
 
 
 def _columns_of(conn: sqlite3.Connection, table: str) -> set[str]:

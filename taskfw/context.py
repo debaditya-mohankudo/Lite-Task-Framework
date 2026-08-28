@@ -196,7 +196,7 @@ def _task_summary(task: Task) -> dict:
     done, total = task.progress
     return {
         "id": task.id,
-        "type": task.type,
+        "epic": task.epic,
         "status": task.status,
         "title": task.title,
         "parent": task.parent,

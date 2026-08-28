@@ -132,12 +132,12 @@ class TestIdempotency:
 class TestTypeCollapse:
     def test_epic_stays_an_epic(self, source, dest):
         migrate(source, dest=dest)
-        assert rows(dest)["epic01"]["type"] == "epic"
+        assert rows(dest)["epic01"]["epic"] == 1
 
     @pytest.mark.parametrize("task_id", ["story1", "bug001", "sub001", "feed01"])
     def test_other_types_become_tasks(self, source, dest, task_id):
         migrate(source, dest=dest)
-        assert rows(dest)[task_id]["type"] == "task"
+        assert rows(dest)[task_id]["epic"] == 0
 
     @pytest.mark.parametrize("task_id,original",
                              [("story1", "story"), ("bug001", "bug"),
@@ -152,7 +152,7 @@ class TestTypeCollapse:
         relationship."""
         migrate(source, dest=dest)
         row = rows(dest)["epic02"]
-        assert row["type"] == "task"
+        assert row["epic"] == 0
         assert row["parent"] == "epic01"
         assert "was-epic" in row["data"]
 

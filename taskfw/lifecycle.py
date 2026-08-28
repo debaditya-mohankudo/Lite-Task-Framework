@@ -9,12 +9,16 @@ hooks, so there is no second copy and no way to reach the store around it.
 Every function is pure over (inputs, store): no session, prompt, or host state.
 That is what lets any caller use it without dragging a runtime along.
 
-DELIBERATELY SMALL, and smaller than it first looked. Three rules were removed
+DELIBERATELY SMALL, and smaller than it first looked. Four rules were removed
 rather than relocated:
 
   - Body-template validation: gone. With a typed task object, "required
     sections are present" is schema validation.
-  - Hierarchy matrix: gone. Two issue types mean one sentence, not a matrix.
+  - Hierarchy matrix: gone. A single `epic` boolean means one sentence, not
+    a matrix.
+  - Type validation: gone. `type` was a two-value string only one value of
+    which ("epic") carried a rule; as the boolean `Task.epic` it cannot be
+    malformed, so there is nothing to check.
   - Commit traceability: moved out. With no pre-commit gate, commit-to-task
     linkage is observation, not enforcement, so it is not a rule at all and
     lives in the hook that observes it.
@@ -26,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from taskfw.log import get_logger
-from taskfw.task import TASK_EDGE_RELATIONS, TASK_STATUSES, TASK_TYPES, Task
+from taskfw.task import TASK_EDGE_RELATIONS, TASK_STATUSES, Task
 
 log = get_logger(__name__)
 
@@ -99,13 +103,6 @@ def check_status(status: str) -> Decision:
     return _allow("status", status=status)
 
 
-def check_type(task_type: str) -> Decision:
-    if task_type not in TASK_TYPES:
-        return _deny("type", f"Unknown type {task_type!r}. Valid: {', '.join(TASK_TYPES)}.",
-                     type=task_type)
-    return _allow("type", type=task_type)
-
-
 def check_link_rel(rel: str) -> Decision:
     """Closed vocabulary for task_edges.rel — see TASK_EDGE_RELATIONS.
 
@@ -150,17 +147,17 @@ def check_transition(current: str, target: str) -> Decision:
     return _allow("transition", current=current, target=target)
 
 
-def check_parent(task_type: str, parent: Task | None) -> Decision:
+def check_parent(epic: bool, parent: Task | None) -> Decision:
     """The whole hierarchy rule: an epic has no parent.
 
-    With only two types there is nothing else to say. A task may have an epic
-    parent or none; nesting a task under a task is allowed because forbidding
-    it would buy nothing a user cannot express with an epic.
+    With a single `epic` flag there is nothing else to say. A task may have an
+    epic parent or none; nesting a task under a task is allowed because
+    forbidding it would buy nothing a user cannot express with an epic.
     """
-    if task_type == "epic" and parent is not None:
+    if epic and parent is not None:
         return _deny("parent", "An epic cannot have a parent.",
-                     type=task_type, parent_id=parent.id)
-    return _allow("parent", type=task_type, parent_id=parent.id if parent else None)
+                     epic=epic, parent_id=parent.id)
+    return _allow("parent", epic=epic, parent_id=parent.id if parent else None)
 
 
 
@@ -171,13 +168,13 @@ def check_save(task: Task, *, previous: Task | None = None, parent: Task | None 
     individual checks themselves — doing so is how one caller ends up enforcing
     a different set than another.
     """
-    log.debug("check_save task=%s type=%s status=%s parent=%s previous_status=%s",
-              task.id, task.type, task.status, task.parent,
+    log.debug("check_save task=%s epic=%s status=%s parent=%s previous_status=%s",
+              task.id, task.epic, task.status, task.parent,
               previous.status if previous else None)
-    for check in (check_type(task.type), check_status(task.status)):
-        if not check:
-            return check
-    parent_check = check_parent(task.type, parent)
+    status_check = check_status(task.status)
+    if not status_check:
+        return status_check
+    parent_check = check_parent(task.epic, parent)
     if not parent_check:
         return parent_check
     if task.parent == task.id:

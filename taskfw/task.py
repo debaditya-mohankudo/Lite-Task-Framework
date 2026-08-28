@@ -16,10 +16,6 @@ import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 
-#: Two issue types only. 'epic' groups; 'task' does the work. No story / bug /
-#: subtask, so there is no hierarchy matrix to enforce — see taskfw.lifecycle.
-TASK_TYPES = ("epic", "task")
-
 TASK_STATUSES = ("open", "blocked", "done", "abandoned")
 
 #: Closed vocabulary for task_edges.rel, enforced by lifecycle.check_link_rel.
@@ -51,7 +47,10 @@ class ResolutionItem:
 @dataclass
 class Task:
     id: str = field(default_factory=new_id)
-    type: str = "task"
+    #: True for a grouping epic, False for a task that does work. Replaced a
+    #: two-value 'type' string: only 'epic' ever carried a rule, so a boolean
+    #: says the same thing and cannot be malformed — see taskfw.lifecycle.
+    epic: bool = False
     status: str = "open"
     parent: str | None = None
     title: str = ""
@@ -83,8 +82,13 @@ class Task:
         version must stay readable by an older one, which matters because the
         migration path is additive-only and never rewrites rows.
         """
+        data = data or {}
         known = set(cls.__dataclass_fields__)
-        clean = {k: v for k, v in (data or {}).items() if k in known}
+        clean = {k: v for k, v in data.items() if k in known}
+        # Legacy rows carried a 'type' string ("epic"/"task") instead of the
+        # `epic` boolean. Honour it only when `epic` itself was not written.
+        if "epic" not in clean and "type" in data:
+            clean["epic"] = data["type"] == "epic"
         clean["resolution"] = [
             r if isinstance(r, ResolutionItem) else ResolutionItem(**r)
             for r in clean.get("resolution") or []

@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Iterator
 
 from taskfw import config
-from taskfw.db.schema import migrate
+from taskfw.db.schema import backfill_epic_scalar, migrate
 
 _migrated: set[str] = set()
 
@@ -39,6 +39,7 @@ def connect(path: Path | str | None = None, *, migrate_once: bool = True) -> sql
     key = str(target)
     if migrate_once and key not in _migrated:
         migrate(conn)
+        backfill_epic_scalar(conn)
         _migrated.add(key)
     return conn
 

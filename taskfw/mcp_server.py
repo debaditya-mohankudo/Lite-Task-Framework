@@ -345,15 +345,17 @@ def tasks__phase(task_id: str) -> dict[str, Any]:
 
 
 @_tool()
-def tasks__list(status: str = "open,blocked", type: str = "", parent: str = "", limit: int = 50) -> list[dict]:
+def tasks__list(status: str = "open,blocked", epic: bool | None = None, parent: str = "", limit: int = 50) -> list[dict]:
     """List tasks. status is comma-separated; empty means every status.
 
-    Rows come back ordered by updated_at, most recently touched first.
+    epic omitted lists both; epic=true lists only epics, epic=false only
+    non-epic tasks. Rows come back ordered by updated_at, most recently
+    touched first.
     """
     statuses = tuple(s.strip() for s in status.split(",") if s.strip()) or None
-    tasks = store().list(status=statuses, type=type or None, parent=parent or None, limit=limit)
+    tasks = store().list(status=statuses, epic=epic, parent=parent or None, limit=limit)
     return [
-        {"id": t.id, "type": t.type, "status": t.status, "title": t.title,
+        {"id": t.id, "epic": t.epic, "status": t.status, "title": t.title,
          "parent": t.parent, "progress": list(t.progress),
          "created_at": t.created_at, "updated_at": t.updated_at}
         for t in tasks
@@ -364,7 +366,7 @@ def tasks__list(status: str = "open,blocked", type: str = "", parent: str = "", 
 def tasks__search(query: str, limit: int = 25) -> list[dict]:
     """Full-text search over titles, motivation, notes, tags, files, and checklist items."""
     return [
-        {"id": t.id, "type": t.type, "status": t.status, "title": t.title}
+        {"id": t.id, "epic": t.epic, "status": t.status, "title": t.title}
         for t in store().search(query, limit=limit)
     ]
 
@@ -376,7 +378,7 @@ def tasks__search(query: str, limit: int = 25) -> list[dict]:
 @_tool()
 def tasks__create(
     title: str,
-    type: str = "task",
+    epic: bool = False,
     parent: str = "",
     motivation: str = "",
     resolution: list[str] | None = None,
@@ -386,9 +388,10 @@ def tasks__create(
 ) -> dict[str, Any]:
     """Create a task or epic.
 
-    Two types only: "epic" groups, "task" does work. resolution is a list of
-    checklist item texts — there is no body template to satisfy and no required
-    sections, because the object's shape is the schema.
+    epic=True groups other tasks and cannot have a parent; epic=False (the
+    default) does work. resolution is a list of checklist item texts — there
+    is no body template to satisfy and no required sections, because the
+    object's shape is the schema.
 
     The response's related_candidates is advisory only — titles that share
     words with an existing task, surfaced for a human to review. Nothing here
@@ -400,7 +403,7 @@ def tasks__create(
     active either. Calling this repeatedly is harmless.
     """
     task = Task(
-        title=title, type=type, parent=parent or None, motivation=motivation,
+        title=title, epic=epic, parent=parent or None, motivation=motivation,
         resolution=[ResolutionItem(t) for t in (resolution or [])],
         files=files or [], tags=tags or [], notes=notes,
     )
@@ -414,7 +417,7 @@ def tasks__create(
     scope = _scope()
     if store().get_active(scope):
         _clear_and_broadcast(scope)
-    result: dict[str, Any] = {"ok": True, "id": task.id, "type": task.type, "status": task.status}
+    result: dict[str, Any] = {"ok": True, "id": task.id, "epic": task.epic, "status": task.status}
     candidates = TaskContext(store()).related(task)
     if candidates:
         result["related_candidates"] = candidates

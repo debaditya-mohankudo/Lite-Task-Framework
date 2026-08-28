@@ -27,7 +27,7 @@ def store(tmp_path):
 
 @pytest.fixture
 def populated(store):
-    epic = store.save(Task(title="The epic", type="epic"))
+    epic = store.save(Task(title="The epic", epic=True))
     task = store.save(Task(
         title="Do the thing", parent=epic.id, motivation="because reasons",
         resolution=[ResolutionItem("step one", True), ResolutionItem("step two")],
@@ -175,7 +175,7 @@ class TestBudget:
         assert "truncated" not in _build_context(populated["store"], populated["task"].id)
 
     def test_oversized_bundle_drops_sections_and_says_so(self, store):
-        epic = store.save(Task(title="epic", type="epic"))
+        epic = store.save(Task(title="epic", epic=True))
         big = store.save(Task(title="huge", parent=epic.id, motivation="x" * (CHAR_BUDGET // 2)))
         for i in range(40):
             store.add_event(big.id, f"decision {i} " + "y" * 400, kind="decision")
@@ -241,7 +241,7 @@ class TestGroomingTrim:
         # the least-useful field or two brings it back under — mirroring
         # task:1c31a060's reproduction case (grooming=8371, total bundle
         # over budget only once other sections are added in).
-        epic = store.save(Task(title="epic", type="epic"))
+        epic = store.save(Task(title="epic", epic=True))
         return store.save(Task(
             title="huge grooming", parent=epic.id,
             grooming={
@@ -283,7 +283,7 @@ class TestGroomingTrim:
         loop, so it alone can keep bundle["grooming"] non-empty even after every
         known field has been shrunk. _enforce_budget must still fall back to
         dropping the section whole rather than returning an over-budget bundle."""
-        epic = store.save(Task(title="epic", type="epic"))
+        epic = store.save(Task(title="epic", epic=True))
         t = store.save(Task(
             title="unlisted field", parent=epic.id,
             grooming={"an_unrecognised_field": "x" * (CHAR_BUDGET * 3)},
@@ -294,7 +294,7 @@ class TestGroomingTrim:
         assert _size(c) <= CHAR_BUDGET
 
     def test_grooming_that_cannot_shrink_enough_falls_back_to_whole_drop(self, store):
-        epic = store.save(Task(title="epic", type="epic"))
+        epic = store.save(Task(title="epic", epic=True))
         t = store.save(Task(
             title="unshrinkable", parent=epic.id,
             grooming={"clarifications": ["c" * (CHAR_BUDGET * 3)]},
@@ -324,7 +324,7 @@ class TestEdgesCap:
         assert "edges_truncated" not in c
 
     def test_edges_truncated_cleared_if_graph_dropped_for_budget(self, store):
-        epic = store.save(Task(title="epic", type="epic"))
+        epic = store.save(Task(title="epic", epic=True))
         big = store.save(Task(title="huge", parent=epic.id, motivation="x" * (CHAR_BUDGET // 2)))
         for i in range(40):
             store.add_event(big.id, f"decision {i} " + "y" * 400, kind="decision")

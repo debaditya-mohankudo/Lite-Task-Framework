@@ -41,18 +41,14 @@ def create(**kw):
 class TestCreate:
     def test_creates_a_task(self):
         r = create(title="Build it")
-        assert r["ok"] and r["type"] == "task" and r["status"] == "open"
+        assert r["ok"] and r["epic"] is False and r["status"] == "open"
 
     def test_creates_an_epic(self):
-        assert create(title="An epic", type="epic")["type"] == "epic"
-
-    def test_rejects_an_unknown_type_via_lifecycle(self):
-        r = create(type="story")
-        assert r["rule"] == "type" and "story" in r["error"]
+        assert create(title="An epic", epic=True)["epic"] is True
 
     def test_rejects_an_epic_with_a_parent(self):
-        e = create(title="e", type="epic")
-        r = create(title="e2", type="epic", parent=e["id"])
+        e = create(title="e", epic=True)
+        r = create(title="e2", epic=True, parent=e["id"])
         assert r["rule"] == "parent"
 
     def test_rejects_a_missing_parent(self):

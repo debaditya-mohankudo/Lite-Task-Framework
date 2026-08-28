@@ -120,10 +120,12 @@ package Requirements {
              *
              * Recorded as a requirement because of how little it takes to
              * satisfy. A Jira-style set of five issue types needs a matrix of
-             * which type may parent which, and a table to hold it; two types
-             * reduce the same requirement to one sentence with no matrix at
-             * all. The rule survived the simplification, almost none of its
-             * machinery did. */
+             * which type may parent which, and a table to hold it; a single
+             * `epic` boolean (there is no "type" enum — one flag, not two
+             * named values) reduces the same requirement to one sentence with
+             * no matrix at all. The rule survived the simplification, almost
+             * none of its machinery did — check_parent takes a bool now, and
+             * check_type stopped existing because a bool cannot be malformed. */
     }
     satisfy requirement ParentRuleRequirement by system.rules;
 

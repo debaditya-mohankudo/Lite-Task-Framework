@@ -95,10 +95,10 @@ active task is announced once at `tasks__set_active` and not re-surfaced.
 
 ## Structure only where it earns its keep
 
-Two issue types. Four statuses. One hierarchy rule. That is not minimalism as
-an aesthetic — it is a bet that every additional category is a decision someone
-has to make on every single task, forever, and that most such decisions carry
-no information.
+One `epic` boolean. Four statuses. One hierarchy rule. That is not minimalism
+as an aesthetic — it is a bet that every additional category is a decision
+someone has to make on every single task, forever, and that most such decisions
+carry no information.
 
 Where the schema does not anticipate a thought, there is somewhere to put it
 anyway. That escape hatch is deliberate and should survive future tidying.

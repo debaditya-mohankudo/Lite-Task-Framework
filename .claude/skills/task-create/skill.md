@@ -1,6 +1,6 @@
 ---
 name: task-create
-description: Reference for creating tasks and epics in taskfw — the two types, what each field is for, and how linking works. Use before calling tasks__create or when the user says /task-create.
+description: Reference for creating tasks and epics in taskfw — the epic flag, what each field is for, and how linking works. Use before calling tasks__create or when the user says /task-create.
 user-invocable: true
 updated: 2026-08-08
 doc: docs/methodology/02-create.md
@@ -21,12 +21,12 @@ epic
 └── task
 ```
 
-- **epic** — groups related work. Cannot have a parent.
-- **task** — does the work. May have an epic parent, or none.
+- **epic** (`epic=True`) — groups related work. Cannot have a parent.
+- **task** (`epic=False`, the default) — does the work. May have an epic parent, or none.
 
-That is the whole hierarchy. There is no story, bug, or subtask, and no matrix governing what may parent what. A task under a task is allowed; forbidding it would buy nothing an epic cannot express.
+That is the whole hierarchy. `epic` is one boolean on the task, not a `type` enum — there is no story, bug, or subtask, and no matrix governing what may parent what. A task under a task is allowed; forbidding it would buy nothing an epic cannot express.
 
-Kind of work — bug, refactor, urgent, research — goes in `tags`, which is exactly why the type system does not carry it.
+Kind of work — bug, refactor, urgent, research — goes in `tags`, which is exactly why the `epic` flag does not carry it.
 
 ## Signature
 
@@ -34,7 +34,7 @@ Kind of work — bug, refactor, urgent, research — goes in `tags`, which is ex
 tasks__log_skill_invocation(skill="task-create/create")
 tasks__create(
     title="Short, specific, and readable in a list",
-    type="task",                      # or "epic"
+    epic=False,                       # True groups other tasks; default False
     parent="<epic id>",               # optional; never for an epic
     motivation="Why this is worth doing, and what breaks without it.",
     resolution=["first step", "second step"],
@@ -129,7 +129,7 @@ Skip silently if the repo has no store.
 ## Rules
 
 - **An epic cannot have a parent.** A task cannot be its own parent. Those are the only two structural rules; both return `{"error": ..., "rule": ...}`, and `rule` names which one fired so you can react without matching on message text.
-- **Use `tags`, not new types**, for anything the two types do not express.
+- **Use `tags`, not new fields**, for anything the `epic` flag does not express.
 - **Specify observable behaviour before internal design.** Write `resolution`
   as verifiable behavioural outcomes; name files or modules only when that
   genuinely constrains scope — otherwise that belongs in `files`. Keep

@@ -24,7 +24,7 @@ Where hooks are installed, a one-line pointer names the active task. That is a r
 create ──▶ groom ──▶ implement ──▶ finish ──▶ introspect
 ```
 
-Two types: **epic** groups (no parent), **task** does work. That is the whole hierarchy — no story, bug, or subtask. If you want a bug distinguished from a feature, use a tag.
+One `epic` boolean: **epic** (`epic=True`) groups (no parent), **task** (`epic=False`, the default) does work. That is the whole hierarchy — no `type` enum, no story, bug, or subtask. If you want a bug distinguished from a feature, use a tag.
 
 Four statuses: `open`, `blocked`, `done`, `abandoned`. The last two are terminal.
 
@@ -44,7 +44,7 @@ If it is one coherent piece of work, create one task. Do not force a split.
 
 ```python
 tasks__log_skill_invocation(skill="task-framework/step-2-create")
-tasks__create(title="...", type="epic", motivation="...")          # if grouping
+tasks__create(title="...", epic=True, motivation="...")            # if grouping
 tasks__create(title="...", parent="<epic id>", motivation="...",
               resolution=["step one", "step two"], files=["a.py"], tags=["area"])
 ```

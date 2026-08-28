@@ -38,7 +38,7 @@ class TestSearchText:
 class TestJSONRoundTrip:
     def test_to_json_and_from_json_preserve_every_field(self):
         t = Task(
-            type="epic",
+            epic=True,
             status="blocked",
             parent="parentid",
             title="t",
@@ -60,7 +60,13 @@ class TestJSONRoundTrip:
 
     def test_from_dict_defaults_missing_keys(self):
         t = Task.from_dict({"title": "t"})
-        assert t.status == "open" and t.type == "task" and t.resolution == []
+        assert t.status == "open" and t.epic is False and t.resolution == []
+
+    def test_from_dict_reads_a_legacy_type_string_into_the_epic_flag(self):
+        assert Task.from_dict({"title": "t", "type": "epic"}).epic is True
+        assert Task.from_dict({"title": "t", "type": "task"}).epic is False
+        # An explicit epic key wins over a stale type string.
+        assert Task.from_dict({"title": "t", "type": "epic", "epic": False}).epic is False
 
     def test_from_dict_converts_raw_resolution_dicts_to_resolution_items(self):
         t = Task.from_dict({"title": "t", "resolution": [{"text": "x", "done": True}]})
@@ -73,7 +79,7 @@ class TestJSONRoundTrip:
 
     def test_from_json_of_none_or_empty_returns_a_default_task(self):
         for t in (Task.from_json(None), Task.from_json("{}")):
-            assert t.title == "" and t.status == "open" and t.type == "task"
+            assert t.title == "" and t.status == "open" and t.epic is False
             assert t.resolution == []
 
 

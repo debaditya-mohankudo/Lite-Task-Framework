@@ -446,9 +446,9 @@
         "tests/test_lifecycle.py:TestCheckLinkRel"
       ],
       "invariants": [
-        "check_transition, check_parent, check_type, check_status, check_link_rel, and check_save take only plain values/Task objects and a Decision return type -- no store, connection, or session argument.",
+        "check_transition, check_parent, check_status, check_link_rel, and check_save take only plain values/Task objects and a Decision return type -- no store, connection, or session argument. (check_type was deleted in task:50183b29 when Task.type became the boolean Task.epic -- a bad value stopped being representable, so there was nothing left to check.)",
         "Same-status transitions are always allowed even from a terminal state, and this precedence (same-status beats terminal-lock) is checked ahead of the terminal rule.",
-        "check_save evaluates type before parent before transition, so the first failing rule is always the one reported.",
+        "check_save evaluates status before parent before transition, so the first failing rule is always the one reported.",
         "parent_of is deliberately excluded from the closed relation set enforced by check_link_rel, since it is redundant with Task.parent."
       ],
       "last_validated": "2026-08-23T15:11:25.945430+00:00",
@@ -467,7 +467,7 @@
         "There is no check_active_switch anymore (removed task:f302eb2b) — tasks__set_active/push_active is non-destructive by construction, so nothing needs confirm=True to avoid losing state"
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "The single implementation of every task rule, imported by both the MCP tools and the hooks. Pure functions over (inputs, store) with no session, prompt, or host state. Deliberately small: body-template validation became schema validation, the hierarchy matrix collapsed to one sentence with two issue types, and commit traceability left entirely once the pre-commit gate was dropped. check_active_switch was deleted outright in task:f302eb2b once the active-task pointer became a non-destructive LIFO stack (push_active) instead of a single overwritten value — there was nothing left to guard against losing.",
+      "description": "The single implementation of every task rule, imported by both the MCP tools and the hooks. Pure functions over (inputs, store) with no session, prompt, or host state. Deliberately small: body-template validation became schema validation, the hierarchy matrix collapsed to the single rule 'an epic has no parent', and commit traceability left entirely once the pre-commit gate was dropped. check_active_switch was deleted outright in task:f302eb2b once the active-task pointer became a non-destructive LIFO stack (push_active) instead of a single overwritten value — there was nothing left to guard against losing. check_type went the same way in task:50183b29: the two-value type enum ('epic'/'task') became the boolean Task.epic, so a malformed type became unrepresentable and the check had nothing to validate.",
       "evidence": [
         "taskfw/lifecycle.py:check_transition",
         "taskfw/lifecycle.py:check_save",
@@ -764,14 +764,14 @@
       "confidence": 0.8,
       "contracts": [],
       "created_at": "2026-08-23T15:12:03.044040+00:00",
-      "description": "Pins how the migration collapses claude-hooks' five issue types (epic/story/bug/subtask/feedback) and a 'review' status down into taskfw's two-type, four-status model without losing information: the dropped label is preserved as a data tag rather than discarded outright, and a structurally impossible shape (an epic with a parent) is demoted to a task while its real parent relationship is kept, never orphaned.",
+      "description": "Pins how the migration collapses claude-hooks' five issue types (epic/story/bug/subtask/feedback) and a 'review' status down into taskfw's model -- one epic boolean, four statuses -- without losing information: the dropped label is preserved as a data tag rather than discarded outright, and a structurally impossible shape (an epic with a parent) is demoted to a non-epic task while its real parent relationship is kept, never orphaned.",
       "evidence": [
         "tests/test_migrate_hooks.py:TestTypeCollapse",
         "tests/test_migrate_hooks.py:TestContent"
       ],
       "invariants": [
-        "story/bug/subtask/feedback all become type='task' in taskfw, with the original type name preserved inside the task's data as a tag (e.g. 'was-story').",
-        "An epic that had a parent in the source is demoted to type='task' with its parent preserved and 'was-epic' recorded in data -- the relationship is never dropped to satisfy the epic-cannot-have-parent rule.",
+        "story/bug/subtask/feedback all become epic=False (a plain task) in taskfw, with the original type name preserved inside the task's data as a tag (e.g. 'was-story'). Only source type 'epic' maps to epic=True.",
+        "An epic that had a parent in the source is demoted to epic=False with its parent preserved and 'was-epic' recorded in data -- the relationship is never dropped to satisfy the epic-cannot-have-parent rule.",
         "status='review' becomes 'open' with 'was-review' recorded in data.",
         "Body checklist markup ('- [x]'/'- [ ]') is parsed into typed ResolutionItem entries and the raw body is also preserved verbatim in notes."
       ],
@@ -786,7 +786,7 @@
       "confidence": 0.8,
       "contracts": [],
       "created_at": "2026-08-01T02:51:02.588824+00:00",
-      "description": "One-time import of claude-hooks' task store (~/.claude/proj_tasks.db) into taskfw. Every task is written through TaskStore.save() rather than by raw INSERT, because tasks.data holds the typed object while the scalar columns are projected from it, and save() is the sole writer of both. A bulk INSERT here would be a second writer whose rows disagree with themselves the moment either side changes. Side tables (events, edges, commits) are inserted directly since they carry no projected duplication. The type collapse is lossy by decision, not by accident: five claude-hooks issue types become taskfw's two, with the original preserved as a tag, because the extra four enforced no rule and were therefore already labels.",
+      "description": "One-time import of claude-hooks' task store (~/.claude/proj_tasks.db) into taskfw. Every task is written through TaskStore.save() rather than by raw INSERT, because tasks.data holds the typed object while the scalar columns are projected from it, and save() is the sole writer of both. A bulk INSERT here would be a second writer whose rows disagree with themselves the moment either side changes. Side tables (events, edges, commits) are inserted directly since they carry no projected duplication. The type collapse is lossy by decision, not by accident: five claude-hooks issue types become taskfw's single epic boolean (True only for source 'epic'), with the original preserved as a tag, because the other four enforced no rule and were therefore already labels.",
       "evidence": [
         "taskfw/migrate_hooks.py",
         "taskfw/store.py",
@@ -1113,7 +1113,7 @@
       ],
       "invariants": [
         "search_text() concatenates title, motivation, notes, tags, files, and every resolution item's text (done or not) -- falsy fields are omitted entirely rather than appearing as blank segments.",
-        "Task.from_dict silently drops unknown keys (forward compatibility with a newer schema) and defaults every missing key (status='open', type='task', resolution=[]) rather than raising.",
+        "Task.from_dict silently drops unknown keys (forward compatibility with a newer schema) and defaults every missing key (status='open', epic=False, resolution=[]) rather than raising. A legacy dict carrying \"type\":\"epic\" instead of the epic boolean still loads as epic=True (task:50183b29).",
         "from_dict converts raw resolution dicts to ResolutionItem instances but passes through already-constructed ResolutionItem objects unchanged.",
         "to_json()/from_json() round-trips every field losslessly, and from_json(None) or from_json('{}') both produce the same default Task as a bare constructor call.",
         "Task.progress is always (done_count, total_count) computed live from resolution -- never a stored field that could drift from it."
@@ -1137,7 +1137,7 @@
         "tasks__logs(logger, level, limit) filters by EXACT match only (SQL 'logger=?'/'level=?'), no LIKE/prefix/wildcard support -- auditing a family of related logger names (e.g. every 'taskfw.skill.<name>/<step>' row for one skill) requires either querying each exact name individually or pulling unfiltered rows and filtering client-side by string prefix (verified task:a0bb2c26).",
         "tasks__log_skill_invocation(skill, task_id='') is a thin wrapper around get_logger()",
         "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task",
-        "tasks__create(...) returns {ok, id, type, status} plus an OPTIONAL related_candidates key (list of task summaries, from TaskContext(store()).related(task) against the new task's title -- task:01fba67f) -- present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657)."
+        "tasks__create(...) returns {ok, id, epic, status} plus an OPTIONAL related_candidates key (list of task summaries, from TaskContext(store()).related(task) against the new task's title -- task:01fba67f) -- present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657)."
       ],
       "created_at": "2026-08-24T12:03:13.375728+00:00",
       "description": "Pulled out of [[mcp-portable-interface]]. Per-tool response-shape and semantics contracts for individual tasks__* tools not covered by registration/hooks or active-task mechanics -- context fallback, finish idempotency, introspection append-vs-replace, commit-message formatting, and tasks__logs' exact-match-only log query.",
@@ -1163,14 +1163,14 @@
     "tasks-table-projection-contract": {
       "confidence": 0.85,
       "contracts": [
-        "schema.TASKS declares the 5 scalar columns (id, type, status, parent, title) plus data/created_at/updated_at — adding a 6th scalar means updating BOTH schema.TASKS and the explicit column list in TaskStore.save()'s INSERT/ON CONFLICT statement, which is not derived from TABLES",
-        "Task (models.py) is the superset: every schema scalar name (type, status, parent, title, id) must exist as a same-named Task field, or save() breaks on task.<attr> access",
-        "TaskStore.save(task) is the ONLY place that writes tasks.type/status/parent/title — no other method in store.py, lifecycle.py, or mcp_server.py issues an UPDATE/INSERT against those columns",
-        "TaskStore.list(status=, type=, parent=) and TaskStore.children() filter on the scalar columns only — a field promoted into `data` but not mirrored as a scalar is invisible to these filters and to idx_tasks_status/idx_tasks_parent",
+        "schema.TASKS declares the 5 scalar columns (id, epic, status, parent, title) plus data/created_at/updated_at — adding a 6th scalar means updating BOTH schema.TASKS and the explicit column list in TaskStore.save()'s INSERT/ON CONFLICT statement, which is not derived from TABLES. (The `epic` INTEGER column replaced the old `type` TEXT column in task:50183b29; `type` is now an orphaned column the DB still carries but TABLES no longer names.)",
+        "Task (models.py) is the superset: every schema scalar name (epic, status, parent, title, id) must exist as a same-named Task field, or save() breaks on task.<attr> access",
+        "TaskStore.save(task) is the ONLY place that writes tasks.epic/status/parent/title — no other method in store.py, lifecycle.py, or mcp_server.py issues an UPDATE/INSERT against those columns",
+        "TaskStore.list(status=, epic=, parent=) and TaskStore.children() filter on the scalar columns only — a field promoted into `data` but not mirrored as a scalar is invisible to these filters and to idx_tasks_status/idx_tasks_parent. list(epic=None) means 'either', epic=True/False filters.",
         "TaskStore.get(task_id) and .search() read ONLY the `data` column and reconstruct via Task.from_json — they never read the scalars, so a scalar/data mismatch is invisible to these two paths specifically"
       ],
       "created_at": "2026-08-08T04:30:33.942098+00:00",
-      "description": "The tasks table has two kinds of columns that must stay in lockstep: five indexable scalars (id, type, status, parent, title) that mirror fields on Task, and one `data` column holding the full Task as JSON, which is authoritative for every field not promoted to a scalar. There is exactly one writer of both — TaskStore.save() — which is what prevents the projection from drifting. Anything that reads a scalar (tasks__list's status/type/parent filters, the idx_tasks_status/idx_tasks_parent indexes) is reading a value that also exists inside `data`; anything that reads `data` (Task.from_json, every other field) never touches the scalars at all.",
+      "description": "The tasks table has two kinds of columns that must stay in lockstep: five indexable scalars (id, epic, status, parent, title) that mirror fields on Task, and one `data` column holding the full Task as JSON, which is authoritative for every field not promoted to a scalar. There is exactly one writer of both — TaskStore.save() — which is what prevents the projection from drifting. Anything that reads a scalar (tasks__list's status/epic/parent filters, the idx_tasks_status/idx_tasks_parent indexes) is reading a value that also exists inside `data`; anything that reads `data` (Task.from_json, every other field) never touches the scalars at all.",
       "evidence": [
         "taskfw/db/schema.py:TASKS",
         "taskfw/task.py:Task",
@@ -1308,7 +1308,7 @@
         "TASK_EDGE_RELATIONS is the closed vocabulary for task_edges.rel (10 relations: depends_on, blocks, relates_to, duplicates, removes, implements, supersedes, reverts, writes_to, extends), enforced by lifecycle.check_link_rel on tasks__link. Confirmed against real usage in task_edges before being formalised (task:1c9d37d7) — 4 trace to Jira's issue-link-type vocabulary, the other 6 are this framework's own emergent vocabulary. parent_of was deliberately excluded as redundant with Task.parent."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "A task is one typed dataclass serialised to JSON. Two issue types only (epic, task) and four statuses. Typing removes two things outright rather than relocating them: required-section validation becomes schema validation, and 'resolution must be a checklist' becomes unrepresentable because resolution IS a list of items.",
+      "description": "A task is one typed dataclass serialised to JSON. One `epic` boolean (default False) and four statuses. Typing removes things outright rather than relocating them: required-section validation becomes schema validation, 'resolution must be a checklist' becomes unrepresentable because resolution IS a list of items, and (task:50183b29) the two-value 'type' enum became the `epic` bool so a malformed type is unrepresentable and lifecycle.check_type ceased to exist.",
       "evidence": [
         "taskfw/mcp_server.py:_merge_grooming_risks",
         "taskfw/mcp_server.py:tasks__update",

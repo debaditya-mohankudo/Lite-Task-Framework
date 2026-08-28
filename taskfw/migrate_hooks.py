@@ -15,10 +15,10 @@ against their natural keys, so a second run changes nothing.
 The mapping is lossy in three places, each decided rather than stumbled into
 (task:d6ddb40f):
 
-  * Five issue types become one. epic stays epic; task, story, bug, subtask and
-    feedback all become `task`, tagged with the type they arrived as. Those four
-    carried no rule taskfw enforces — they were labels, and a tag is where a
-    label belongs.
+  * Five issue types become one boolean. issue_type == "epic" sets epic=True;
+    task, story, bug, subtask and feedback all land epic=False, tagged with the
+    type they arrived as. Those four carried no rule taskfw enforces — they
+    were labels, and a tag is where a label belongs.
   * `review` is not a taskfw status. Those rows arrive `open`, tagged
     `was-review`. It is a non-terminal working state, and the alternative
     non-terminal status, blocked, would assert an obstacle that may not exist.
@@ -141,9 +141,9 @@ def to_task(row: sqlite3.Row, report: Report) -> Task:
     parent = (row["parent_id"] or "").strip() or None
     tags = _tags(row["tags"])
 
-    task_type = "epic" if issue_type == "epic" else "task"
-    if task_type == "epic" and parent:
-        task_type = "task"
+    epic = issue_type == "epic"
+    if epic and parent:
+        epic = False
         report.epics_demoted += 1
         if "was-epic" not in tags:
             tags.append("was-epic")
@@ -166,7 +166,7 @@ def to_task(row: sqlite3.Row, report: Report) -> Task:
 
     return Task(
         id=row["id"],
-        type=task_type,
+        epic=epic,
         status=status,
         parent=parent,
         title=row["title"] or "",
