@@ -75,9 +75,16 @@ class Task:
     #: Which project this task belongs to — see taskfw.scope for the one
     #: derivation and why it is a git origin rather than a path. Empty means
     #: unscoped, which is what every task written before this field existed
-    #: reads as. Empty is never filled in retroactively: a scope inferred
-    #: later from prose is reconstructed, not recorded, and the framework
-    #: treats those as different kinds of fact.
+    #: reads as. No code path fills it retroactively: a scope inferred later
+    #: from prose is reconstructed, not recorded, and the framework treats
+    #: those as different kinds of fact.
+    #:
+    #: One exception exists in the DATA, not in the code. task:e62cefe8
+    #: hydrated 105 pre-scope rows by hand from this repo's own commit
+    #: trailers — recorded evidence (the author wrote task:<id> at the time,
+    #: the same source taskfw/backfill.py trusts for task_commits), not prose
+    #: inference. Nothing on a row distinguishes a hydrated scope from a
+    #: derived one, so that task record is the only provenance for it.
     scope: str = ""
     created_at: str = field(default_factory=utcnow)
     updated_at: str = field(default_factory=utcnow)

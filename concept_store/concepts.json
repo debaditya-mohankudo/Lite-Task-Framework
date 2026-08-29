@@ -1028,9 +1028,11 @@
         "Origin is coarser than the working directory. A monorepo has one origin for many sub-projects, so two sibling projects in one repo get the same scope — a real and accepted loss, taken in exchange for worktrees and second clones of one repo correctly resolving to a single scope, which a path-based answer gets wrong.",
         "Fails open in every failure mode (not a repo, no origin, git absent, git hung) — a scope is a filter, and a missing filter must degrade to unscoped, never block a write. Mirrors backfill.git_log's established shape.",
         "Derivation happens once, at record-creation time. A task's scope is never recomputed on read: a task does not change project because someone later read it from elsewhere.",
-        "Memoised per resolved directory, since a repository's origin does not change within a process lifetime and both writers call it on every write."
+        "Memoised per resolved directory, since a repository's origin does not change within a process lifetime and both writers call it on every write.",
+        "Scope filtering is SUPPLY-side, not demand-side. context._same_project(a, b) returns True whenever EITHER side is empty, so scoping a task changes which OTHER stores' bundles can exclude it; it does not change what that task's own bundle draws in. A candidate with no scope stays compatible with every query. Consequence measured on task:e62cefe8: hydrating 105 of this repo's rows left tasks__context's `related` byte-identical, because the 1630 foreign candidates it was drawing from are still unscoped. Scope only starts filtering a bundle once the CANDIDATES carry scopes, which means per-repo hydration pays off in other repos, not the one doing it.",
+        "Derivation-once is a property of the CODE, and as of task:e62cefe8 no longer a property of the DATA. 105 pre-scope rows were stamped by hand from this repo's own commit trailers; no function does this and none should. A row carries no marker distinguishing a hydrated scope from a derived one, so task:e62cefe8's record is the only provenance for those 105 — see the note in taskfw/task.py on Task.scope."
       ],
-      "last_validated": "2026-08-29T10:29:41.861013+00:00",
+      "last_validated": "2026-08-29T13:10:31.398508+00:00",
       "module": "taskfw/scope.py",
       "name": "scope-derivation",
       "related": [
@@ -1431,6 +1433,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-29T12:14:30.071326+00:00"
+    "updated_at": "2026-08-29T13:10:31.398744+00:00"
   }
 }
