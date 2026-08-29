@@ -16,7 +16,7 @@ package DerivedValues {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "7c3a4338e9086655ef37337063e3135d87992710";
+        derivedFromCommit = "00d16b2c772dbee1770576ec7377db607aeea0f0";
         derivedAt = "2026-08-29";
         modelledPaths = (
             "taskfw/task.py",
@@ -62,7 +62,11 @@ package DerivedValues {
              * risk grades — materialized, avoided, wrong — across finished
              * tasks' introspection reports, plus ungraded and unrecognised
              * counts. Never reads a self-reported total back; the tally is
-             * the derivation, not a stored count of it.
+             * the derivation, not a stored count of it. The grade vocabulary
+             * itself (GROOMING_GRADES) lives in taskfw/risk.py as part of the
+             * risk shape (task:dd4ceb01); accuracy.py imports it. It is
+             * closed for counting only — an unrecognised grade is bucketed
+             * and reported, never refused on write.
              *
              * WHICH finished tasks is now a parameter (task:a5bb2f45): the
              * aggregate is global by default but can be narrowed to one
