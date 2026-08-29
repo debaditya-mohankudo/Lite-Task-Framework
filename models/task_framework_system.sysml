@@ -45,9 +45,10 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "889c0ddd529f74e4b8473b0b642aa7f90f4ab058";
+        derivedFromCommit = "7c3a4338e9086655ef37337063e3135d87992710";
         derivedAt = "2026-08-29";
         modelledPaths = (
+            "taskfw/scope.py",
             "taskfw/store.py",
             "taskfw/task.py",
             "taskfw/lifecycle.py",
@@ -121,7 +122,18 @@ package TaskFrameworkSystem {
              *     active carries ungraded risks of its own. Both derive from
              *     taskfw/accuracy.py:_task_grading, the same per-task
              *     classification tasks__grooming_accuracy uses, so neither
-             *     nudge can disagree with what that tool reports (task:07f9270c).
+             *     nudge can disagree with that tool about what COUNTS as
+             *     graded (task:07f9270c). They can now differ on WHICH TASKS
+             *     were counted, and deliberately so (task:a5bb2f45):
+             *     loop_debt_nudge passes the derived Scope, because it fires
+             *     on every tasks__set_active and a debt figure driven by
+             *     another repository's tasks would interrupt work here with
+             *     no way to tell; tasks__grooming_accuracy stays global by
+             *     default, because it is an occasional, deliberate read where
+             *     a cross-project pattern is a finding rather than noise.
+             *     Neither is ambiguous about it — both name the scope they
+             *     counted in their result, and a scoped count additionally
+             *     reports the unscoped remainder it left out.
              * A nudge never refuses a write and never changes what
              * is stored, so it carries none of the properties that earned
              * LifecycleRules or TaskStore their own part: it enforces nothing

@@ -43,9 +43,10 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "889c0ddd529f74e4b8473b0b642aa7f90f4ab058";
+        derivedFromCommit = "7c3a4338e9086655ef37337063e3135d87992710";
         derivedAt = "2026-08-29";
         modelledPaths = (
+            "taskfw/scope.py",
             "taskfw/db/schema.py",
             "taskfw/db/connect.py",
             "taskfw/log.py",
@@ -208,7 +209,23 @@ package Requirements {
              * `_passes_floor` relevance floor used by `_related_candidates`
              * excludes weak matches from both sections rather than always
              * filling to their count cap with whatever is available, however
-             * weak. */
+             * weak.
+             *
+             * A SECOND filter applies to both, and this is where the two
+             * sections stop behaving alike (task:a5bb2f45). `_passes_floor`
+             * asks whether a candidate is ABOUT the same thing; `_same_project`
+             * asks whether it is FROM the same place, comparing Task.scope.
+             * Word overlap could only ever answer the first: a shared tag such
+             * as `code-review` supplies two common words, so a task in an
+             * unrelated repository clears the floor honestly and is still not
+             * a neighbour. `related` therefore EXCLUDES a cross-project
+             * candidate outright, while `lessons` RETURNS it carrying
+             * `cross_project: true` — loop memory exists to generalise across
+             * tasks, so hiding a foreign lesson would defeat the subsystem to
+             * enforce a boundary it was built to cross. An unscoped record
+             * (every task written before Task.scope existed) is compatible
+             * with every scope, so neither filter can retroactively erase the
+             * pre-existing corpus. */
     }
     satisfy requirement PullContextRequirement by system.mcpTools;
 

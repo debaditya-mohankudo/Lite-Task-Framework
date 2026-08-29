@@ -16,7 +16,7 @@ package DerivedValues {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "889c0ddd529f74e4b8473b0b642aa7f90f4ab058";
+        derivedFromCommit = "7c3a4338e9086655ef37337063e3135d87992710";
         derivedAt = "2026-08-29";
         modelledPaths = (
             "taskfw/task.py",
@@ -62,7 +62,14 @@ package DerivedValues {
              * risk grades — materialized, avoided, wrong — across finished
              * tasks' introspection reports, plus ungraded and unrecognised
              * counts. Never reads a self-reported total back; the tally is
-             * the derivation, not a stored count of it. */
+             * the derivation, not a stored count of it.
+             *
+             * WHICH finished tasks is now a parameter (task:a5bb2f45): the
+             * aggregate is global by default but can be narrowed to one
+             * project by Scope. The derivation below is unchanged either
+             * way — only the population it ranges over differs — and the
+             * result always names the scope it counted, so a narrowed tally
+             * can never be mistaken for a complete one. */
         in materialized : Integer;
         in avoided : Integer;
         in wrong : Integer;
