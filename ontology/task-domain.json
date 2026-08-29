@@ -172,10 +172,10 @@
     }
   },
   "relations": [
-    {"subject": "Task", "predicate": "part-of", "object": "Epic",
-     "note": "Cardinality: one Epic groups zero or more Tasks; each Task has at most one parent (Task.parent, self-referential, not a TaskEdge). 'parent_of' was deliberately excluded from TASK_EDGE_RELATIONS because it would just duplicate this field -- the hierarchy has exactly one home."},
+    {"subject": "Task", "predicate": "part-of", "object": "Task",
+     "note": "The parent/child hierarchy, through the self-referential Task.parent field (not a TaskEdge). Each Task has at most one parent, which by rule must be an epic (lifecycle.check_parent); an epic groups zero or more children. 'parent_of' was left out of TASK_EDGE_RELATIONS because it would just duplicate this field -- the hierarchy has exactly one home. The container is an ordinary Task carrying the epic flag, not the Epic term itself: that term names the boolean, and its structural home is the next relation."},
     {"subject": "Epic", "predicate": "part-of", "object": "Task",
-     "note": "The 'epic' boolean field on the Task record, with no independent object to fall out of sync with Task. The lone rule it drives -- an epic has no parent -- lives in lifecycle.check_parent and nowhere else. This relation and the 'Task part-of Epic' relation use 'Epic' in two senses: here it is the flag on one Task; there it is that same flag read as a grouping other Tasks point their parent at."},
+     "note": "The 'epic' boolean field on the Task record, with no independent object to fall out of sync with Task. The lone rule it drives -- an epic has no parent -- lives in lifecycle.check_parent and nowhere else. The grouping the flag enables is the self-referential 'Task part-of Task' relation above; this relation is only about where the flag lives."},
     {"subject": "TaskStatus", "predicate": "part-of", "object": "Task",
      "note": "The state field on the Task record. Its closed vocabulary (TASK_STATUSES) and its legal transitions are enforced only in the lifecycle layer, so no caller can validate status differently from another."},
     {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
