@@ -830,7 +830,8 @@
       "contracts": [
         "parse_evidence() is the single definition of how an evidence string decodes into (file, symbol) pairs; every evidence-checking test must go through it.",
         "Symbol checking is a substring match on the cited file's text, not AST resolution -- enough to catch a rename or delete, not a claim of semantic verification.",
-        "The `form` closed vocabulary is exactly {record, part, attribute, transient, process}, held in the FORMS module constant; test_every_term_form_is_in_the_closed_vocabulary checks membership only. Whether a term's assigned `form` is the right one is not checked -- ontology/README.md's 'Shape' prose is the sole guard against a boundary term (e.g. Risk=part not record, TaskStore=process not a sixth 'component') being reclassified."
+        "The `form` closed vocabulary is exactly {record, part, attribute, transient, process}, held in the FORMS module constant; test_every_term_form_is_in_the_closed_vocabulary checks membership only. Whether a term's assigned `form` is the right one is not checked -- ontology/README.md's 'Shape' prose is the sole guard against a boundary term (e.g. Risk=part not record, TaskStore=process not a sixth 'component') being reclassified.",
+        "Coverage is bounded by what each term CHOOSES to cite, which is the one way this test silently protects nothing. On task:d98a8f46 three terms had drifted into falsehood while every citation still resolved, because each cited only its namesake symbol (TaskContext, TaskStore.set_active, introspection_nudge) and none cited the symbol its claim actually turned on (grooming_truncated/edges_truncated, mcp_server._scope, loop_debt_nudge). The fix is a citation, not a test change: parse_evidence's multi-symbol and multi-file forms make pinning a load-bearing symbol one line of JSON, so a term's evidence should name what its sentences depend on, not what the term is called."
       ],
       "created_at": "2026-08-25T14:10:50.529662+00:00",
       "description": "Whether ontology/task-domain.json's evidence citations still hold is answered structurally rather than by discipline: this test file fails the suite the moment a term's evidence names a missing file, a symbol no longer found in that file, or a relation whose subject/object is not a defined term (or a declared exception like SourceModule). parse_evidence() decodes the ontology's comma-separated 'path:symbol[, symbol2]' shorthand, where a bare symbol inherits the file of the citation before it. The cited file need not be code: it is only Path-checked for existence and substring-scanned for the symbol, so a docs/ path with a heading as its 'symbol' is valid (first such: the Methodology term, evidence docs/methodology/01-framework.md:Lifecycle, added task:557e5aad). TestShape additionally enforces two closed vocabularies on every term: bounded_context must be a declared key, and `form` (added task:27f6a39a) must be one of {record, part, attribute, transient, process} -- both are membership-only checks, never correctness checks.",
@@ -848,7 +849,7 @@
         "Evidence paths are not required to be code -- a docs/ file cited with a heading substring passes the same file-exists + substring check, so terms embodied in docs or skills rather than a taskfw/*.py symbol can still be evidence-anchored.",
         "Every term must carry a `form` value drawn from the closed FORMS set {record, part, attribute, transient, process}; it is in the required-field tuple of test_every_term_has_the_required_fields and is range-checked by test_every_term_form_is_in_the_closed_vocabulary."
       ],
-      "last_validated": "2026-08-28T21:51:49.768387+00:00",
+      "last_validated": "2026-08-29T13:18:54.854633+00:00",
       "module": "tests/test_ontology.py",
       "name": "ontology-evidence-enforced-by-test",
       "related": []
@@ -1433,6 +1434,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-29T13:10:31.398744+00:00"
+    "updated_at": "2026-08-29T13:18:54.854780+00:00"
   }
 }
