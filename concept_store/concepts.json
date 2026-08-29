@@ -1226,7 +1226,11 @@
         "tasks__logs(logger, level, limit) filters by EXACT match only (SQL 'logger=?'/'level=?'), no LIKE/prefix/wildcard support -- auditing a family of related logger names (e.g. every 'taskfw.skill.<name>/<step>' row for one skill) requires either querying each exact name individually or pulling unfiltered rows and filtering client-side by string prefix (verified task:a0bb2c26).",
         "tasks__log_skill_invocation(skill, task_id='') is a thin wrapper around get_logger()",
         "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task",
-        "tasks__create(...) returns {ok, id, epic, status} plus an OPTIONAL related_candidates key (list of task summaries, from TaskContext(store()).related(task) against the new task's title -- task:01fba67f) -- present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657)."
+        "tasks__create(...) returns {ok, id, epic, status} plus an OPTIONAL related_candidates key (list of task summaries, from TaskContext(store()).related(task) against the new task's title -- task:01fba67f) -- present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657).",
+        "tasks__add_decision(task_id, decision, resolves=None) -> {'ok','id'} when resolves is omitted (byte-identical to its pre-task:1f400ecf shape), or the full _apply_check_item result plus 'decision_recorded': True when given one. `resolves` is the zero-based index of the checklist item the decision ANSWERS; which item that is stays the caller's knowledge and is never inferred. The index is validated BEFORE the event is written, so a rejected index records nothing at all -- a decision on the record with no tick beside it is the exact state the parameter exists to make unreachable, and a half-applied call would recreate it.",
+        "_apply_check_item(task_id, index, done) is the single implementation of ticking, shared by tasks__check_item and tasks__add_decision's resolve path (task:1f400ecf). Both therefore auto-activate on progress and auto-finish on the last open item because there is one path, not two that agree today. _resolution_index_error is likewise one home for the range rule, because add_decision must ask it earlier in its sequence than check_item does.",
+        "tasks__check_item's log line carries `waited=<n>s` -- seconds since the task's most recent decision event, via _seconds_since_last_decision and store.last_event_ts. It is an OBSERVABLE with no automatic reader: nothing branches on it. It exists because which item a decision answers is not a fact the framework holds, so the gap between answering and ticking can be measured after the fact but never judged in the moment. The field is OMITTED, never printed as zero, when the task carries no decision -- a zero would read as 'ticked the instant it was answered', the opposite of what it means. task-implementation's close-out step is its intended reader.",
+        "tasks__get returns Task.to_dict() and carries NO `progress` key; progress reaches a caller through tasks__context's task section instead. The asymmetry is not obvious from either tool's name and has caught test authors (task:1f400ecf)."
       ],
       "created_at": "2026-08-24T12:03:13.375728+00:00",
       "description": "Pulled out of [[mcp-portable-interface]]. Per-tool response-shape and semantics contracts for individual tasks__* tools not covered by registration/hooks or active-task mechanics -- context fallback, finish idempotency, introspection append-vs-replace, commit-message formatting, and tasks__logs' exact-match-only log query.",
@@ -1240,7 +1244,7 @@
       "invariants": [
         "related_candidates in tasks__create's response is computed inline in the tool body, NOT via the dispatcher hook/nudge mechanism -- every existing nudge is str | None, a candidate list is list[dict], a structurally different shape (task:78853657)"
       ],
-      "last_validated": "2026-08-24T12:03:13.376810+00:00",
+      "last_validated": "2026-08-29T13:42:47.309975+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "task-tool-response-shapes",
       "related": [
@@ -1292,7 +1296,8 @@
         "search(query, limit) falls back to LIKE when FTS5 is unavailable or the query is malformed",
         "search(query)'s `query` is a PLAIN string, not pre-formatted FTS5 syntax -- search() builds its own OR-of-terms MATCH expression internally (each term quoted, so punctuation is read as literal text). Callers (tasks__search, context._related_candidates()) never construct FTS syntax themselves.",
         "search() ranks results by _combination_score(task, terms), NOT FTS5's own bm25 `rank` -- tag-word overlap is weighted 3x over body-word overlap (_TAG_WEIGHT/_BODY_WEIGHT), mirroring claude-hooks' LoadMemoriesNode combination scorer (task:c3b53021). FTS5 MATCH still does candidate recall (over-fetched at limit*4); only the final ordering is Python-side (task:f24a88e3).",
-        "set_active(task_id, scope)/get_active(scope)/clear_active(scope) replaced push_active/pop_active/active_stack (task:f5ace343) -- a plain in-memory dict (scope -> task_id) on TaskStore, gone the moment the process ends. set_active just overwrites scope's entry; no push/no-op-on-already-top special case. clear_active pops the scope key and logs only if something was actually cleared."
+        "set_active(task_id, scope)/get_active(scope)/clear_active(scope) replaced push_active/pop_active/active_stack (task:f5ace343) -- a plain in-memory dict (scope -> task_id) on TaskStore, gone the moment the process ends. set_active just overwrites scope's entry; no push/no-op-on-already-top special case. clear_active pops the scope key and logs only if something was actually cleared.",
+        "last_event_ts(task_id, kind) -> str | None (task:1f400ecf) is the `ts` of the most recent event of that kind, or None when there is none. Deliberately not a filter over events(): events() takes a limit and returns the most recent rows of EVERY kind, so a decision older than that many notes would be missing from its result and read as absent. Asking the question directly makes 'no such event' the only reason None can come back -- the same omission-versus-absence rule the rest of the framework holds to."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "Persistence for tasks, events, edges, commits, and the active-task pointer. Contains no rule enforcement at all, so LifecycleRules keeps a single allocation; a store method rejects only what it structurally cannot do. save() is the sole writer of both the scalar columns and the JSON blob, which is what keeps them from drifting.",
@@ -1304,7 +1309,8 @@
         "taskfw/store.py:TaskStore.set_active",
         "taskfw/store.py:TaskStore.get_active",
         "taskfw/store.py:TaskStore.clear_active",
-        "tests/test_store.py"
+        "tests/test_store.py",
+        "taskfw/store.py:last_event_ts"
       ],
       "invariants": [
         "No store method ever rejects a write for a policy reason -- that is LifecycleRules' job",
@@ -1314,7 +1320,7 @@
         "FTS5 absence degrades search rather than failing at import",
         "_combination_score scores tags and body against DISJOINT word sets -- a word counted as a tag match is excluded from the body-overlap count, so it can never score twice"
       ],
-      "last_validated": "2026-08-25T13:41:04.355105+00:00",
+      "last_validated": "2026-08-29T13:42:54.847967+00:00",
       "module": "taskfw/store.py",
       "name": "taskstore-data-access-only",
       "related": [
@@ -1434,6 +1440,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-29T13:18:54.854780+00:00"
+    "updated_at": "2026-08-29T13:42:54.848012+00:00"
   }
 }
