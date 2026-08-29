@@ -105,8 +105,8 @@
     "Risk": {
       "bounded_context": "Loop Memory",
       "form": "part",
-      "definition": "One falsifiable prediction inside a Grooming pass, and the one part of Grooming that is not wholesale-replaced. A Risk has its own identity and an optional 'graded' verdict that Introspection assigns on whether it held; across re-grooming passes Risks are carried forward and merged by that identity, so a graded Risk -- the loop's primary evidence -- is never silently dropped because a later pass omitted it.",
-      "evidence": "taskfw/mcp_server.py:tasks__update"
+      "definition": "One falsifiable prediction inside a Grooming pass, and the one part of Grooming that is not wholesale-replaced. A Risk has its own identity and an optional 'graded' verdict that Introspection assigns on whether it held; across re-grooming passes Risks are carried forward and merged by that identity, so a graded Risk -- the loop's primary evidence -- is never silently dropped because a later pass omitted it. Stored as a plain dict inside Grooming, but the shape rule every consumer shares -- coercing a raw entry to that dict and collapsing its text to an identity key -- lives in one place, taskfw/risk.py, rather than being re-derived at each call site.",
+      "evidence": "taskfw/risk.py:coerce, normalise_text, taskfw/mcp_server.py:_merge_grooming_risks"
     },
     "Introspection": {
       "bounded_context": "Loop Memory",

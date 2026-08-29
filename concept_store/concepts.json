@@ -961,6 +961,60 @@
         "mcp-portable-interface"
       ]
     },
+    "risk-primitives-tested": {
+      "confidence": 0.85,
+      "contracts": [
+        "coerce({'text','graded'}) round-trips equal and returns a distinct object (a copy).",
+        "coerce(non-str, non-dict) still yields {'text': str(raw), 'graded': None}.",
+        "normalise_text collapses '  The  Build   Breaks. ' to 'the build breaks' and maps None/'' to ''."
+      ],
+      "created_at": "2026-08-29T05:52:25.295945+00:00",
+      "description": "Pins the two properties of taskfw.risk that made pulling the shared risk primitives out of mcp_server and accuracy safe as a pure move: coerce() never manufactures an 'id' key (mcp_server._merge_grooming_risks keys off its absence to tell a new prediction from a carried-forward one) and never drops an entry (a malformed risk still carries text). Also covers normalise_text's whitespace/case/trailing-period collapsing. The end-to-end merge and recurrence behaviour stays pinned by tests/test_mcp_tools.py and tests/test_accuracy.py -- this file guards only the extracted primitives.",
+      "evidence": [
+        "tests/test_risk.py:TestCoerce",
+        "tests/test_risk.py:TestNormaliseText",
+        "taskfw/risk.py"
+      ],
+      "invariants": [
+        "A test asserting `'id' not in coerce({...})` is load-bearing: if coerce ever starts defaulting an id, the merge's brand-new-risk branch changes silently and this is the test that catches it.",
+        "This file does not re-test merge-by-id or recurrence grouping -- those stay in test_mcp_tools.py / test_accuracy.py, and duplicating them here would create two homes for the same assertion."
+      ],
+      "last_validated": "2026-08-29T05:52:25.295956+00:00",
+      "module": "tests/test_risk.py",
+      "name": "risk-primitives-tested",
+      "related": [
+        "risk-shape-primitives"
+      ]
+    },
+    "risk-shape-primitives": {
+      "confidence": 0.9,
+      "contracts": [
+        "normalise_text(text) -> str: lowercases, collapses internal and surrounding whitespace to single spaces, strips one trailing period; None/'' -> ''.",
+        "coerce(raw) -> dict: a dict is returned as a shallow copy with NO key added or removed; a str becomes {'text': raw, 'graded': None}; anything else becomes {'text': str(raw), 'graded': None}.",
+        "Stdlib-only module -- imports nothing from taskfw, so accuracy.py and mcp_server.py can both depend on it without a cycle."
+      ],
+      "created_at": "2026-08-29T05:52:15.692497+00:00",
+      "description": "The single home for the two primitives every grooming-risk consumer shares: coerce(raw) turns a bare string, a dict, or a malformed entry into a canonical dict, and normalise_text(s) collapses a risk's text to a comparable key. Before this module both were re-derived in mcp_server._coerce_risk, mcp_server._merge_grooming_risks, accuracy._risks, and accuracy._RecurrenceGrouper, and mcp_server imported accuracy._normalise -- a portable tool module reaching into an analytics module's private. Identity itself and the two distinct merge/group algorithms deliberately stay at their call sites; only the shared shape/text primitives live here.",
+      "evidence": [
+        "taskfw/risk.py:coerce",
+        "taskfw/risk.py:normalise_text",
+        "taskfw/mcp_server.py:_merge_grooming_risks",
+        "taskfw/accuracy.py:_risks",
+        "taskfw/accuracy.py:_RecurrenceGrouper",
+        "tests/test_risk.py"
+      ],
+      "invariants": [
+        "coerce never manufactures an 'id' key -- the ABSENCE of 'id' on a risk is how mcp_server._merge_grooming_risks tells a brand-new prediction from a carried-forward one, so adding one would silently change that branch.",
+        "coerce never returns None or drops an entry: a malformed risk still carries text, because an ungraded risk that vanished would be an omission indistinguishable from an absence -- the failure taskfw.accuracy exists to prevent.",
+        "Risk identity (id-if-present-else-normalised-text, id-less risks in their own keyspace) and the merge/group algorithms are NOT here -- _merge_grooming_risks assigns ids and text-matches, _RecurrenceGrouper keeps id-less risks apart; those are different operations that only share these primitives."
+      ],
+      "last_validated": "2026-08-29T05:52:15.692546+00:00",
+      "module": "taskfw/risk.py",
+      "name": "risk-shape-primitives",
+      "related": [
+        "grooming-accuracy-aggregate"
+      ]
+    },
     "schema-single-source-additive-migration": {
       "confidence": 0.95,
       "contracts": [
@@ -1346,6 +1400,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-28T21:51:49.768526+00:00"
+    "updated_at": "2026-08-29T05:52:25.295993+00:00"
   }
 }

@@ -31,11 +31,11 @@ the raw tallies and disagree with the interpretation.
 """
 from __future__ import annotations
 
-import re
 from collections import Counter
 from typing import Any
 
 from taskfw.log import get_logger
+from taskfw.risk import coerce, normalise_text
 from taskfw.task import Task
 from taskfw.store import TaskStore
 
@@ -68,31 +68,24 @@ RECURRENCE = 2
 MAX_RECURRING = 10
 
 
-def _normalise(text: str) -> str:
-    """Collapse a risk to a comparable key. Trailing punctuation is not signal."""
-    return re.sub(r"\s+", " ", (text or "").strip().lower()).rstrip(".")
-
-
 def _risks(task: Task) -> list[dict]:
-    """The grooming risks of a task, tolerating a bare string for a risk.
+    """The grooming risks of a task, projected to {"id", "text", "graded"}.
 
-    The documented shape is {"id": ..., "text": ..., "graded": ...}, but a
-    plain string is a plausible thing to write and dropping it would make an
-    ungraded risk invisible — which is the one outcome this module exists to
-    prevent. `id` is optional: risks written before task:f24be6e4 have none,
-    and are never rewritten to gain one — see `_RecurrenceGrouper`.
+    Shape-coercion (bare string, dict, or worse -> dict) is `taskfw.risk.coerce`;
+    this adds only the projection to the exact three keys this module compares
+    on. A plain string is a plausible thing to write and dropping it would make
+    an ungraded risk invisible — the one outcome this module exists to prevent.
+    `id` is optional: risks written before task:f24be6e4 have none, and are
+    never rewritten to gain one — see `_RecurrenceGrouper`. A non-str, non-dict
+    entry is skipped, matching `coerce`'s callers that never hand it one.
     """
     raw = (task.grooming or {}).get("risks") or []
     out = []
     for risk in raw:
-        if isinstance(risk, str):
-            out.append({"id": None, "text": risk, "graded": None})
-        elif isinstance(risk, dict):
-            out.append({
-                "id": risk.get("id"),
-                "text": risk.get("text", ""),
-                "graded": risk.get("graded"),
-            })
+        if not isinstance(risk, (str, dict)):
+            continue
+        c = coerce(risk)
+        out.append({"id": c.get("id"), "text": c.get("text", ""), "graded": c.get("graded")})
     return out
 
 
@@ -122,7 +115,7 @@ class _RecurrenceGrouper:
 
     def add(self, risk: dict, task_id: str, grade: Any) -> None:
         text = risk.get("text", "")
-        key = _normalise(text)
+        key = normalise_text(text)
         rid = risk.get("id")
 
         if rid:

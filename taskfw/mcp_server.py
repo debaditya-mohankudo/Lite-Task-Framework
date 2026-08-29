@@ -20,13 +20,14 @@ from typing import Any, Callable
 from mcp.server import MCPServer
 
 from taskfw import dispatcher, lifecycle
-from taskfw.accuracy import _normalise, _task_grading, grooming_accuracy, loop_debt
+from taskfw.accuracy import _task_grading, grooming_accuracy, loop_debt
 from taskfw.concepts import ConceptStore
 from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.context import TaskContext
 from taskfw.db.connect import connect
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
+from taskfw.risk import coerce, normalise_text
 from taskfw.task import ResolutionItem, Task, new_id
 from taskfw.store import TaskStore
 
@@ -424,15 +425,6 @@ def tasks__create(
     return result
 
 
-def _coerce_risk(risk: Any) -> dict[str, Any]:
-    """A risk as a dict, tolerating the bare-string shape accuracy._risks tolerates."""
-    if isinstance(risk, str):
-        return {"text": risk, "graded": None}
-    if isinstance(risk, dict):
-        return dict(risk)
-    return {"text": str(risk), "graded": None}
-
-
 def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -> list[dict]:
     """Union current and incoming grooming risks by id — task:f24be6e4.
 
@@ -462,8 +454,8 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
       falling back to the same carry-forward-if-graded rule when nothing
       matches. Stored grooming from before this change is never rewritten.
     """
-    current = [_coerce_risk(r) for r in (current_raw or [])]
-    incoming = [_coerce_risk(r) for r in (incoming_raw or [])]
+    current = [coerce(r) for r in (current_raw or [])]
+    incoming = [coerce(r) for r in (incoming_raw or [])]
 
     current_by_id = {r["id"]: r for r in current if r.get("id")}
     current_idless = [r for r in current if not r.get("id")]
@@ -481,10 +473,10 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
             merged.append(risk)
             consumed_ids.add(rid)
             continue
-        key = _normalise(risk.get("text", ""))
+        key = normalise_text(risk.get("text", ""))
         match_i = next(
             (i for i, cand in enumerate(current_idless)
-             if i not in consumed_idless and key and _normalise(cand.get("text", "")) == key),
+             if i not in consumed_idless and key and normalise_text(cand.get("text", "")) == key),
             None,
         )
         new_entry = dict(risk)
