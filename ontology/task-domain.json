@@ -129,7 +129,7 @@
     "TaskContext": {
       "bounded_context": "Task Tracking",
       "form": "transient",
-      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order -- assembled fresh on every call. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it.",
+      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order -- assembled fresh on every call. Two of those sections -- related and lessons -- are approximate (full-text / bm25 matches) and are the first dropped when the bundle exceeds its size budget; every section above them (decisions, grooming, graph, commits) is an exact lookup where a wrong answer would mislead rather than merely disappoint. Exact is not the same as permanent: every section except task identity can still be dropped for budget, and anything dropped is named in the `truncated` field, so a caller can always tell an omission from an absence. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it.",
       "evidence": "taskfw/context.py:TaskContext"
     },
     "Commit": {
@@ -211,7 +211,7 @@
     {"subject": "TaskContext", "predicate": "references", "object": "TaskEdge",
      "note": "The bundle's graph section pulls a Task's edges fresh on every call, capped per direction -- edges are read into the bundle, never duplicated into it."},
     {"subject": "TaskContext", "predicate": "references", "object": "MemoryRecord",
-     "note": "The bundle's lessons section is the guaranteed read path back into Loop Memory (see MemoryRecord's Introspection link for the write side) -- without it, a lesson only reached an agent if it happened to look for it directly."},
+     "note": "The bundle's lessons section is the guaranteed read path back into Loop Memory (see MemoryRecord's Introspection link for the write side) -- without it, a lesson only reached an agent if it happened to look for it directly. Like related, this section is an approximate (bm25) match and among the first trimmed when the bundle is over budget, with any drop reported in `truncated` -- so the exact/approximate split is visible from both approximate sections' relations, not only from 'references Task'."},
     {"subject": "Nudge", "predicate": "references", "object": "Task",
      "note": "A nudge speaks only about the one task or memory the triggering call already touched, never some other record the caller didn't ask about -- it rides on a response, it does not fetch or add a fact of its own."},
     {"subject": "Nudge", "predicate": "references", "object": "Introspection",
@@ -229,7 +229,7 @@
     {"subject": "TaskContext", "predicate": "references", "object": "Decision",
      "note": "The bundle's decisions section pulls a Task's decision-kind events fresh on every call, matching TaskContext's own definition -- without this relation the definition named a section the ontology did not otherwise back with a term."},
     {"subject": "TaskContext", "predicate": "references", "object": "Task",
-     "note": "Distinct from 'describes': the bundle also embeds full Task summaries beyond the one it was built for -- parent/children in the graph section and full-text neighbours in the related section -- both approximate/derived, never the same Task the bundle describes."},
+     "note": "Distinct from 'describes': the bundle also embeds full Task summaries beyond the one it was built for, by two unlike paths. Parent and children arrive in the graph section as an exact deterministic traversal (store.get(parent), children WHERE parent=?) -- a wrong answer there would be misleading, not merely unhelpful. Full-text neighbours arrive in the related section as an approximate bm25 match, and related is the first section trimmed when the bundle is over budget. Neither path ever returns the same Task the bundle describes."},
     {"subject": "GroomingAccuracy", "predicate": "references", "object": "Risk",
      "note": "The per-Risk 'graded' verdicts across finished tasks are the sole source; the grooming_accuracy tally in an introspection report is recomputed from them every call and only cross-checked, never read back as truth. Same derive-don't-store reason as progress-from-checklist and standing-from-links -- a stored aggregate can drift from its own evidence."},
     {"subject": "GroomingAccuracy", "predicate": "part-of", "object": "Methodology",
