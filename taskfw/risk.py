@@ -35,6 +35,15 @@ from typing import Any
 #: plausible thing to write by hand) or, defensively, something malformed.
 RISK_KEYS = ("id", "text", "graded")
 
+#: Grades a PREDICTED risk's `graded` field can carry. Here beside RISK_KEYS
+#: because it is part of the risk shape, not an analytics concept — accuracy.py
+#: imports it. `missed` is deliberately absent: it names a surprise nothing
+#: predicted, so it cannot be a grade ON a prediction and is counted from
+#: `missed_surprises` instead. NOT enforced on write — introspection may record
+#: a grade outside this set, and accuracy.py buckets that as `unrecognised` and
+#: still reports it rather than dropping it (see grooming-accuracy-aggregate).
+GROOMING_GRADES = ("materialized", "avoided", "wrong")
+
 
 def normalise_text(text: str) -> str:
     """Collapse a risk's text to a comparable key.

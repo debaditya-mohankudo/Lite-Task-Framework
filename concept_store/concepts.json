@@ -399,10 +399,11 @@
         "grooming_accuracy(store, limit) -> tallies, recurring risks, skipped introspections, self-report disagreements, and signals",
         "Scoped to status='done' only",
         "Everything except `signals` is a raw count or a list of task ids",
-        "Exposed as tasks__grooming_accuracy"
+        "Exposed as tasks__grooming_accuracy",
+        "GROOMING_GRADES is imported from taskfw.risk (moved there task:dd4ceb01, co-located with RISK_KEYS as part of the risk shape); accuracy.py uses it only for bucketing and tallying. The move is a one-line import change; test_sysml.py's paired grade check imports from taskfw.risk too."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "Aggregates grooming risk grades across recent finished tasks — the only read that spans tasks rather than descending into one. Closes the feedback edge at the level of the loop itself: without it, 'repeated wrong grades mean grooming asks the wrong questions' is advice nothing can act on, because grades live inside each task and a pattern across tasks was writable but unreadable.",
+      "description": "Grooming accuracy aggregated across finished tasks — the loop's feedback edge read in aggregate. GROOMING_GRADES is imported from taskfw.risk, not defined here.",
       "evidence": [
         "taskfw/accuracy.py:_task_grading",
         "taskfw/accuracy.py:loop_debt",
@@ -428,7 +429,7 @@
         "Recurrence groups by a risk's id when it has one (task:f24be6e4) and falls back to normalised text only for id-less (pre-migration) risks; each recurring_risks entry reports keyed_by so a caller can tell which grouping produced it.",
         "Because ids are assigned per-risk rather than shared across tasks, two occurrences of the 'same' risk written independently in different tasks will not recur under id-keying unless one was reworded forward from the other — a known, accepted limitation recorded as an open risk on task:f24be6e4, not yet resolved."
       ],
-      "last_validated": "2026-08-25T13:41:21.291873+00:00",
+      "last_validated": "2026-08-29T10:52:35.892648+00:00",
       "module": "taskfw/accuracy.py",
       "name": "grooming-accuracy-aggregate",
       "related": [
@@ -488,10 +489,11 @@
         "Every check returns Decision(allowed, rule, reason); Decision is falsy when denied",
         "check_save(task, previous=None, parent=None) is the single entry point for validating a mutation",
         "check_link_rel(rel) -> Decision gates tasks__link only, denying any rel not in TASK_EDGE_RELATIONS — mirrors check_status(status)'s exact closed-set-against-a-tuple shape. Deliberately NOT called from tasks__unlink: removal must always work for a legacy or out-of-vocabulary rel, or a bad historical row becomes permanently stuck (task:1c9d37d7).",
-        "There is no check_active_switch anymore (removed task:f302eb2b) — tasks__set_active/push_active is non-destructive by construction, so nothing needs confirm=True to avoid losing state"
+        "There is no check_active_switch anymore (removed task:f302eb2b) — tasks__set_active/push_active is non-destructive by construction, so nothing needs confirm=True to avoid losing state",
+        "check_event_kind(kind) -> Decision gates the event-write path (tasks__add_decision and _finish_task's status event), denying any kind not in TASK_EVENT_KINDS — same closed-set-against-a-tuple shape as check_link_rel / check_status (task:dd4ceb01). Reads are never gated: a historical row with an off-vocabulary kind still returns through store.events()."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "The single implementation of every task rule, imported by both the MCP tools and the hooks. Pure functions over (inputs, store) with no session, prompt, or host state. Deliberately small: body-template validation became schema validation, the hierarchy matrix collapsed to the single rule 'an epic has no parent', and commit traceability left entirely once the pre-commit gate was dropped. check_active_switch was deleted outright in task:f302eb2b once the active-task pointer became a non-destructive LIFO stack (push_active) instead of a single overwritten value — there was nothing left to guard against losing. check_type went the same way in task:50183b29: the two-value type enum ('epic'/'task') became the boolean Task.epic, so a malformed type became unrepresentable and the check had nothing to validate.",
+      "description": "Every task rule has exactly one implementation here, imported by the MCP tools and the optional hooks so no caller can enforce a different set.",
       "evidence": [
         "taskfw/lifecycle.py:check_transition",
         "taskfw/lifecycle.py:check_save",
@@ -499,7 +501,9 @@
         "taskfw/mcp_server.py:tasks__finish",
         "taskfw/mcp_server.py:tasks__link",
         "tests/test_lifecycle.py",
-        "tests/test_mcp_tools.py:TestGraph::test_link_rejects_an_unrecognised_relation"
+        "tests/test_mcp_tools.py:TestGraph::test_link_rejects_an_unrecognised_relation",
+        "taskfw/lifecycle.py:check_event_kind",
+        "tests/test_lifecycle.py:TestCheckEventKind"
       ],
       "invariants": [
         "Rules are pure — the tests need no fixtures at all, which is the observable signal that portability holds",
@@ -510,7 +514,7 @@
         "check_link_rel is the FIRST policy check ever added to tasks__link — before task:1c9d37d7 it had zero lifecycle validation, calling store().link() directly after only confirming both task ids exist",
         "tasks__finish/tasks__check_item's auto-finish share one _finish_task() helper (mcp_server.py) that pops the active-task stack only when the finished task_id is on top — a buried finish still marks the task done, it just skips the pop (task:f302eb2b)"
       ],
-      "last_validated": "2026-08-25T13:41:11.416382+00:00",
+      "last_validated": "2026-08-29T10:52:23.787688+00:00",
       "module": "taskfw/lifecycle.py",
       "name": "lifecycle-single-rule-implementation",
       "related": [
@@ -1016,24 +1020,26 @@
       "contracts": [
         "normalise_text(text) -> str: lowercases, collapses internal and surrounding whitespace to single spaces, strips one trailing period; None/'' -> ''.",
         "coerce(raw) -> dict: a dict is returned as a shallow copy with NO key added or removed; a str becomes {'text': raw, 'graded': None}; anything else becomes {'text': str(raw), 'graded': None}.",
-        "Stdlib-only module -- imports nothing from taskfw, so accuracy.py and mcp_server.py can both depend on it without a cycle."
+        "Stdlib-only module -- imports nothing from taskfw, so accuracy.py and mcp_server.py can both depend on it without a cycle.",
+        "GROOMING_GRADES = ('materialized', 'avoided', 'wrong') lives here beside RISK_KEYS (moved from accuracy.py, task:dd4ceb01); accuracy.py imports it. It is closed for COUNTING but NOT enforced on write — introspection may record a grade outside the set and accuracy.py buckets it as 'unrecognised' and still reports it, per grooming-accuracy-aggregate's never-drop-a-grade invariant."
       ],
       "created_at": "2026-08-29T05:52:15.692497+00:00",
-      "description": "The single home for the two primitives every grooming-risk consumer shares: coerce(raw) turns a bare string, a dict, or a malformed entry into a canonical dict, and normalise_text(s) collapses a risk's text to a comparable key. Before this module both were re-derived in mcp_server._coerce_risk, mcp_server._merge_grooming_risks, accuracy._risks, and accuracy._RecurrenceGrouper, and mcp_server imported accuracy._normalise -- a portable tool module reaching into an analytics module's private. Identity itself and the two distinct merge/group algorithms deliberately stay at their call sites; only the shared shape/text primitives live here.",
+      "description": "The shared risk-shape primitives (coerce, normalise_text) plus GROOMING_GRADES, the closed grade vocabulary that is part of the risk shape. Stdlib-only so every consumer can depend on it without a cycle.",
       "evidence": [
         "taskfw/risk.py:coerce",
         "taskfw/risk.py:normalise_text",
         "taskfw/mcp_server.py:_merge_grooming_risks",
         "taskfw/accuracy.py:_risks",
         "taskfw/accuracy.py:_RecurrenceGrouper",
-        "tests/test_risk.py"
+        "tests/test_risk.py",
+        "taskfw/risk.py:GROOMING_GRADES"
       ],
       "invariants": [
         "coerce never manufactures an 'id' key -- the ABSENCE of 'id' on a risk is how mcp_server._merge_grooming_risks tells a brand-new prediction from a carried-forward one, so adding one would silently change that branch.",
         "coerce never returns None or drops an entry: a malformed risk still carries text, because an ungraded risk that vanished would be an omission indistinguishable from an absence -- the failure taskfw.accuracy exists to prevent.",
         "Risk identity (id-if-present-else-normalised-text, id-less risks in their own keyspace) and the merge/group algorithms are NOT here -- _merge_grooming_risks assigns ids and text-matches, _RecurrenceGrouper keeps id-less risks apart; those are different operations that only share these primitives."
       ],
-      "last_validated": "2026-08-29T05:52:15.692546+00:00",
+      "last_validated": "2026-08-29T10:52:30.235014+00:00",
       "module": "taskfw/risk.py",
       "name": "risk-shape-primitives",
       "related": [
@@ -1457,10 +1463,11 @@
         "Task.to_dict()/to_json() and Task.from_dict()/from_json() round-trip every field",
         "Task.progress -> (done, total), derived from resolution on every read",
         "Task.search_text() flattens the fields worth indexing",
-        "TASK_EDGE_RELATIONS is the closed vocabulary for task_edges.rel (10 relations: depends_on, blocks, relates_to, duplicates, removes, implements, supersedes, reverts, writes_to, extends), enforced by lifecycle.check_link_rel on tasks__link. Confirmed against real usage in task_edges before being formalised (task:1c9d37d7) — 4 trace to Jira's issue-link-type vocabulary, the other 6 are this framework's own emergent vocabulary. parent_of was deliberately excluded as redundant with Task.parent."
+        "TASK_EDGE_RELATIONS is the closed vocabulary for task_edges.rel (10 relations: depends_on, blocks, relates_to, duplicates, removes, implements, supersedes, reverts, writes_to, extends), enforced by lifecycle.check_link_rel on tasks__link. Confirmed against real usage in task_edges before being formalised (task:1c9d37d7) — 4 trace to Jira's issue-link-type vocabulary, the other 6 are this framework's own emergent vocabulary. parent_of was deliberately excluded as redundant with Task.parent.",
+        "TASK_EVENT_KINDS is the closed vocabulary for task_events.kind (note, decision, status, hooks_event), enforced by lifecycle.check_event_kind from the write path (task:dd4ceb01). 'hooks_event' is a member because migrate_hooks.py writes it as a literal through a raw INSERT; the set is closed against what is actually written. Nothing reads the column except context.py's kind=='decision' filter."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "A task is one typed dataclass serialised to JSON. One `epic` boolean (default False) and four statuses. Typing removes things outright rather than relocating them: required-section validation becomes schema validation, 'resolution must be a checklist' becomes unrepresentable because resolution IS a list of items, and (task:50183b29) the two-value 'type' enum became the `epic` bool so a malformed type is unrepresentable and lifecycle.check_type ceased to exist.",
+      "description": "The single typed Task object and the closed vocabularies that live beside it (TASK_STATUSES, TASK_EDGE_RELATIONS, TASK_EVENT_KINDS).",
       "evidence": [
         "taskfw/mcp_server.py:_merge_grooming_risks",
         "taskfw/mcp_server.py:tasks__update",
@@ -1469,7 +1476,8 @@
         "taskfw/task.py:Task.progress",
         "taskfw/task.py:TASK_EDGE_RELATIONS",
         "tests/test_store.py:TestRoundTrip",
-        "tests/test_lifecycle.py:TestCheckLinkRel"
+        "tests/test_lifecycle.py:TestCheckLinkRel",
+        "taskfw/task.py:TASK_EVENT_KINDS"
       ],
       "invariants": [
         "A grooming risk carries a stable, framework-assigned `id` (task:f24be6e4) — assigned by tasks__update whenever an incoming risk lacks one, never accepted from the caller, so no caller can collide with an existing id.",
@@ -1481,7 +1489,7 @@
         "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent",
         "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck"
       ],
-      "last_validated": "2026-08-25T21:51:14.617784+00:00",
+      "last_validated": "2026-08-29T10:52:18.023968+00:00",
       "module": "taskfw/task.py",
       "name": "typed-task-object",
       "related": [
@@ -1495,6 +1503,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-29T10:35:59.528240+00:00"
+    "updated_at": "2026-08-29T10:52:35.892741+00:00"
   }
 }

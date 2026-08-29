@@ -29,6 +29,13 @@ TASK_EDGE_RELATIONS = (
     "removes", "implements", "supersedes", "reverts", "writes_to", "extends",
 )
 
+#: Closed vocabulary for task_events.kind, enforced by lifecycle.check_event_kind.
+#: note/decision/status are the labels store.add_event's callers pass; hooks_event
+#: is written once, by migrate_hooks.py's raw INSERT during the claude-hooks
+#: import. The set is closed against what is actually written — nothing reads the
+#: column except context.py's `kind == "decision"` filter — not a wider guess.
+TASK_EVENT_KINDS = ("note", "decision", "status", "hooks_event")
+
 
 def new_id() -> str:
     return uuid.uuid4().hex[:8]

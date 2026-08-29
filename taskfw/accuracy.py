@@ -35,16 +35,11 @@ from collections import Counter
 from typing import Any
 
 from taskfw.log import get_logger
-from taskfw.risk import coerce, normalise_text
+from taskfw.risk import GROOMING_GRADES, coerce, normalise_text
 from taskfw.task import Task
 from taskfw.store import TaskStore
 
 log = get_logger(__name__)
-
-#: Grades a PREDICTED grooming risk can carry. `missed` is deliberately not
-#: here: it describes a surprise nothing predicted, so it cannot be a grade ON
-#: a prediction. It is counted from `missed_surprises` instead.
-GROOMING_GRADES = ("materialized", "avoided", "wrong")
 
 #: A prediction earns its keep if it came true or changed the plan. `wrong` is
 #: the only grade that represents a pass spent on noise.

@@ -6,7 +6,8 @@
   },
   "bounded_contexts": {
     "Task Tracking": "The core domain: tasks (some flagged as epics), their checklists, the links between tasks, and which task is currently active.",
-    "Loop Memory": "Lessons the grooming/introspection loop produces that nothing else can hold -- separate vocabulary, separate lifecycle, only loosely coupled to Task Tracking by citation.",
+    "Loop Memory": "Durable takeaways the loop accumulates that nothing in Task Tracking or The Loop can hold: MemoryRecords and the closed vocabularies on them. Separate store, separate lifecycle, coupled to the rest only by a MemoryRecord's mandatory citation to the Task it was learned from.",
+    "The Loop": "The four-pass methodology and everything it writes as it runs: the Methodology itself, its Grooming / Implementation / Introspection passes, the Risks a Grooming pass predicts, the GroomingGrade verdicts Introspection assigns, the GroomingAccuracy read across many Tasks, and the advisory Nudges the loop emits. These are recorded onto the Task, so the context is tightly coupled to Task Tracking by design -- it is the coupling, which is why it is named apart from Loop Memory rather than folded into it.",
     "Architectural Knowledge": "What each source module promises, tracked in concept_store/concepts.json -- describes the codebase itself, not tasks or memories."
   },
   "terms": {
@@ -47,8 +48,8 @@
     "ActiveTaskPointer": {
       "bounded_context": "Task Tracking",
       "form": "transient",
-      "definition": "Which task_id is currently 'active' for a scope -- a single in-memory value, not a stack, and not a field on Task itself.",
-      "evidence": "taskfw/mcp_server.py:tasks__set_active"
+      "definition": "Which task_id is currently 'active' for a given workspace -- a single in-memory value, not a stack, and not a field on Task itself. Keyed by working directory, so two repositories worked on at once each keep their own active task; nothing about it is persisted or survives a restart.",
+      "evidence": "taskfw/store.py:TaskStore.set_active"
     },
     "MemoryRecord": {
       "bounded_context": "Loop Memory",
@@ -85,37 +86,37 @@
       "evidence": "taskfw/mcp_server.py:tasks__log_skill_invocation"
     },
     "Methodology": {
-      "bounded_context": "Loop Memory",
+      "bounded_context": "The Loop",
       "form": "process",
       "definition": "The practice the whole framework exists to make cheap: the four-skill loop -- create, groom, implement, introspect -- together with the docs/methodology/ documents that specify it. It has no artifact of its own, only what each pass writes onto a Task and into Loop Memory. CLAUDE.md calls it 'the asset' and the storage/validation/serving code 'plumbing' subordinate to it: the ontology names every moving part (Grooming, Risk, Introspection, MemoryRecord) but this term names the thing they add up to. Its evidence is the first in this file to cite a docs/ file rather than a taskfw/*.py symbol, because the methodology is embodied in the skills and the methodology docs, not in code.",
       "evidence": "docs/methodology/01-framework.md:Lifecycle"
     },
     "Grooming": {
-      "bounded_context": "Loop Memory",
+      "bounded_context": "The Loop",
       "form": "part",
       "definition": "The pre-implementation pass that records a task's current best understanding as falsifiable risks/findings before work starts. Recorded as part of the Task and replaced wholesale each pass -- unlike Introspection, only the latest pass is kept, because grooming is a current-belief snapshot, not a history.",
       "evidence": "taskfw/task.py:Task.grooming"
     },
     "Risk": {
-      "bounded_context": "Loop Memory",
+      "bounded_context": "The Loop",
       "form": "part",
-      "definition": "One falsifiable prediction inside a Grooming pass, and the one part of Grooming that is not wholesale-replaced. A Risk has its own identity and an optional 'graded' verdict that Introspection assigns on whether it held; across re-grooming passes Risks are carried forward and merged by that identity, so a graded Risk -- the loop's primary evidence -- is never silently dropped because a later pass omitted it. Stored as a plain dict inside Grooming, but the shape rule every consumer shares -- coercing a raw entry to that dict and collapsing its text to an identity key -- lives in one place, taskfw/risk.py, rather than being re-derived at each call site.",
+      "definition": "One falsifiable prediction inside a Grooming pass, and the one part of Grooming that is not wholesale-replaced. A Risk has its own identity and an optional 'graded' verdict that Introspection assigns on whether it held; across re-grooming passes Risks are carried forward and merged by that identity, so a graded Risk -- the loop's primary evidence -- is never silently dropped because a later pass omitted it. Stored as a plain dict inside Grooming. Two shared shape PRIMITIVES -- coercing a raw entry to the canonical dict, and collapsing its text to an identity key -- live in one place, taskfw/risk.py, so no consumer re-derives them. The merge that carries a graded verdict forward is a separate, single-caller algorithm and lives at its call site in taskfw/mcp_server.py, not in risk.py, which disclaims it by name; whether that merge should move behind a shared write path is an open question tracked as its own task, not a claim this ontology makes.",
       "evidence": "taskfw/risk.py:coerce, normalise_text, taskfw/mcp_server.py:_merge_grooming_risks"
     },
     "Introspection": {
-      "bounded_context": "Loop Memory",
+      "bounded_context": "The Loop",
       "form": "part",
       "definition": "The post-implementation pass that grades how well Grooming's predictions held up and surfaces lessons for Loop Memory. Recorded as part of the Task as an appended series rather than Grooming's replace-in-place snapshot, since each report is evidence about one distinct execution and the series itself is the value.",
       "evidence": "taskfw/task.py:Task.introspection"
     },
     "Implementation": {
-      "bounded_context": "Loop Memory",
+      "bounded_context": "The Loop",
       "form": "process",
       "definition": "The third pass of the Methodology: doing the work a groomed Task describes, once Grooming has removed enough uncertainty to begin. It is where the plan becomes a change, and where the outcome that Introspection later grades each Risk against is produced. Like Grooming and Introspection it has no artifact of its own, only what it writes onto the Task as it goes: Decisions logged when the choice is made, Commits, and ResolutionItems checked off as they land. Its one intention is to not reintroduce the uncertainty Grooming removed -- staying in scope, and recording reasoning as it happens rather than reconstructing it after.",
       "evidence": "docs/methodology/04-implementation.md:Implementation"
     },
     "Nudge": {
-      "bounded_context": "Task Tracking",
+      "bounded_context": "The Loop",
       "form": "transient",
       "definition": "A transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time. It never blocks the action or changes what gets stored; it only points back at context the caller already has (this task, this memory, this report) and asks it to be looked at again. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
       "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge"
@@ -135,26 +136,26 @@
     "Event": {
       "bounded_context": "Task Tracking",
       "form": "record",
-      "definition": "One entry on a Task's append-only activity log: a timestamped piece of text carrying a kind label from a small closed set. A Decision is one kind of Event; a status change is another. Not a distinct class per kind -- the kind label is the only thing that tells two Events apart -- and the log is never addressed by an id of its own, only read back through the Task it belongs to.",
-      "evidence": "taskfw/store.py:TaskStore.add_event"
+      "definition": "One entry on a Task's append-only activity log: a timestamped piece of text carrying a kind label from a fixed, closed vocabulary (TASK_EVENT_KINDS: note, decision, status, hooks_event), enforced in the lifecycle layer the same way every other closed vocabulary in the domain is -- no caller can write a kind another caller could not. A Decision is one kind of Event; a status change is another. Not a distinct class per kind -- the kind label is the only thing that tells two Events apart -- and the log is never addressed by an id of its own, only read back through the Task it belongs to.",
+      "evidence": "taskfw/store.py:TaskStore.add_event, taskfw/task.py:TASK_EVENT_KINDS, taskfw/lifecycle.py:check_event_kind"
     },
     "Decision": {
       "bounded_context": "Task Tracking",
       "form": "attribute",
-      "definition": "One kind of Event recorded against a Task: the design-reasoning entry, set down at the moment a real choice was made. What makes an Event a Decision is only its kind label on an otherwise uniform log entry -- there is no separate decisions store to hold it.",
+      "definition": "One kind of Event recorded against a Task: the design-reasoning entry, set down at the moment a real choice was made. What makes an Event a Decision is only its kind label -- the value 'decision' from the closed TASK_EVENT_KINDS set -- on an otherwise uniform log entry; there is no separate decisions store to hold it.",
       "evidence": "taskfw/store.py:TaskStore.add_event"
     },
     "GroomingAccuracy": {
-      "bounded_context": "Loop Memory",
+      "bounded_context": "The Loop",
       "form": "transient",
       "definition": "The Methodology's feedback edge read in aggregate: how well a Grooming pass's Risks predicted, gathered across many finished Tasks instead of one. Introspection grades each Risk against a single Task; GroomingAccuracy is what those grades amount to once collected -- the loop's report on itself. Computed from the graded Risks on every read.",
       "evidence": "taskfw/accuracy.py:grooming_accuracy"
     },
     "GroomingGrade": {
-      "bounded_context": "Loop Memory",
+      "bounded_context": "The Loop",
       "form": "attribute",
-      "definition": "The verdict Introspection passes on a single predicted Risk, graded against what the Implementation pass actually did: did predicting this help -- did it come true with its mitigation ready, or force the change that avoided it -- or was the pass spent on noise. A label carried on the Risk, the way MemoryKind is a label on a MemoryRecord, absent until Introspection assigns it. A surprise that no Risk predicted is deliberately not a GroomingGrade: with no prediction beneath it there is nothing for a verdict to be about, so it stays part of Introspection's account of what Grooming missed. One GroomingGrade is Introspection closing the Methodology's feedback edge for a single prediction; GroomingAccuracy is what those verdicts amount to across many finished Tasks.",
-      "evidence": "taskfw/accuracy.py:GROOMING_GRADES",
+      "definition": "The verdict Introspection passes on a single predicted Risk, graded against what the Implementation pass actually did: did predicting this help -- did it come true with its mitigation ready, or force the change that avoided it -- or was the pass spent on noise. A label carried on the Risk, the way MemoryKind is a label on a MemoryRecord, absent until Introspection assigns it. Its vocabulary (GROOMING_GRADES: materialized, avoided, wrong) is closed for COUNTING but not enforced on write -- Introspection may record a grade outside the set, and GroomingAccuracy buckets that as `unrecognised` and still reports it rather than dropping it. This is a deliberate difference from TaskStatus or MemoryKind, where an off-vocabulary value is refused: a grade is an observation worth keeping, not a state that corrupts a machine. A surprise that no Risk predicted is deliberately not a GroomingGrade: with no prediction beneath it there is nothing for a verdict to be about, so it stays part of Introspection's account of what Grooming missed. One GroomingGrade is Introspection closing the Methodology's feedback edge for a single prediction; GroomingAccuracy is what those verdicts amount to across many finished Tasks.",
+      "evidence": "taskfw/risk.py:GROOMING_GRADES, taskfw/accuracy.py:grooming_accuracy",
       "lifecycle": "Assigned by a single Introspection pass, after Implementation, and carried by its Risk from then on. Re-grooming the same Task keeps the verdict rather than discarding it, so a judgement Introspection has already made is never lost.",
       "lifecycle_evidence": "docs/methodology/05-introspection.md, docs/methodology/04-implementation.md"
     },
@@ -327,13 +328,13 @@
       "subject": "Decision",
       "predicate": "is-a",
       "object": "Event",
-      "note": "A Decision is an Event with its kind label set to 'decision'; a status change is the same Event mechanism with a different label. The Decision term and this relation describe that entry from two angles: what a decision-kind Event is for (the Decision term) and that it is one value of a closed kind set on a uniform log (this relation)."
+      "note": "A Decision is an Event with its kind label set to 'decision'; a status change is the same Event mechanism with a different label. The Decision term and this relation describe that entry from two angles: what a decision-kind Event is for (the Decision term) and that it is one value of the closed TASK_EVENT_KINDS vocabulary on a uniform log (this relation)."
     },
     {
       "subject": "Event",
       "predicate": "relates",
       "object": "Task",
-      "note": "An Event only exists on one Task's append-only log; it is never addressed by an id of its own, only read back through the Task -- the same shape as TaskEdge and Commit. The closed kind vocabulary is what tells a Decision-kind Event from a status-change Event."
+      "note": "An Event only exists on one Task's append-only log; it is never addressed by an id of its own, only read back through the Task -- the same shape as TaskEdge and Commit. The closed TASK_EVENT_KINDS vocabulary is what tells a Decision-kind Event from a status-change Event."
     },
     {
       "subject": "TaskContext",
@@ -369,7 +370,7 @@
       "subject": "GroomingGrade",
       "predicate": "part-of",
       "object": "Risk",
-      "note": "The verdict label on a Risk's 'graded' field. Closed vocabulary (GROOMING_GRADES) of three values, absent until Introspection assigns it and merged forward by risk id across re-grooming passes so a graded verdict is never silently lost."
+      "note": "The verdict label on a Risk's 'graded' field, from the closed GROOMING_GRADES set (materialized, avoided, wrong); absent until Introspection assigns it and merged forward by risk id across re-grooming passes so a graded verdict is never silently lost. Closed for counting only -- an unrecognised grade is reported as `unrecognised`, never refused on write."
     },
     {
       "subject": "GroomingAccuracy",

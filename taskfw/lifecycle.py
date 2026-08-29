@@ -30,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from taskfw.log import get_logger
-from taskfw.task import TASK_EDGE_RELATIONS, TASK_STATUSES, Task
+from taskfw.task import TASK_EDGE_RELATIONS, TASK_EVENT_KINDS, TASK_STATUSES, Task
 
 log = get_logger(__name__)
 
@@ -114,6 +114,21 @@ def check_link_rel(rel: str) -> Decision:
         return _deny("rel", f"Unknown relation {rel!r}. Valid: {', '.join(TASK_EDGE_RELATIONS)}.",
                      rel=rel)
     return _allow("rel", rel=rel)
+
+
+def check_event_kind(kind: str) -> Decision:
+    """Closed vocabulary for task_events.kind — see TASK_EVENT_KINDS.
+
+    The same shape as check_link_rel: the vocabulary is enforced here, in the
+    one rule layer, and invoked from the write path (tasks__add_decision and
+    the finish-task status event). Reads are never gated — a historical row
+    with an off-vocabulary kind still has to come back through store.events().
+    """
+    if kind not in TASK_EVENT_KINDS:
+        return _deny("event_kind",
+                     f"Unknown event kind {kind!r}. Valid: {', '.join(TASK_EVENT_KINDS)}.",
+                     kind=kind)
+    return _allow("event_kind", kind=kind)
 
 
 def check_transition(current: str, target: str) -> Decision:

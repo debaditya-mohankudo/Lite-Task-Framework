@@ -637,6 +637,10 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
     decision = lifecycle.check_transition(task.status, "done")
     if not decision:
         return _denied(decision)
+    if reason:
+        kind_check = lifecycle.check_event_kind("status")
+        if not kind_check:
+            return _denied(kind_check)
     task.status = "done"
     store().save(task)
     if reason:
@@ -724,6 +728,9 @@ def tasks__add_decision(task_id: str, decision: str) -> dict[str, Any]:
     """Record a design decision. Surfaces in tasks__context, where it explains the task's shape."""
     if store().get(task_id) is None:
         return {"error": f"No task {task_id!r}"}
+    kind_check = lifecycle.check_event_kind("decision")
+    if not kind_check:
+        return _denied(kind_check)
     store().add_event(task_id, decision, kind="decision")
     return {"ok": True, "id": task_id}
 
