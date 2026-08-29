@@ -208,7 +208,7 @@ concept that turned out wrong, or writes one for a module nobody had
 understood well enough to describe yet.
 
 `ontology/task-domain.json` is the domain's ubiquitous language: the nouns
-(Task, Epic, Link, TaskStore, MemoryRecord, …) and the explicit typed
+(Task, Link, TaskStore, MemoryRecord, …) and the explicit typed
 relations between them — is-a, part-of, relates, persists, references,
 describes. It exists separately from concept_store because the two answer
 different questions and don't share a shape: concept_store is architecture
