@@ -21,10 +21,12 @@ In effect for any active task. Also reach for it when the user says "just implem
 ## Start
 
 Use the supplied `task_id`. If none was given, read the active task with
-`tasks__active()` instead of guessing. `tasks__set_active` pushes task_id onto
-a LIFO stack rather than overwriting whatever was active — nothing is lost,
-so no confirmation is needed. `tasks__finish`/`tasks__clear_active` pop back
-to whatever was pushed underneath automatically.
+`tasks__active()` instead of guessing. `tasks__set_active` is a single
+ephemeral pointer, not a stack: it replaces whatever was active, in memory
+only, and does not survive a restart. Nothing there is destructive and there
+is no confirmation to pass — but nothing is pushed underneath either, so a
+task you displace is not restored when this one finishes. If you are stepping
+away from another task, that is the moment to note where you left it.
 
 ```python
 tasks__set_active(task_id)
@@ -105,6 +107,42 @@ Verify against reality where the cost is small. A real temporary git repository 
 ## When a test fails, decide which side is wrong
 
 Sometimes the test encodes an assumption the design deliberately contradicts. Do not reflexively change the implementation to satisfy it. Ask which one expresses the intended behaviour, then fix the other — and if the design was right, add a test pinning the interaction so the next person does not have the same argument.
+
+## Read the logs before you close
+
+```python
+tasks__log_skill_invocation(skill="task-implementation/check-logs", task_id=task_id)
+tasks__logs(limit=100)   # then scan the messages — see the level trap below
+```
+
+**Do not reach for `tasks__logs(level="ERROR")` to find failed tool calls.** It
+will come back nearly empty and read as a clean run. The chassis logs a failure
+as `tool=<name> ERROR <Type>: <msg>` at level **INFO** (chassis.py:105) — ERROR
+is text inside the message, not the row's level. The same holds for `REFUSE`
+lines. Pull the recent rows and scan them; filter by `logger` when you want one
+subsystem.
+
+The last thing to check is the one dimension a green suite cannot show you: what
+the tools actually did while you worked, as opposed to what they returned. A
+result is the tool's own account of itself. The log is the second witness.
+
+Read for three things. A chassis `ERROR` line means a call raised and you may
+have carried on from a result that never existed. A `DENY`/`REFUSE` means a rule
+refused something and the refusal may have been read as a no-op. And
+`check_item` carries `waited=<n>s` — the gap between a decision being recorded
+and the item it answered being ticked — which is an observable with no automatic
+reader, so it teaches nothing unless someone looks.
+
+This step exists because of a call that returned `{"ok": true}` and did nothing
+(task:1f400ecf). A parameter was silently dropped before it reached the code —
+the running server was advertising an older schema — so the tool truthfully
+reported success at doing what it had actually been asked, which was less than
+the caller asked. Nothing failed, nothing logged an error, and only the store's
+unchanged state disagreed. Trusting a success result is how that goes unnoticed;
+the logs are where it shows.
+
+Introspection reads the logs too, for the same reason. Reading them here is not
+duplication — it is reading them while you can still act on what they say.
 
 ## Finish
 
