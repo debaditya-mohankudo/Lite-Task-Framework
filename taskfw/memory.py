@@ -32,7 +32,7 @@ different thing from outdated.
 PULLED, NEVER PUSHED. Nothing here is injected. A memory reaches an agent only
 because it asked — either by calling `task_memory__recall`, or by pulling a
 full `tasks__context` bundle, whose `lessons` section is built from this store
-(taskfw/context.py:lessons_for). Both are pulls, which is the same bargain the
+(taskfw/context.py:_lessons_for). Both are pulls, which is the same bargain the
 rest of the framework makes.
 
 That second path exists because the first one alone made this a diary. Doc 05

@@ -201,7 +201,7 @@ class TestBudget:
 
 class TestRelevanceFloorHelper:
     """Unit-level pins on _passes_floor, independent of any store — the
-    shared predicate related_candidates and lessons_for both filter through.
+    shared predicate _related_candidates and _lessons_for both filter through.
     """
 
     def test_no_shared_word_fails(self):

@@ -130,7 +130,7 @@ def _query_terms(task: Task) -> str:
     """The words that describe a task, for any full-text lookup about it.
 
     One definition, because both approximate sections of the bundle
-    (_related_candidates, lessons_for) search on it. Two copies would drift the
+    (_related_candidates, _lessons_for) search on it. Two copies would drift the
     moment either one learned a new term, and the divergence would only ever
     surface as an inconsistent bundle.
     """
@@ -160,9 +160,9 @@ def _term_set(text: str) -> set[str]:
 
 
 def _passes_floor(query_terms: str, candidate_text: str) -> bool:
-    """The relevance floor shared by _related_candidates and lessons_for.
+    """The relevance floor shared by _related_candidates and _lessons_for.
 
-    _related_candidates and lessons_for rank by relevance but never excluded
+    _related_candidates and _lessons_for rank by relevance but never excluded
     anything, so both always filled up to their cap with the best available
     match among ALL rows in the store, however weak — confirmed live
     (task:60ebca8e) surfacing candidates with zero title or tag overlap with
@@ -172,7 +172,7 @@ def _passes_floor(query_terms: str, candidate_text: str) -> bool:
     TERM-OVERLAP MINIMUM, not a score threshold or a cutoff relative to the
     top hit — chosen because it is the one form that applies unchanged to
     both call sites. _related_candidates ranks via store.search()'s
-    _combination_score (tag overlap weighted 3:1 over body); lessons_for
+    _combination_score (tag overlap weighted 3:1 over body); _lessons_for
     ranks via memories_fts's plain bm25 over a schema with no tags column at
     all. Neither score is comparable to the other or stable as the store
     grows, so a threshold or relative cutoff tuned against one would need
@@ -284,7 +284,7 @@ def _build_context(store: TaskStore, task_id: str, verbosity: str = "full",
         "graph": graph,
         "commits": store.commits(task_id)[:MAX_COMMITS],
         "related": _related_candidates(store, task),
-        "lessons": lessons_for(store, task, memory),
+        "lessons": _lessons_for(store, task, memory),
     })
     if edges_dropped:
         bundle["edges_truncated"] = edges_dropped
@@ -350,12 +350,18 @@ def _related_candidates(store: TaskStore, task: Task) -> list[dict]:
     return [_task_summary(t) for t in passing[:MAX_RELATED]]
 
 
-def lessons_for(store: TaskStore, task: Task,
-                memory: MemoryStore | None = None) -> list[dict]:
+def _lessons_for(store: TaskStore, task: Task,
+                 memory: MemoryStore | None = None) -> list[dict]:
     """Loop memories matching this task, best match first.
 
     The bundle's second approximate section, and the read path that makes loop
     memory load-bearing rather than write-only.
+
+    Private (task:02736a7a), matching its sibling _related_candidates: both are
+    reached only through _build_context, so a second public name is just
+    something a future caller could import directly and route around
+    TaskContext with. It was briefly public (task:60ebca8e) for no caller that
+    needed it.
 
     QUERY SHAPE comes from _query_terms, shared with _related_candidates so the
     notion of "what is this task about" has one definition. The justification does not
