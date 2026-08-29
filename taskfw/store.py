@@ -201,6 +201,21 @@ class TaskStore:
         )
         return [dict(r) for r in rows]
 
+    def last_event_ts(self, task_id: str, kind: str) -> str | None:
+        """The `ts` of the most recent event of `kind` on this task, or None.
+
+        Separate from events() rather than a filter over its result: events()
+        takes a limit and returns the most recent rows of EVERY kind, so a
+        decision older than that many notes would be missing from it and read
+        as absent. This asks the question directly, so "no such event" is the
+        only reason it can answer None.
+        """
+        row = self.conn.execute(
+            "SELECT ts FROM task_events WHERE task_id=? AND kind=? ORDER BY id DESC LIMIT 1",
+            (task_id, kind),
+        ).fetchone()
+        return row["ts"] if row else None
+
     # -- edges --------------------------------------------------------------
 
     def link(self, from_id: str, to_id: str, rel: str = "relates_to") -> bool:

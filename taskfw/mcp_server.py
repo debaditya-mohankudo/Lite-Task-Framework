@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 import json
 import os
+from datetime import datetime, timezone
 import urllib.error
 import urllib.request
 from typing import Any, Callable
@@ -651,6 +652,95 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
     return {"ok": True, "id": task_id, "status": "done"}
 
 
+def _resolution_index_error(task: Task, index: int) -> str | None:
+    """The error for an out-of-range checklist index, or None if it is in range.
+
+    One home for the range rule, because two tools now ask it: tasks__check_item
+    on its way to ticking, and tasks__add_decision, which has to ask BEFORE it
+    writes its event so a rejected index cannot leave a decision behind with no
+    tick to go with it.
+    """
+    if 0 <= index < len(task.resolution):
+        return None
+    return f"No item {index} — task has {len(task.resolution)}."
+
+
+def _seconds_since_last_decision(task_id: str) -> float | None:
+    """How long since the most recent decision event on this task, or None.
+
+    None means the task carries no decision at all. That is an absence, and it
+    is reported by leaving the figure out of the log line entirely rather than
+    printing a zero, which would read as "ticked the instant it was answered" —
+    the exact opposite of what it means.
+
+    Measured, never acted on. Nothing branches on this number. It exists so the
+    gap between "an item was answered in a decision" and "the item was ticked"
+    is readable after the fact in tasks__logs, instead of being something a
+    nudge has to guess at in the moment: which item a decision resolves is not
+    a fact the framework has, so a nudge asking about it would be firing on
+    judgement it does not hold (task:1f400ecf).
+
+    An unparseable ts also yields None, which does conflate it with "no
+    decision" in the log line — accepted, because the warning logged beside it
+    is where that case is distinguishable, and because the schema writes
+    datetime('now') and all 354 decision rows in the live store match that
+    shape. The except is a guard against a bad row crashing a tick, not a case
+    anyone has seen.
+    """
+    ts = store().last_event_ts(task_id, "decision")
+    if not ts:
+        return None
+    try:
+        recorded = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        log.warning("unparseable decision ts task=%s ts=%r", task_id, ts)
+        return None
+    return (datetime.now(timezone.utc) - recorded).total_seconds()
+
+
+def _waited_field(task_id: str) -> str:
+    """The ` waited=...` fragment for a check_item log line, or "" when there is
+    no decision on this task to have waited since."""
+    waited = _seconds_since_last_decision(task_id)
+    return "" if waited is None else f" waited={waited:.0f}s"
+
+
+def _apply_check_item(task_id: str, index: int, done: bool) -> dict[str, Any]:
+    """Tick or untick one checklist item — the single implementation.
+
+    Shared by tasks__check_item and tasks__add_decision's resolve path
+    (task:1f400ecf), so the two cannot enforce different rules about what
+    ticking an item does. Both auto-activate on progress and both auto-finish
+    on the last open item because there is one path here, not two that happen
+    to agree today.
+    """
+    task = store().get(task_id)
+    if task is None:
+        return {"error": f"No task {task_id!r}"}
+    index_error = _resolution_index_error(task, index)
+    if index_error:
+        return {"error": index_error}
+    task.resolution[index].done = done
+    store().save(task)
+    log.info(
+        "check_item task=%s index=%s done=%s%s text=%r",
+        task_id, index, done, _waited_field(task_id), task.resolution[index].text,
+    )
+    d, total = task.progress
+    result: dict[str, Any] = {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
+    if not done:
+        return result
+    if total > 0 and d == total:
+        finish_result = _finish_task(task_id, reason="last checklist item checked off")
+        if "error" in finish_result:
+            result["finish_notice"] = finish_result["error"]
+        else:
+            result["status"] = finish_result["status"]
+        return result
+    _auto_activate_on_checklist_progress(task_id, task.title)
+    return result
+
+
 @_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
     """Tick or untick one resolution checklist item by its zero-based index.
@@ -665,28 +755,13 @@ def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, 
     item, so intermediate items (not the last one, which gets its own `add_event`
     via _finish_task) would otherwise be indistinguishable from each other in
     tasks__logs.
+
+    The same line carries `waited=<n>s` — how long since the task's most recent
+    decision event — when the task has one. It is an observable and nothing
+    reads it back: see _seconds_since_last_decision for why the gap is measured
+    rather than gated on.
     """
-    task = store().get(task_id)
-    if task is None:
-        return {"error": f"No task {task_id!r}"}
-    if not 0 <= index < len(task.resolution):
-        return {"error": f"No item {index} — task has {len(task.resolution)}."}
-    task.resolution[index].done = done
-    store().save(task)
-    log.info("check_item task=%s index=%s done=%s text=%r", task_id, index, done, task.resolution[index].text)
-    d, total = task.progress
-    result: dict[str, Any] = {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
-    if not done:
-        return result
-    if total > 0 and d == total:
-        finish_result = _finish_task(task_id, reason="last checklist item checked off")
-        if "error" in finish_result:
-            result["finish_notice"] = finish_result["error"]
-        else:
-            result["status"] = finish_result["status"]
-        return result
-    _auto_activate_on_checklist_progress(task_id, task.title)
-    return result
+    return _apply_check_item(task_id, index, done)
 
 
 @_tool(hook=_finish_hook)
@@ -723,16 +798,64 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
     return {"ok": True, "id": task_id, "reports": len(task.introspection)}
 
 
-@_tool()
-def tasks__add_decision(task_id: str, decision: str) -> dict[str, Any]:
-    """Record a design decision. Surfaces in tasks__context, where it explains the task's shape."""
-    if store().get(task_id) is None:
+def _resolved_item_hook(result: dict[str, Any]) -> None:
+    """finish_reminder_nudge and ungroomed_progress_nudge for tasks__add_decision
+    — but only on a call that actually ticked an item.
+
+    A decision on its own changes no checklist state, so nudging about
+    checklist state would be noise on the overwhelming majority of calls, and
+    would change what a caller sees from a tool they reached for an unrelated
+    reason. `progress` appears in the result only on the resolve path, which
+    is exactly the condition, so this reads the result rather than the args.
+    """
+    if "progress" not in result:
+        return
+    task = _refetch(result)
+    if task is None:
+        return
+    dispatcher.apply_nudge(result, "finish_reminder_nudge", dispatcher.finish_reminder_nudge(task))
+    dispatcher.apply_nudge(result, "ungroomed_progress_nudge", dispatcher.ungroomed_progress_nudge(task))
+
+
+@_tool(hook=_resolved_item_hook)
+def tasks__add_decision(task_id: str, decision: str, resolves: int | None = None) -> dict[str, Any]:
+    """Record a design decision. Surfaces in tasks__context, where it explains the task's shape.
+
+    `resolves` is the zero-based index of the checklist item this decision
+    ANSWERS. Pass it and the item is ticked in the same call, through the same
+    path tasks__check_item uses (task:1f400ecf). It exists because an item
+    whose completion criterion IS a recorded judgement ("consider whether X")
+    is completed by the decision, while recording the decision on its own
+    ticks nothing — task:d98a8f46 sat open at 5/6 with its last item already
+    answered, one call from done and reading as work in progress.
+
+    Which item a decision answers is the caller's knowledge and not a fact the
+    framework holds, which is why this is a parameter rather than something a
+    nudge asks about after the fact.
+
+    The index is validated before anything is written, so a rejected index
+    leaves no trace at all — a decision recorded with no tick beside it is the
+    precise state this parameter exists to make unreachable, and a half-applied
+    call would recreate it.
+
+    Omitting `resolves` leaves the call exactly as it was.
+    """
+    task = store().get(task_id)
+    if task is None:
         return {"error": f"No task {task_id!r}"}
+    if resolves is not None:
+        index_error = _resolution_index_error(task, resolves)
+        if index_error:
+            return {"error": index_error}
     kind_check = lifecycle.check_event_kind("decision")
     if not kind_check:
         return _denied(kind_check)
     store().add_event(task_id, decision, kind="decision")
-    return {"ok": True, "id": task_id}
+    if resolves is None:
+        return {"ok": True, "id": task_id}
+    result = _apply_check_item(task_id, resolves, True)
+    result["decision_recorded"] = True
+    return result
 
 
 # ---------------------------------------------------------------------------

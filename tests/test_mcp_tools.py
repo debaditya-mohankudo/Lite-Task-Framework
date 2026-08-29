@@ -920,3 +920,94 @@ class TestToolCallLogging:
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+class TestDecisionResolvesItem:
+    """task:1f400ecf — a decision can tick the item it answers.
+
+    The state being deleted is "answered but unticked": task:d98a8f46 sat open
+    at 5/6 with its last item already resolved in a decision, one call from
+    done and reading as work in progress to anyone scanning statuses.
+    """
+
+    def test_resolving_records_the_decision_and_ticks_the_item(self):
+        t = create(resolution=["a", "b"])
+        r = m.tasks__add_decision(t["id"], "answered a", resolves=0)
+        assert r["decision_recorded"] is True
+        assert r["progress"] == {"done": 1, "total": 2}
+        assert [d["text"] for d in m.tasks__context(t["id"])["decisions"]] == ["answered a"]
+
+    def test_resolving_the_last_open_item_auto_finishes_like_check_item(self):
+        """Same path, so the same outcome — not two implementations agreeing."""
+        t = create(resolution=["a", "b"])
+        m.tasks__check_item(t["id"], 0)
+        r = m.tasks__add_decision(t["id"], "answered b", resolves=1)
+        assert r["status"] == "done"
+        assert m.tasks__get(t["id"])["status"] == "done"
+
+    def test_resolving_a_non_final_item_activates_the_task_like_check_item(self):
+        t = create(resolution=["a", "b"])
+        m.tasks__clear_active()
+        m.tasks__add_decision(t["id"], "answered a", resolves=0)
+        assert m.tasks__active()["active"] == t["id"]
+
+    def test_an_out_of_range_index_leaves_no_trace(self):
+        """A rejected call must not record the decision either.
+
+        Half-applying would recreate the exact state this parameter deletes:
+        a decision on the record with no tick beside it.
+        """
+        t = create(resolution=["a"])
+        r = m.tasks__add_decision(t["id"], "answers nothing", resolves=5)
+        assert "error" in r
+        assert m.tasks__context(t["id"])["decisions"] == []
+        assert m.tasks__context(t["id"])["task"]["progress"] == {"done": 0, "total": 1}
+
+    def test_omitting_resolves_leaves_the_old_behaviour_untouched(self):
+        t = create(resolution=["a"])
+        r = m.tasks__add_decision(t["id"], "just a decision")
+        assert r == {"ok": True, "id": t["id"]}
+        assert m.tasks__context(t["id"])["task"]["progress"] == {"done": 0, "total": 1}
+
+    def test_a_plain_decision_gets_no_checklist_nudge(self):
+        """The checklist nudges ride on the resolve path only — a decision on a
+        100%-done-but-open task must not start nudging about the checklist."""
+        t = create(resolution=["a"])
+        m.tasks__update(t["id"], resolution=["a", "b"])
+        m.tasks__check_item(t["id"], 0)
+        r = m.tasks__add_decision(t["id"], "unrelated")
+        assert "finish_reminder_nudge" not in r
+        assert "ungroomed_progress_nudge" not in r
+
+    def test_unknown_task_is_rejected(self):
+        assert "error" in m.tasks__add_decision("nope", "d", resolves=0)
+
+
+class TestWaitedLogField:
+    """task:1f400ecf — the tick log line reports how long it waited.
+
+    An observable, not a signal: nothing reads it back. It exists so the gap
+    between answering an item and ticking it is measurable after the fact,
+    rather than something a nudge has to guess at in the moment.
+    """
+
+    def test_waited_is_reported_when_the_task_has_a_decision(self, caplog):
+        import logging
+
+        t = create(resolution=["a", "b"])
+        m.tasks__add_decision(t["id"], "some decision")
+        with caplog.at_level(logging.INFO, logger="taskfw"):
+            m.tasks__check_item(t["id"], 0)
+        line = [ln for ln in caplog.text.splitlines() if "check_item task=" in ln]
+        assert line and "waited=" in line[0]
+
+    def test_waited_is_absent_rather_than_zero_when_there_is_no_decision(self, caplog):
+        """No decision is an absence. A zero would read as "ticked the instant
+        it was answered", which is the opposite of what it means."""
+        import logging
+
+        t = create(resolution=["a", "b"])
+        with caplog.at_level(logging.INFO, logger="taskfw"):
+            m.tasks__check_item(t["id"], 0)
+        line = [ln for ln in caplog.text.splitlines() if "check_item task=" in ln]
+        assert line and "waited=" not in line[0]
