@@ -182,3 +182,36 @@ def for_repo(repo: str = "") -> str:
 def reset_cache() -> None:
     """Forget every derived scope. For tests, which build repos mid-process."""
     _cache.clear()
+
+
+def local_root(scope: str) -> str | None:
+    """The local directory `scope`'s relative paths resolve against, or None.
+
+    `Task.files` holds paths relative to a project root (`taskfw/task.py`, not
+    an absolute path). Before `Task.scope` a reader had to guess that root;
+    now the scope carries the answer, and this turns it back into a directory
+    where one is knowable from here:
+
+      path:<abs>   -> that directory, if it still exists
+      git:<id>     -> the git toplevel of cwd, but ONLY when <id> is also this
+                      workspace's scope. A `git:` scope names a repo, not a
+                      checkout; which checkout is the reader's, and the only
+                      one this process can point at is its own.
+      hint:<raw>   -> nothing resolvable, by construction
+      '' unscoped  -> not recorded, never invented
+
+    Never raises and never guesses: a foreign `git:` scope returns None rather
+    than the current repo's root, because a wrong path is worse than an
+    absent one.
+    """
+    if scope.startswith(PATH):
+        root = scope[len(PATH):]
+        try:
+            return root if Path(root).is_dir() else None
+        except OSError:
+            return None
+    if scope.startswith(GIT) and derive() == scope:
+        out = run_git(["rev-parse", "--show-toplevel"], cwd=os.getcwd(), timeout=TIMEOUT)
+        if out is not None and out.returncode == 0:
+            return out.stdout.strip() or None
+    return None

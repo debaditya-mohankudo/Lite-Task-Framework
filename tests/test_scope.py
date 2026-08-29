@@ -110,6 +110,37 @@ class TestForRepo:
         assert scope_mod.for_repo("github.com/org/repo") != scope_mod.for_repo(str(repo))
 
 
+class TestLocalRoot:
+    """Turning a stored scope back into a directory `files` can be joined to,
+    without ever pointing at the wrong one."""
+
+    def test_a_path_scope_is_its_own_root(self, tmp_path):
+        assert scope_mod.local_root(f"{scope_mod.PATH}{tmp_path}") == str(tmp_path)
+
+    def test_a_path_scope_for_a_vanished_dir_is_none(self):
+        assert scope_mod.local_root(f"{scope_mod.PATH}/no/such/dir/here") is None
+
+    def test_unscoped_has_no_root(self):
+        assert scope_mod.local_root("") is None
+
+    def test_a_hint_scope_has_no_root(self):
+        assert scope_mod.local_root("hint:task-framework") is None
+
+    def test_a_git_scope_resolves_only_when_it_is_this_workspace(self, tmp_path, monkeypatch):
+        repo = git_repo(tmp_path / "r", "git@github.com:Org/Repo.git")
+        monkeypatch.chdir(repo)
+        scope_mod.reset_cache()
+        here = scope_mod.derive()
+        assert here == "git:github.com/org/repo"
+        assert scope_mod.local_root(here) == str(repo.resolve())
+
+    def test_a_foreign_git_scope_never_borrows_this_repos_root(self, tmp_path, monkeypatch):
+        repo = git_repo(tmp_path / "r", "git@github.com:Org/Repo.git")
+        monkeypatch.chdir(repo)
+        scope_mod.reset_cache()
+        assert scope_mod.local_root("git:github.com/someone/else") is None
+
+
 class TestTaskField:
     def test_scope_round_trips(self, store):
         store.save(Task(title="t", scope="git:github.com/org/repo"))

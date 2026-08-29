@@ -69,6 +69,7 @@ import re
 
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore
+from taskfw.scope import local_root
 from taskfw.task import Task
 from taskfw.store import TaskStore
 
@@ -292,6 +293,8 @@ def _build_context(store: TaskStore, task_id: str, verbosity: str = "full",
             "motivation": task.motivation,
             "resolution": [{"text": r.text, "done": r.done} for r in task.resolution],
             "files": task.files,
+            "scope": task.scope,
+            "files_root": local_root(task.scope),
             "tags": task.tags,
             "notes": task.notes,
             "created_at": task.created_at,

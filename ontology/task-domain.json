@@ -162,7 +162,7 @@
       "bounded_context": "Task Tracking",
       "form": "attribute",
       "definition": "Which project a record belongs to: a scheme-prefixed string derived from the working directory, never typed by hand. `git:<host>/<path>` when a git origin was readable, `path:<abs>` when there was none, `hint:<raw>` when a caller supplied a repo string that could not be resolved to a directory. An attribute, not an entity -- it has no identity of its own, only equality, which is the single operation every consumer needs. The prefix is part of the value because it records HOW the project was known: a fallback must never compare equal to a derived answer, or an omission becomes indistinguishable from an absence. The empty string is a fourth, distinct case meaning 'project unknown' -- carried by every Task written before the field existed, never backfilled, and treated as compatible with every scope rather than as a project of its own.",
-      "evidence": "taskfw/scope.py:derive, taskfw/scope.py:normalise_remote, taskfw/task.py:Task",
+      "evidence": "taskfw/scope.py:derive, taskfw/scope.py:normalise_remote, taskfw/scope.py:local_root, taskfw/task.py:Task",
       "lifecycle": "Derived once, at record creation, from the workspace in hand, and never recomputed on read -- a record does not change project because someone later read it from somewhere else."
     }
   },
@@ -393,7 +393,7 @@
       "subject": "TaskContext",
       "predicate": "references",
       "object": "Scope",
-      "note": "The bundle's two approximate sections read Scope, and diverge on it: `related` excludes a neighbour from another project outright, while `lessons` returns it marked cross_project, because loop memory exists to generalise across projects and hiding a foreign lesson would defeat the subsystem to enforce a boundary it was built to cross."
+      "note": "The bundle's two approximate sections read Scope, and diverge on it: `related` excludes a neighbour from another project outright, while `lessons` returns it marked cross_project, because loop memory exists to generalise across projects and hiding a foreign lesson would defeat the subsystem to enforce a boundary it was built to cross. The bundle's task section also carries Scope verbatim plus a files_root resolved from it (scope.local_root), so a reader can turn the task's relative files into real paths instead of guessing the project root; files_root is null, never a guess, when the root is not knowable from the reading workspace."
     }
   ]
 }

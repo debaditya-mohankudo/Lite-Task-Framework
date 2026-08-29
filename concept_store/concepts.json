@@ -931,10 +931,11 @@
         "_related_candidates(store, task) (task:78853657 made it public for mcp_server.tasks__create's direct use; task:01fba67f made it private again once TaskContext became the only caller outside this module) passes task.title straight through as a plain string to store.search() -- search() itself builds the OR-of-terms FTS5 query AND ranks by _combination_score (tag overlap weighted 3x over body overlap), not bm25 `rank` as of task:f24a88e3. As of task:1f1e48e2 it over-fetches MAX_RELATED*4+1 hits and filters them through _passes_floor before slicing to MAX_RELATED, so ranking alone no longer determines what surfaces.",
         "_lessons_for(store, task, memory=None) (private, task:02736a7a -- renamed to match its sibling _related_candidates; both are reached only through _build_context. Was briefly public, task:60ebca8e, for no caller that needed it) queries MemoryStore.recall with the same 'title + tags' string _related_candidates uses, over-fetching MAX_LESSONS*4 rows (task:1f1e48e2) and filtering through the same _passes_floor before slicing to MAX_LESSONS. Rows that pass are returned unmodified so each lesson carries the `standing` derived in the memory store. It calls recall(count_hit=False): assembling a bundle must not bump hit_count/last_hit, which exist to measure DELIBERATE recall.",
         "_passes_floor(query_terms, candidate_text) -> bool (task:1f1e48e2) is the ONE relevance-floor predicate shared by both _related_candidates and _lessons_for, deliberately not reimplemented per call site or per scorer. It requires at least one word of _MIN_TERM_LEN (4) or more letters shared between query and candidate text, via _term_set — a plain lowercase-word-set overlap check, chosen over a score threshold or a cutoff relative to the top hit because it is the one form that works unchanged across store.search()'s _combination_score and memories_fts's bm25, two scores that are neither comparable to each other nor stable as the corpus grows. Purely-numeric tokens (e.g. \"2026\" from a tag like introspection-2026-08-23) are excluded from _term_set so two same-day items don't pass the floor on a meaningless date collision. If the query itself has no word meeting the length floor, _passes_floor returns True (permissive) rather than rejecting everything — there is no vocabulary to test candidates against in that case.",
-        "TaskContext(store, memory=None) (task:01fba67f) is the interface callers depend on instead of _build_context/_related_candidates directly — deliberately thin, no behaviour of its own. `.bundle(task_id, verbosity)` calls _build_context; `.related(task)` calls _related_candidates. Both free functions are private: TaskContext is their only caller outside this module, so there is no second public name a future caller could import and call directly. _build_context and _related_candidates remain the actual implementation and stay directly testable (tests/test_context.py calls them straight, not through TaskContext)."
+        "TaskContext(store, memory=None) (task:01fba67f) is the interface callers depend on instead of _build_context/_related_candidates directly — deliberately thin, no behaviour of its own. `.bundle(task_id, verbosity)` calls _build_context; `.related(task)` calls _related_candidates. Both free functions are private: TaskContext is their only caller outside this module, so there is no second public name a future caller could import and call directly. _build_context and _related_candidates remain the actual implementation and stay directly testable (tests/test_context.py calls them straight, not through TaskContext).",
+        "The bundle's task section carries `scope` (Task.scope verbatim) and `files_root` (scope.local_root(task.scope) computed on read). files_root is an absolute directory when the root is locally knowable — a path: scope's own dir, or the git toplevel of cwd when the task's git: scope is also this workspace's — and null otherwise. The key is always present: a null files_root states the root is not knowable from here, it does not mean the task has no files. A reader falls back to `scope` for the project identity."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "_build_context assembles the whole working bundle for a task in one call — the sole replacement for per-turn prompt injection. Fixed section order, a documented trim order dropping whole sections least-useful-first, and a truncated list so an omitted section is distinguishable from an empty one. Independently, several sections also carry a fixed per-section cap (MAX_DECISIONS, MAX_COMMITS, MAX_RELATED, MAX_LESSONS, MAX_EDGES) applied by slicing before CHAR_BUDGET enforcement ever runs — a separate, silent mechanism from the whole-section drop that TRIM_ORDER implements, except for edges: edges' cap is the one case that IS surfaced, via `edges_truncated`. As of task:60ebca8e the bundle has a seventh section, `lessons`, which is the guaranteed read path for loop memory. As of task:1f1e48e2, related and lessons both filter through a shared relevance floor before their caps are applied. As of task:01fba67f, callers no longer call _build_context/_related_candidates directly — they go through the thin `TaskContext` class (constructed once per store/memory pair, exposing `.bundle(task_id, verbosity)` and `.related(task)`), so a signature change to either free function is no longer a change at every call site; both functions were also renamed private at the same time, since TaskContext is now their only caller outside this module.",
+      "description": "The pull-only context bundle that replaces prompt injection: _build_context assembles a task's object, decisions, grooming, graph, commits, related and lessons on demand. The task section also carries scope and files_root so a reader can resolve the task's relative files without guessing the project root.",
       "evidence": [
         "taskfw/context.py:_graph",
         "taskfw/context.py:_lessons_for",
@@ -976,7 +977,7 @@
         "TaskContext is deliberately thin: it binds store/memory once and forwards to the free functions unchanged, so it introduces no new behaviour, caching, or validation of its own that could diverge from _build_context/_related_candidates.",
         "_build_context and _related_candidates are private (task:01fba67f): TaskContext is their only caller outside taskfw/context.py, so there is no public name for a future caller to import and reintroduce the coupling TaskContext exists to remove."
       ],
-      "last_validated": "2026-08-25T22:37:04.624923+00:00",
+      "last_validated": "2026-08-29T10:29:52.017045+00:00",
       "module": "taskfw/context.py",
       "name": "pull-context-bundle",
       "related": [
@@ -1074,17 +1075,19 @@
         "derive(cwd=None) -> str — never raises, never returns empty. Prefers the git origin, falls back to `path:<resolved abs>`. TASKFW_SCOPE selects the directory asked about, not the answer.",
         "for_repo(repo='') -> str — the sole writer of task_commits.repo. Empty derives cwd; a real directory derives that directory; anything else is kept verbatim under `hint:`.",
         "reset_cache() — clears the per-directory memoisation; for tests that build repos mid-process.",
-        "Consumed by Task.scope (set once at tasks__create), TaskStore.add_commit, context._same_project, and accuracy.loop_debt/grooming_accuracy."
+        "Consumed by Task.scope (set once at tasks__create), TaskStore.add_commit, context._same_project, and accuracy.loop_debt/grooming_accuracy.",
+        "local_root(scope) -> str | None — the local directory a scope's relative paths resolve against. path:<abs> returns that dir when it still exists; git:<id> returns the git toplevel of cwd ONLY when derive() == that same scope (a git scope names a repo, not a checkout, and the only checkout this process can point at is its own); hint: and '' return None. Never raises, never guesses — a foreign git scope returns None rather than the current repo's root."
       ],
       "created_at": "2026-08-29T09:45:25.483284+00:00",
-      "description": "The single derivation of which project a record belongs to, and the only writer of that vocabulary. Produces a scheme-prefixed string from a working directory: `git:<host>/<path>` from the git origin, `path:<abs>` when there is no origin, `hint:<raw>` when a caller supplied a repo string that could not be resolved to a directory. Exists because project identity was already being answered by hand, inconsistently — task_commits.repo held five spellings of two projects — and because a task store that is global by default (config.DB_PATH) has no other way to tell one project's tasks from another's.",
+      "description": "The single derivation of which project a record belongs to, and the only writer of that vocabulary. Produces a scheme-prefixed string from a working directory: git:<host>/<path> from the git origin, path:<abs> when there is no origin, hint:<raw> when a caller supplied a repo string that could not be resolved to a directory. Also turns a stored scope back into a local directory (local_root) for resolving a task's relative files. Exists because project identity was already being answered by hand, inconsistently.",
       "evidence": [
         "taskfw/scope.py:normalise_remote",
         "taskfw/scope.py:derive",
         "taskfw/scope.py:for_repo",
         "taskfw/task.py:Task.scope",
         "taskfw/store.py:add_commit",
-        "taskfw/context.py:_same_project"
+        "taskfw/context.py:_same_project",
+        "taskfw/scope.py:local_root"
       ],
       "invariants": [
         "The scheme prefix is load-bearing, not decoration: a fallback value must never be comparable to a derived one, so `path:` and `hint:` can never equal a `git:` scope. This is the local form of the project rule that an omission must not look like an absence.",
@@ -1093,7 +1096,7 @@
         "Derivation happens once, at record-creation time. A task's scope is never recomputed on read: a task does not change project because someone later read it from elsewhere.",
         "Memoised per resolved directory, since a repository's origin does not change within a process lifetime and both writers call it on every write."
       ],
-      "last_validated": "2026-08-29T09:45:25.483341+00:00",
+      "last_validated": "2026-08-29T10:29:41.861013+00:00",
       "module": "taskfw/scope.py",
       "name": "scope-derivation",
       "related": [
@@ -1490,6 +1493,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-29T10:00:31.678365+00:00"
+    "updated_at": "2026-08-29T10:29:52.017086+00:00"
   }
 }

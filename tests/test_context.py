@@ -97,6 +97,20 @@ class TestFullBundle:
         assert c["files"] == ["a.py"] and c["tags"] == ["x"] and c["notes"] == "a note"
         assert [r["done"] for r in c["resolution"]] == [True, False]
 
+    def test_files_carry_their_root_so_a_reader_need_not_guess(self, store, tmp_path):
+        """`files` are relative; the bundle says what to a reader, or says plainly
+        that it cannot — never leaving the root to a guess."""
+        scoped = store.save(Task(title="rooted", files=["taskfw/task.py"],
+                                 scope=f"path:{tmp_path}"))
+        c = _build_context(store, scoped.id)["task"]
+        assert c["scope"] == f"path:{tmp_path}"
+        assert c["files_root"] == str(tmp_path)
+
+    def test_files_root_is_present_but_null_when_the_root_is_not_knowable(self, store):
+        unscoped = store.save(Task(title="rootless", files=["a.py"]))
+        c = _build_context(store, unscoped.id)["task"]
+        assert "files_root" in c and c["files_root"] is None
+
     def test_related_excludes_the_task_itself(self, store):
         a = store.save(Task(title="migration runner"))
         store.save(Task(title="migration runner two"))
