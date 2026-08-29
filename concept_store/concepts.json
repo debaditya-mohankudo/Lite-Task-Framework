@@ -1113,23 +1113,25 @@
         "TestCommitRepoNormalisation — the fragmented spellings of one repo path collapse to a single value.",
         "TestRelatedIsScoped — cross-project neighbours excluded, same-project kept, unscoped never dropped.",
         "TestLessonsAreMarkedNotFiltered — a foreign lesson is still returned, carrying cross_project: True.",
-        "TestLoopDebtIsHonestAboutWhatItCounted — scope is echoed either way, and a narrowed count reports unscoped_not_counted."
+        "TestLoopDebtIsHonestAboutWhatItCounted — scope is echoed either way, and a narrowed count reports unscoped_not_counted.",
+        "TestLocalRoot — a path: scope is its own root (None if the dir is gone); an unscoped '' and a hint: have no root; a git: scope resolves to cwd's git toplevel only when it is this workspace's own scope, and a foreign git: scope returns None rather than borrowing the current repo's root."
       ],
       "created_at": "2026-08-29T09:48:06.228364+00:00",
-      "description": "Pins the three ways scope could fail silently. (1) Normalisation: two spellings of one remote must produce one string — a divergence raises nothing, it just grows a sixth convention beside the five already in task_commits.repo while every scoped read quietly returns half its rows. (2) Unscoped survival: tasks written before Task.scope existed carry '', and a filter that reads that as 'belongs to no project' rather than 'project unknown' erases the entire pre-existing corpus from related/lessons at once, with no error. (3) Honest narrowing: a scoped count is smaller than the truth, and one that does not say so reads as complete.",
+      "description": "Pins the ways scope could fail silently: remote normalisation divergence, erasure of the unscoped pre-field corpus, dishonest narrowing of a scoped count, and local_root pointing at the wrong checkout.",
       "evidence": [
         "tests/test_scope.py:TestNormaliseRemote",
         "tests/test_scope.py:TestRelatedIsScoped",
         "tests/test_scope.py:TestLessonsAreMarkedNotFiltered",
         "tests/test_scope.py:TestLoopDebtIsHonestAboutWhatItCounted",
-        "taskfw/scope.py"
+        "taskfw/scope.py",
+        "tests/test_scope.py:TestLocalRoot"
       ],
       "invariants": [
         "Derivation is exercised against real `git init` repositories with real remotes, not a mocked subprocess — the normalisation rule is only worth anything if it agrees with what git actually prints. The one mocked case is the fail-open path, where the point is precisely that git is unavailable.",
         "scope_mod.reset_cache() runs around every test (autouse): derive() memoises per resolved directory, so a repo created mid-test would otherwise inherit the answer computed before `git init` ran.",
         "The cross-project related tests deliberately give both tasks the SAME title and tags. If they differed, the term-overlap floor could pass the test on its own and the scope filter would never be exercised — the assertion has to fail for the right reason."
       ],
-      "last_validated": "2026-08-29T09:48:06.228414+00:00",
+      "last_validated": "2026-08-29T10:35:59.528164+00:00",
       "module": "tests/test_scope.py",
       "name": "scope-tests",
       "related": [
@@ -1493,6 +1495,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-29T10:29:52.017086+00:00"
+    "updated_at": "2026-08-29T10:35:59.528240+00:00"
   }
 }
