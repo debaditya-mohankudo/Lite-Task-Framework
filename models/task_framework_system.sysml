@@ -45,7 +45,7 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "c6606bd72d97b239121c07a8d43fdce217397b55";
+        derivedFromCommit = "500866b9d0b4e3faa43f1423f904bc83e1c6782f";
         derivedAt = "2026-08-29";
         modelledPaths = (
             "taskfw/scope.py",
@@ -107,13 +107,19 @@ package TaskFrameworkSystem {
              *     promoted one to loop memory.
              *   - finish_nudge (tasks__finish): a task closed with no
              *     introspection report yet.
-             *   - finish_reminder_nudge (tasks__check_item / tasks__update):
+             *   - finish_reminder_nudge (tasks__check_item / tasks__update,
+             *     and tasks__add_decision on a call that resolved an item):
              *     the resolution checklist is 100% done but the task is still
              *     open.
              *   - stale_memory_nudge (task_memory__link): the memory being
              *     linked is 'disputed' or 'contradicted'.
-             *   - ungroomed_progress_nudge (tasks__check_item / tasks__update):
+             *   - ungroomed_progress_nudge (tasks__check_item / tasks__update,
+             *     and tasks__add_decision on a call that resolved an item):
              *     checklist progress exists but task.grooming is still empty.
+             *     Both checklist nudges reach add_decision only on the resolve
+             *     path, keyed off `progress` being present in the result: a
+             *     plain decision changes no checklist state, so nudging about
+             *     checklist state there would be noise on nearly every call.
              *   - loop_debt_nudge / task_debt_nudge (tasks__set_active): the
              *     earlier of the two calls every documented workflow makes at
              *     the start of work, not tasks__context or tasks__create —
@@ -145,15 +151,24 @@ package TaskFrameworkSystem {
              * which is trimmed field-by-field before it is dropped whole —
              * see PullContextRequirement.
              *
-             * ONE TOOL IS THE EXCEPTION TO "dispatcher never changes what is
-             * stored": tasks__check_item(done=True) also sets its task as
-             * the active task for the current scope as a direct side
-             * effect — a checked-off item is unambiguous evidence
-             * implementation started, so it removes the "forgot to call
-             * set_active" failure mode instead of merely nudging about it.
-             * Checking off a checklist's LAST open item goes further and
-             * finishes the task outright, through the same path
-             * tasks__finish uses. Neither set nor finish needs a gate to
+             * TICKING A CHECKLIST ITEM IS THE EXCEPTION TO "dispatcher never
+             * changes what is stored": it also sets its task as the active
+             * task for the current scope as a direct side effect — a
+             * checked-off item is unambiguous evidence implementation
+             * started, so it removes the "forgot to call set_active" failure
+             * mode instead of merely nudging about it. Ticking a checklist's
+             * LAST open item goes further and finishes the task outright,
+             * through the same path tasks__finish uses.
+             *
+             * Two tools reach that behaviour, not one (task:1f400ecf):
+             * tasks__check_item, and tasks__add_decision when given a
+             * `resolves` index naming the item the decision answers. They
+             * share it rather than each implementing it — both call
+             * _apply_check_item, which is why the exception is stated here
+             * as a property of ticking rather than of one tool. add_decision
+             * carries it because an item whose completion criterion IS a
+             * recorded judgement is completed by the decision, and recording
+             * the decision alone ticks nothing. Neither set nor finish needs a gate to
              * mirror: the active-task pointer is a single in-memory dict
              * entry per scope (task:f5ace343) — not persisted, not a stack —
              * so setting a different task simply overwrites whatever was
