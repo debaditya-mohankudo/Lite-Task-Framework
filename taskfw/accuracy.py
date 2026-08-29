@@ -287,12 +287,13 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
     tallies: Counter[str] = Counter()
     unrecognised: Counter[str] = Counter()
     ungraded = 0
-    missed = 0
+    missed_groomed = 0
     #: Surprises from finished tasks that were never groomed. Kept apart from
-    #: `missed` rather than added to it: the existing ratio is
-    #: missed / (graded + missed), and an ungroomed task contributes surprises
-    #: with no graded risks to balance them, so folding them in would drive
-    #: that percentage toward 100% for a reason its sentence does not describe.
+    #: `missed_groomed` rather than added to it: the existing ratio is
+    #: missed_groomed / (graded + missed_groomed), and an ungroomed task
+    #: contributes surprises with no graded risks to balance them, so folding
+    #: them in would drive that percentage toward 100% for a reason its own
+    #: sentence does not describe.
     missed_ungroomed = 0
     ungroomed_with_surprises = 0
     with_grooming = 0
@@ -316,7 +317,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
                 ungroomed_with_surprises += 1
             continue
         with_grooming += 1
-        missed += _missed(task)
+        missed_groomed += _missed(task)
 
         graded_here: Counter[str] = Counter()
         for risk in risks:
@@ -365,10 +366,12 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
             "ungraded": ungraded,
             "unrecognised": dict(unrecognised),
         },
-        # Ranges over GROOMED tasks only, so it stays comparable with the
-        # graded-risk tallies beside it. Surprises from tasks that were never
-        # groomed are counted separately below rather than summed in here.
-        "missed_surprises": missed,
+        # Named for the population it ranges over, because it is a
+        # narrowing and not a total: groomed tasks only, so it stays
+        # comparable with the graded-risk tallies beside it. The unqualified
+        # `missed_surprises` it replaces (task:703c3f26) invited every reader
+        # to take it for the total, which is the one thing it is not.
+        "missed_surprises_groomed": missed_groomed,
         "missed_surprises_ungroomed": missed_ungroomed,
         "ungroomed_tasks_with_surprises": ungroomed_with_surprises,
         "predictive_value": (
@@ -379,16 +382,16 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
         "skipped_introspection": skipped,
         "self_report_disagreements": disagreements,
         "signals": _signals(
-            tallies, graded_total, missed, skipped,
+            tallies, graded_total, missed_groomed, skipped,
             missed_ungroomed, ungroomed_with_surprises,
         ),
     }
-    log.info("grooming accuracy: tasks=%d graded=%d ungraded=%d missed=%d signals=%d",
-             len(tasks), graded_total, ungraded, missed, len(result["signals"]))
+    log.info("grooming accuracy: tasks=%d graded=%d ungraded=%d missed_groomed=%d signals=%d",
+             len(tasks), graded_total, ungraded, missed_groomed, len(result["signals"]))
     return result
 
 
-def _signals(tallies: Counter, graded_total: int, missed: int, skipped: list[str],
+def _signals(tallies: Counter, graded_total: int, missed_groomed: int, skipped: list[str],
              missed_ungroomed: int = 0, ungroomed_with_surprises: int = 0) -> list[str]:
     """Interpretations, each traceable to a stated threshold.
 
@@ -410,11 +413,11 @@ def _signals(tallies: Counter, graded_total: int, missed: int, skipped: list[str
                 f"{wrong:.0%} of graded risks were wrong. Grooming is asking the "
                 "wrong questions — change what it asks, not just the estimates."
             )
-        findings = graded_total + missed
-        if findings and missed / findings >= MISSED_SHARE:
+        findings = graded_total + missed_groomed
+        if findings and missed_groomed / findings >= MISSED_SHARE:
             out.append(
-                f"{missed / findings:.0%} of findings were surprises nothing predicted. "
-                "Grooming is not asking enough questions."
+                f"{missed_groomed / findings:.0%} of findings on groomed tasks were "
+                "surprises nothing predicted. Grooming is not asking enough questions."
             )
     # Deliberately outside the MIN_SAMPLE gate above. That threshold sizes
     # itself on graded risks, and an ungroomed task has none by definition —

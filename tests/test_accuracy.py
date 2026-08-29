@@ -207,7 +207,7 @@ class TestDerivedNotReported:
         finished(store, "t",
                  [{"text": "a", "graded": "materialized"}],
                  [{"missed_surprises": ["one", "two"]}, {"missed_surprises": ["three"]}])
-        assert grooming_accuracy(store)["missed_surprises"] == 3
+        assert grooming_accuracy(store)["missed_surprises_groomed"] == 3
 
 
 class TestRecurring:
@@ -335,7 +335,7 @@ class TestUngroomedSurprises:
         finished(store, "never groomed", risks=[],
                  introspection=[{"missed_surprises": ["a", "b", "c"]}])
         r = grooming_accuracy(store)
-        assert r["missed_surprises"] == 1
+        assert r["missed_surprises_groomed"] == 1
         assert r["missed_surprises_ungroomed"] == 3
 
     def test_the_signal_fires_without_any_graded_sample(self, store):
@@ -367,7 +367,7 @@ class TestLegacyReportShape:
     def test_the_older_surprises_shape_is_counted(self, store):
         finished(store, "old report", risks=[{"text": "r", "graded": "avoided"}],
                  introspection=[{"surprises": [{"lesson": "x"}, {"lesson": "y"}]}])
-        assert grooming_accuracy(store)["missed_surprises"] == 2
+        assert grooming_accuracy(store)["missed_surprises_groomed"] == 2
 
     def test_the_canonical_key_wins_rather_than_summing(self, store):
         """A report carrying both must not be double-counted. Over-reporting
@@ -375,4 +375,4 @@ class TestLegacyReportShape:
         finished(store, "both shapes", risks=[{"text": "r", "graded": "avoided"}],
                  introspection=[{"missed_surprises": ["a"],
                                  "surprises": [{"lesson": "a"}]}])
-        assert grooming_accuracy(store)["missed_surprises"] == 1
+        assert grooming_accuracy(store)["missed_surprises_groomed"] == 1
