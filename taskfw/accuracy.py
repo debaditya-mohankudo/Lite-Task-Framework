@@ -247,7 +247,25 @@ def _nonzero(counts: dict[str, int]) -> dict[str, int]:
 
 
 def _missed(task: Task) -> int:
-    return sum(len(r.get("missed_surprises") or []) for r in task.introspection or [])
+    """Surprises recorded across a task's introspection reports, both shapes.
+
+    `missed_surprises` is canonical and is what the introspection skill writes.
+    `surprises` (a list of dicts) is the shape used by reports written before
+    that key existed. taskfw.dispatcher.nudges._lesson_texts already reads both
+    for the LESSONS side, explicitly for those older reports; this is the same
+    tolerance on the COUNTING side, which never got it. Measured in the live
+    store when this was fixed: 99 reports carry the canonical key, 10 carry the
+    older shape ONLY and were counted as zero, and 2 carry both.
+
+    Canonical is preferred over the legacy key rather than summed with it. The
+    two reports carrying both would double-count if their entries describe the
+    same surprises, and over-reporting is the worse error here — it would
+    inflate the very ratio this module exists to make trustworthy.
+    """
+    return sum(
+        len(r.get("missed_surprises") or r.get("surprises") or [])
+        for r in task.introspection or []
+    )
 
 
 def grooming_accuracy(store: TaskStore, limit: int = 25,
@@ -270,6 +288,13 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
     unrecognised: Counter[str] = Counter()
     ungraded = 0
     missed = 0
+    #: Surprises from finished tasks that were never groomed. Kept apart from
+    #: `missed` rather than added to it: the existing ratio is
+    #: missed / (graded + missed), and an ungroomed task contributes surprises
+    #: with no graded risks to balance them, so folding them in would drive
+    #: that percentage toward 100% for a reason its sentence does not describe.
+    missed_ungroomed = 0
+    ungroomed_with_surprises = 0
     with_grooming = 0
     #: Counted independently of the grade buckets. Deriving the total by adding
     #: them up meant an unrecognised grade fell through every bucket and left
@@ -282,6 +307,13 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
     for task in tasks:
         risks, task_ungraded, any_graded = _task_grading(task)
         if not risks:
+            # No grooming, so nothing to grade — but a task that predicted
+            # nothing and still recorded surprises is evidence about the loop,
+            # and returning early used to discard it entirely (task:fca95112).
+            task_missed = _missed(task)
+            if task_missed:
+                missed_ungroomed += task_missed
+                ungroomed_with_surprises += 1
             continue
         with_grooming += 1
         missed += _missed(task)
@@ -333,7 +365,12 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
             "ungraded": ungraded,
             "unrecognised": dict(unrecognised),
         },
+        # Ranges over GROOMED tasks only, so it stays comparable with the
+        # graded-risk tallies beside it. Surprises from tasks that were never
+        # groomed are counted separately below rather than summed in here.
         "missed_surprises": missed,
+        "missed_surprises_ungroomed": missed_ungroomed,
+        "ungroomed_tasks_with_surprises": ungroomed_with_surprises,
         "predictive_value": (
             round(sum(tallies.get(g, 0) for g in USEFUL) / graded_total, 2)
             if graded_total else None
@@ -341,14 +378,18 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
         "recurring_risks": recurring,
         "skipped_introspection": skipped,
         "self_report_disagreements": disagreements,
-        "signals": _signals(tallies, graded_total, missed, skipped),
+        "signals": _signals(
+            tallies, graded_total, missed, skipped,
+            missed_ungroomed, ungroomed_with_surprises,
+        ),
     }
     log.info("grooming accuracy: tasks=%d graded=%d ungraded=%d missed=%d signals=%d",
              len(tasks), graded_total, ungraded, missed, len(result["signals"]))
     return result
 
 
-def _signals(tallies: Counter, graded_total: int, missed: int, skipped: list[str]) -> list[str]:
+def _signals(tallies: Counter, graded_total: int, missed: int, skipped: list[str],
+             missed_ungroomed: int = 0, ungroomed_with_surprises: int = 0) -> list[str]:
     """Interpretations, each traceable to a stated threshold.
 
     Kept separate from the counts so the judgement is auditable and refusable.
@@ -375,4 +416,17 @@ def _signals(tallies: Counter, graded_total: int, missed: int, skipped: list[str
                 f"{missed / findings:.0%} of findings were surprises nothing predicted. "
                 "Grooming is not asking enough questions."
             )
+    # Deliberately outside the MIN_SAMPLE gate above. That threshold sizes
+    # itself on graded risks, and an ungroomed task has none by definition —
+    # reusing it would silence this signal in exactly the case where ungroomed
+    # work is the whole story. It is also a separate sentence from the one
+    # above on purpose: "ask better questions" is the wrong instruction when
+    # the questions were never asked.
+    if missed_ungroomed:
+        out.append(
+            f"{missed_ungroomed} surprise(s) came from {ungroomed_with_surprises} "
+            "finished task(s) that were never groomed. Nothing predicted them "
+            "because nothing was asked — run grooming before the work, rather "
+            "than only sharpening what it asks."
+        )
     return out

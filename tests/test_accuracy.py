@@ -307,3 +307,72 @@ class TestLoopDebt:
         for i in range(5):
             finished(store, f"t{i}", [{"text": "a", "graded": None}])
         assert loop_debt(store, limit=2)["tasks_examined"] == 2
+
+
+class TestUngroomedSurprises:
+    """task:fca95112 — a task that predicted nothing still reports what it learned.
+
+    `missed += _missed(task)` used to sit after an early `continue` for tasks
+    with no risks, so surprises from ungroomed work reached the aggregate as
+    zero. That hid the pattern the aggregate exists to surface, and hid it
+    harder the more often grooming was skipped.
+    """
+
+    def test_an_ungroomed_tasks_surprises_are_counted(self, store):
+        finished(store, "never groomed", risks=[],
+                 introspection=[{"missed_surprises": ["a", "b"]}])
+        r = grooming_accuracy(store)
+        assert r["missed_surprises_ungroomed"] == 2
+        assert r["ungroomed_tasks_with_surprises"] == 1
+
+    def test_they_do_not_inflate_the_groomed_ratio(self, store):
+        """The two populations stay apart. Folding ungroomed surprises into
+        `missed` would push missed/(graded+missed) toward 100% with no graded
+        risks to balance them — a number rising for a reason its own sentence
+        does not describe."""
+        finished(store, "groomed", risks=[{"text": "r", "graded": "avoided"}],
+                 introspection=[{"missed_surprises": ["one"]}])
+        finished(store, "never groomed", risks=[],
+                 introspection=[{"missed_surprises": ["a", "b", "c"]}])
+        r = grooming_accuracy(store)
+        assert r["missed_surprises"] == 1
+        assert r["missed_surprises_ungroomed"] == 3
+
+    def test_the_signal_fires_without_any_graded_sample(self, store):
+        """Deliberately outside the MIN_SAMPLE gate: that threshold sizes itself
+        on graded risks, which an ungroomed task has none of, so reusing it
+        would silence this exactly when ungroomed work is the whole story."""
+        finished(store, "never groomed", risks=[],
+                 introspection=[{"missed_surprises": ["a"]}])
+        r = grooming_accuracy(store)
+        assert r["risks"]["total"] == 0
+        assert any("never groomed" in s for s in r["signals"])
+
+    def test_an_ungroomed_task_with_no_surprises_is_not_counted_as_one(self, store):
+        finished(store, "never groomed", risks=[], introspection=[])
+        r = grooming_accuracy(store)
+        assert r["missed_surprises_ungroomed"] == 0
+        assert r["ungroomed_tasks_with_surprises"] == 0
+        assert r["signals"] == []
+
+
+class TestLegacyReportShape:
+    """task:fca95112 — reports predating the `missed_surprises` key still count.
+
+    dispatcher.nudges._lesson_texts already read both shapes for the lessons
+    side; the counting side never got the same tolerance, so 10 reports in the
+    live store contributed zero regardless of whether they were groomed.
+    """
+
+    def test_the_older_surprises_shape_is_counted(self, store):
+        finished(store, "old report", risks=[{"text": "r", "graded": "avoided"}],
+                 introspection=[{"surprises": [{"lesson": "x"}, {"lesson": "y"}]}])
+        assert grooming_accuracy(store)["missed_surprises"] == 2
+
+    def test_the_canonical_key_wins_rather_than_summing(self, store):
+        """A report carrying both must not be double-counted. Over-reporting
+        would inflate the very ratio this module exists to make trustworthy."""
+        finished(store, "both shapes", risks=[{"text": "r", "graded": "avoided"}],
+                 introspection=[{"missed_surprises": ["a"],
+                                 "surprises": [{"lesson": "a"}]}])
+        assert grooming_accuracy(store)["missed_surprises"] == 1
