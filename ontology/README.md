@@ -22,9 +22,13 @@ answer different questions:
   (e.g. Task Tracking vs. Loop Memory), each with a one-line description of
   what separates it from the others.
 - **`terms`** — one entry per domain noun: which bounded context it belongs
-  to, its `form` (see below), and a plain-language definition of what it is
-  (including things that are *not* distinct things — e.g. an Epic is just a
-  Task with a certain field set, not a separate class).
+  to, its `form` (see below), and a plain-language definition of what it is.
+  The `form` value already carries whether the term is its own record or just
+  a value on / a section inside another; a definition should not restate that
+  — it adds what `form` cannot say: why the shape is that way, what rule a
+  flag drives, how the term differs from a sibling (e.g. that an Epic is just
+  a Task with one field set is worth a clause; that this makes it "not a
+  separate class" is already in `form: attribute`).
 - **`form`** — one value per term, from a closed set of five, naming what
   *shape* of thing the term is:
   - `record` — persisted as its own row/entry, with its own identity and
