@@ -8,7 +8,7 @@ so a task that saves is well-formed by construction.
 tasks__create(
     title="Short, specific, and readable in a list",
     epic=False,                       # True groups other tasks; default False
-    parent="<epic id>",               # optional
+    parent="<parent id>",             # optional; an epic or a task this breaks down
     motivation="Why this is worth doing, and what breaks without it.",
     resolution=["first step", "second step"],
     files=["path/one.py", "path/two.py"],
@@ -82,6 +82,10 @@ Only two, and both are structural rather than stylistic:
 
 - An epic cannot have a parent.
 - A task cannot be its own parent.
+
+Any other task may be a parent. Nesting a task under the one it is a breakdown
+of is expected, not merely tolerated — there is no rule about which task may
+parent which.
 
 A refusal returns `{"error": ..., "rule": ...}`. The `rule` field names which
 rule fired, so a caller can react to the kind of refusal without matching on

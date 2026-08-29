@@ -19,10 +19,11 @@ A task is a typed object. There are no required sections, no `Type:` line, and n
 ```
 epic
 └── task
+    └── task        (a task broken into subtasks)
 ```
 
 - **epic** (`epic=True`) — groups related work. Cannot have a parent.
-- **task** (`epic=False`, the default) — does the work. May have an epic parent, or none.
+- **task** (`epic=False`, the default) — does the work. Its parent is usually an epic, but may be any task it is a breakdown of — or none.
 
 That is the whole hierarchy. `epic` is one boolean on the task, not a `type` enum — there is no story, bug, or subtask, and no matrix governing what may parent what. A task under a task is allowed; forbidding it would buy nothing an epic cannot express.
 
@@ -35,7 +36,7 @@ tasks__log_skill_invocation(skill="task-create/create")
 tasks__create(
     title="Short, specific, and readable in a list",
     epic=False,                       # True groups other tasks; default False
-    parent="<epic id>",               # optional; never for an epic
+    parent="<parent id>",             # optional; an epic or a task this breaks down; omit for an epic
     motivation="Why this is worth doing, and what breaks without it.",
     resolution=["first step", "second step"],
     files=["path/one.py", "path/two.py"],

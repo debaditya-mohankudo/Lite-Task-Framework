@@ -11,12 +11,13 @@ create ──▶ groom ──▶ implement ──▶ finish ──▶ introspect
 A task carries one `epic` boolean:
 
 - **epic (`epic=True`)** — groups related work. Has no parent.
-- **task (`epic=False`, the default)** — does the work. May have an epic
-  parent, or none.
+- **task (`epic=False`, the default)** — does the work. Its parent is
+  usually an epic, but may be any task it is a breakdown of — or none.
 
 That is the entire hierarchy. There is no story, bug, or subtask, no `type`
-enum to get wrong, and no matrix governing what may parent what. If you want a
-bug distinguished from a feature, use a tag.
+enum to get wrong, and no matrix governing what may parent what — only an epic
+is barred from having a parent. If you want a bug distinguished from a
+feature, use a tag.
 
 ## Statuses
 
@@ -36,7 +37,7 @@ an already-finished task succeeds rather than erroring.
 
 ```
 tasks__create(title=..., epic=True, motivation=...)        # if grouping
-tasks__create(title=..., parent=<epic>, motivation=..., resolution=[...])
+tasks__create(title=..., parent=<parent>, motivation=..., resolution=[...])
 tasks__set_active(task_id)
 tasks__context(task_id)      # ← you must call this; nothing is injected
 ```
