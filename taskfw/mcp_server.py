@@ -28,6 +28,7 @@ from taskfw.db.connect import connect
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
 from taskfw.risk import coerce, normalise_text
+from taskfw.scope import derive as derive_scope
 from taskfw.task import ResolutionItem, Task, new_id
 from taskfw.store import TaskStore
 
@@ -95,7 +96,16 @@ def log_conn():
 
 
 def _scope() -> str:
-    """Active-task scope. Per-workspace when there is one, else global."""
+    """Active-task scope. Per-workspace when there is one, else global.
+
+    NOT the same thing as `Task.scope`, and deliberately still a raw path.
+    This keys an in-memory pointer at "which task am I working on right now",
+    which is ephemeral and per-*directory*: two worktrees of one repo are two
+    places someone can be working, and each deserves its own active task.
+    `derive_scope()` would collapse them onto one, which is the right answer
+    for "which project owns this task" and the wrong one for "which task is
+    open in this window". Two different questions, so two different functions.
+    """
     return os.environ.get("TASKFW_SCOPE") or os.getcwd()
 
 
@@ -210,7 +220,11 @@ def _loop_debt_hook(result: dict[str, Any]) -> None:
     task = store().get(result.get("active", ""))
     if task is None:
         return
-    debt = loop_debt(store(), limit=_LOOP_DEBT_LIMIT)
+    # Scoped to the project being worked in. This nudge fires on every
+    # tasks__set_active, so an unscoped count meant a debt figure driven by
+    # another repo's tasks could interrupt work here with no way to tell —
+    # the accepted risk recorded on concept:grooming-accuracy-aggregate.
+    debt = loop_debt(store(), limit=_LOOP_DEBT_LIMIT, scope=derive_scope())
     dispatcher.apply_nudge(
         result, "loop_debt_nudge",
         dispatcher.loop_debt_nudge(debt["skipped_introspection"], debt["tasks_examined"]),
@@ -262,7 +276,7 @@ def tasks__context(task_id: str = "", verbosity: str = "full") -> dict[str, Any]
 
 
 @_tool()
-def tasks__grooming_accuracy(limit: int = 25) -> dict[str, Any]:
+def tasks__grooming_accuracy(limit: int = 25, scope: str = "") -> dict[str, Any]:
     """How well grooming has been predicting, across recent finished tasks.
 
     The only tool that reads across tasks rather than into one. Grades live
@@ -273,7 +287,12 @@ def tasks__grooming_accuracy(limit: int = 25) -> dict[str, Any]:
     Tallies are recomputed from the per-risk grades, never read from an
     introspection report's self-reported count.
     """
-    return grooming_accuracy(store(), limit=limit)
+    # Global by default: the aggregate is a deliberate, occasional read, and
+    # a cross-project pattern in it is a real finding rather than noise. Pass
+    # scope="." (or any path) to narrow to one project. Either way the result
+    # names the scope it counted, so the answer is never ambiguous.
+    return grooming_accuracy(store(), limit=limit,
+                             scope=derive_scope(scope) if scope else None)
 
 
 @_tool()
@@ -407,6 +426,10 @@ def tasks__create(
         title=title, epic=epic, parent=parent or None, motivation=motivation,
         resolution=[ResolutionItem(t) for t in (resolution or [])],
         files=files or [], tags=tags or [], notes=notes,
+        # Recorded at creation, when the workspace is a fact in hand, and
+        # never derived again afterwards — a task does not change project
+        # because someone later read it from somewhere else.
+        scope=derive_scope(),
     )
     parent_task = store().get(task.parent) if task.parent else None
     if task.parent and parent_task is None:

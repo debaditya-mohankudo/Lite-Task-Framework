@@ -63,6 +63,13 @@ class Task:
     grooming: dict = field(default_factory=dict)
     #: Introspection reports, appended — history is kept here, unlike grooming.
     introspection: list[dict] = field(default_factory=list)
+    #: Which project this task belongs to — see taskfw.scope for the one
+    #: derivation and why it is a git origin rather than a path. Empty means
+    #: unscoped, which is what every task written before this field existed
+    #: reads as. Empty is never filled in retroactively: a scope inferred
+    #: later from prose is reconstructed, not recorded, and the framework
+    #: treats those as different kinds of fact.
+    scope: str = ""
     created_at: str = field(default_factory=utcnow)
     updated_at: str = field(default_factory=utcnow)
 
@@ -111,7 +118,16 @@ class Task:
         return sum(1 for r in self.resolution if r.done), len(self.resolution)
 
     def search_text(self) -> str:
-        """Flattened text for the full-text index."""
+        """Flattened text for the full-text index.
+
+        `scope` is deliberately absent. It is a filter, not vocabulary — and
+        the specific harm is already observable: 34 task bodies name a
+        workspace path in prose, so one task's path already matches another's
+        through this index. Indexing the scalar too would formalise that
+        accident, letting two unrelated projects rank as neighbours *because*
+        they were correctly identified as different. Scope narrows results in
+        the WHERE clause; it must never widen them in the MATCH.
+        """
         parts = [self.title, self.motivation, self.notes, " ".join(self.tags), " ".join(self.files)]
         parts += [r.text for r in self.resolution]
         return "\n".join(p for p in parts if p)

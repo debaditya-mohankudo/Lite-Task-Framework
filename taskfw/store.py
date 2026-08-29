@@ -16,6 +16,7 @@ from pathlib import Path
 
 from taskfw.db.connect import connect, transaction
 from taskfw.log import get_logger
+from taskfw.scope import for_repo as _scope_for_repo
 from taskfw.task import Task, utcnow
 
 log = get_logger(__name__)
@@ -65,13 +66,15 @@ class TaskStore:
             log.debug("save task=%s UPDATE status=%s", task.id, task.status)
         with transaction(self.conn):
             self.conn.execute(
-                """INSERT INTO tasks (id, epic, status, parent, title, data, created_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?)
+                """INSERT INTO tasks (id, epic, status, parent, title, data, scope,
+                                      created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(id) DO UPDATE SET
                      epic=excluded.epic, status=excluded.status, parent=excluded.parent,
-                     title=excluded.title, data=excluded.data, updated_at=excluded.updated_at""",
+                     title=excluded.title, data=excluded.data, scope=excluded.scope,
+                     updated_at=excluded.updated_at""",
                 (task.id, int(task.epic), task.status, task.parent, task.title,
-                 task.to_json(), task.created_at, task.updated_at),
+                 task.to_json(), task.scope, task.created_at, task.updated_at),
             )
             if self.fts:
                 self.conn.execute("DELETE FROM tasks_fts WHERE id=?", (task.id,))
@@ -90,8 +93,20 @@ class TaskStore:
         status: str | tuple[str, ...] | None = ("open", "blocked"),
         epic: bool | None = None,
         parent: str | None = None,
+        scope: str | None = None,
         limit: int = 200,
     ) -> list[Task]:
+        """Tasks matching every filter given. None means "do not filter on this".
+
+        `scope` narrows to one project (taskfw/scope.py). Note that it is an
+        exact match and therefore EXCLUDES unscoped rows — every task written
+        before the column existed. That is the honest behaviour rather than a
+        convenient one: silently folding unscoped rows into whichever project
+        happened to ask would invent a scope for them, which is the one thing
+        this field is not allowed to do. Callers that report counts must say
+        how many rows the filter excluded (see accuracy.loop_debt), so a
+        narrowed answer can never be mistaken for a complete one.
+        """
         where, params = [], []
         if status:
             statuses = (status,) if isinstance(status, str) else tuple(status)
@@ -103,6 +118,9 @@ class TaskStore:
         if parent is not None:
             where.append("parent=?")
             params.append(parent)
+        if scope is not None:
+            where.append("scope=?")
+            params.append(scope)
         sql = "SELECT data FROM tasks"
         if where:
             sql += " WHERE " + " AND ".join(where)
@@ -227,14 +245,24 @@ class TaskStore:
     # -- commits ------------------------------------------------------------
 
     def add_commit(self, task_id: str, sha: str, repo: str = "") -> bool:
-        """Record a commit against a task. Idempotent via UNIQUE(task_id, sha)."""
+        """Record a commit against a task. Idempotent via UNIQUE(task_id, sha).
+
+        `repo` is normalised through `scope.for_repo` rather than stored as
+        given. This column is where free-text project identity was already
+        observed fragmenting — five spellings of two projects — so the same
+        derivation that produces `Task.scope` produces this, and the two can
+        be compared. Rows written before this are left exactly as they are:
+        rewriting them would mean inferring a scope from a stale string,
+        which is reconstruction, not a record.
+        """
+        scope_value = _scope_for_repo(repo)
         with transaction(self.conn):
             cur = self.conn.execute(
                 "INSERT OR IGNORE INTO task_commits (task_id, sha, repo) VALUES (?,?,?)",
-                (task_id, sha, repo),
+                (task_id, sha, scope_value),
             )
         recorded = cur.rowcount > 0
-        log.info("commit task=%s sha=%s repo=%s %s", task_id, sha[:12], repo or "-",
+        log.info("commit task=%s sha=%s repo=%s %s", task_id, sha[:12], scope_value or "-",
                  "recorded" if recorded else "already recorded")
         return recorded
 

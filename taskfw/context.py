@@ -192,6 +192,28 @@ def _passes_floor(query_terms: str, candidate_text: str) -> bool:
     return bool(q & _term_set(candidate_text))
 
 
+def _same_project(a: str, b: str) -> bool:
+    """Whether two scopes may be treated as belonging together.
+
+    The second filter on both approximate sections, and a companion to
+    `_passes_floor` rather than a replacement for it: the floor asks whether a
+    candidate is *about* the same thing, this asks whether it is *from* the
+    same place. Word overlap was doing both jobs and could only ever do the
+    first — a tag like `code-review` supplies two common words, so a Java QA
+    task and a Python framework task clear the floor honestly and are still
+    not neighbours.
+
+    UNSCOPED IS COMPATIBLE WITH EVERYTHING, and that asymmetry is the whole
+    design. Every task written before `Task.scope` existed reads as `''`.
+    Treating those as "belongs to no project" would delete them from every
+    bundle at once — a silent, retroactive loss of the entire existing
+    corpus, to enforce a fact that was never recorded about them. Treating
+    them as "project unknown" keeps them exactly as visible as they are
+    today, which is what "old tasks keep working unchanged" has to mean.
+    """
+    return not a or not b or a == b
+
+
 def _task_summary(task: Task) -> dict:
     done, total = task.progress
     return {
@@ -346,7 +368,10 @@ def _related_candidates(store: TaskStore, task: Task) -> list[dict]:
     # work instead of requiring an exact phrase.
     hits = store.search(query, limit=MAX_RELATED * 4 + 1)
     candidates = [t for t in hits if t.id != task.id]
-    passing = [t for t in candidates if _passes_floor(query, _query_terms(t))]
+    passing = [
+        t for t in candidates
+        if _same_project(task.scope, t.scope) and _passes_floor(query, _query_terms(t))
+    ]
     return [_task_summary(t) for t in passing[:MAX_RELATED]]
 
 
@@ -400,7 +425,50 @@ def _lessons_for(store: TaskStore, task: Task,
     store_ = memory if memory is not None else MemoryStore(conn=store.conn)
     candidates = store_.recall(query, limit=MAX_LESSONS * 4, count_hit=False)
     passing = [m for m in candidates if _passes_floor(query, f"{m['slug']} {m['text']}")]
-    return passing[:MAX_LESSONS]
+    return _mark_cross_project(store, task, passing[:MAX_LESSONS])
+
+
+def _mark_cross_project(store: TaskStore, task: Task, lessons: list[dict]) -> list[dict]:
+    """Flag lessons learned entirely in other projects. Marks, never filters.
+
+    THIS IS WHERE `related` AND `lessons` DIVERGE, after being treated as one
+    pair since task:1f1e48e2. A related task from another repo is a bad
+    pointer — following it costs a read and teaches nothing, so it is
+    excluded outright. A lesson from another repo may be exactly the point:
+    loop memory exists to generalise ACROSS tasks, and a constraint learned
+    while writing a hook can be the one thing a framework task needs. Hiding
+    it would defeat the subsystem to enforce a boundary it was built to cross.
+
+    So the scope becomes a label the agent can weigh, not a gate. A lesson
+    carries `cross_project: True` only when it has linked tasks and none of
+    them shares this task's scope — silence means "same project, or not
+    known", never "checked and cleared", which is why the key is present
+    only when it is true.
+
+    One query for the whole batch, not one per lesson: this runs on the
+    bundle assembly path, which is a read the agent pays for on every
+    tasks__context call.
+    """
+    slugs = [m["slug"] for m in lessons if m.get("slug")]
+    if not slugs or not task.scope:
+        return lessons
+    placeholders = ",".join("?" * len(slugs))
+    rows = store.conn.execute(
+        f"""SELECT l.slug AS slug, t.scope AS scope
+            FROM memory_links l JOIN tasks t ON t.id = l.task_id
+            WHERE l.slug IN ({placeholders})""",
+        slugs,
+    ).fetchall()
+    scopes: dict[str, set[str]] = {}
+    for row in rows:
+        scopes.setdefault(row["slug"], set()).add(row["scope"] or "")
+    out = []
+    for lesson in lessons:
+        known = scopes.get(lesson.get("slug"), set())
+        if known and not any(_same_project(task.scope, s) for s in known):
+            lesson = {**lesson, "cross_project": True}
+        out.append(lesson)
+    return out
 
 
 def _size(bundle: dict) -> int:

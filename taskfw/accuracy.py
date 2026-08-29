@@ -164,17 +164,13 @@ def _task_grading(task: Task) -> tuple[list[dict], int, bool]:
     return risks, ungraded, any_graded
 
 
-def loop_debt(store: TaskStore, limit: int = 10) -> dict[str, int]:
-    """A cheap window onto the same debt `grooming_accuracy` reports in full.
+def _debt_counts(tasks: list[Task]) -> tuple[int, int]:
+    """(tasks that graded nothing, total ungraded risks) over `tasks`.
 
-    task:07f9270c — surfaced from `tasks__set_active`, which is called far
-    more often per session than anyone runs `tasks__grooming_accuracy`
-    voluntarily, so this walks a smaller, more recent window (`limit=10`
-    against the aggregate's default 25) rather than the full aggregate.
-    Uses `_task_grading`, the same classification `grooming_accuracy` uses,
-    so the two can never disagree about what counts as skipped or ungraded.
+    Extracted so the scoped window and the unscoped remainder are counted by
+    literally the same code — a "what you are not being shown" figure computed
+    by a second, slightly different rule would be worse than not showing it.
     """
-    tasks = store.list(status=("done",), limit=limit)
     skipped = 0
     ungraded = 0
     for task in tasks:
@@ -184,11 +180,52 @@ def loop_debt(store: TaskStore, limit: int = 10) -> dict[str, int]:
         ungraded += task_ungraded
         if not any_graded:
             skipped += 1
-    return {
+    return skipped, ungraded
+
+
+def loop_debt(store: TaskStore, limit: int = 10,
+              scope: str | None = None) -> dict[str, Any]:
+    """A cheap window onto the same debt `grooming_accuracy` reports in full.
+
+    task:07f9270c — surfaced from `tasks__set_active`, which is called far
+    more often per session than anyone runs `tasks__grooming_accuracy`
+    voluntarily, so this walks a smaller, more recent window (`limit=10`
+    against the aggregate's default 25) rather than the full aggregate.
+    Uses `_task_grading`, the same classification `grooming_accuracy` uses,
+    so the two can never disagree about what counts as skipped or ungraded.
+
+    THE COUNT NOW SAYS WHAT IT COUNTED. concept:grooming-accuracy-aggregate
+    recorded, as an accepted risk, that this number was computed over the
+    whole shared store — so a debt figure shown while working in one repo
+    could be driven entirely by unrelated tasks in another, and nothing in the
+    output revealed that. `scope` narrows the window to one project, and
+    `scope` is echoed in the result either way: a caller can always tell
+    whether it is reading a project figure or a global one, which is the part
+    that was actually missing.
+
+    A scoped call additionally reports `unscoped_not_counted`. Every task
+    written before `Task.scope` existed is unscoped and therefore outside any
+    project window, so a scoped count is genuinely smaller than the truth.
+    Reporting the remainder is what keeps that a narrowing rather than a
+    disappearance — an omission must not look like an absence.
+    """
+    tasks = store.list(status=("done",), scope=scope, limit=limit)
+    skipped, ungraded = _debt_counts(tasks)
+    result: dict[str, Any] = {
         "tasks_examined": len(tasks),
         "skipped_introspection": skipped,
         "ungraded_risks": ungraded,
+        "scope": scope or "global",
     }
+    if scope:
+        unscoped = store.list(status=("done",), scope="", limit=limit)
+        un_skipped, un_ungraded = _debt_counts(unscoped)
+        if un_skipped or un_ungraded:
+            result["unscoped_not_counted"] = {
+                "skipped_introspection": un_skipped,
+                "ungraded_risks": un_ungraded,
+            }
+    return result
 
 
 def _reported_totals(task: Task) -> dict[str, int]:
@@ -218,15 +255,21 @@ def _missed(task: Task) -> int:
     return sum(len(r.get("missed_surprises") or []) for r in task.introspection or [])
 
 
-def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
+def grooming_accuracy(store: TaskStore, limit: int = 25,
+                      scope: str | None = None) -> dict[str, Any]:
     """Aggregate grooming grades over the most recently updated finished tasks.
 
     Returns raw tallies, recurring risks, tasks whose introspection was skipped,
     self-report disagreements, and interpretive signals. Everything except
     `signals` is a count or a list of ids — a caller that distrusts the
     interpretation can ignore it and keep the evidence.
+
+    `scope` narrows to one project and is echoed in the result; omitted, the
+    aggregate stays global and says so. See `loop_debt` for why the echo is
+    not optional. Note that a scoped aggregate excludes every task written
+    before `Task.scope` existed, since those carry no scope to match.
     """
-    tasks = store.list(status=("done",), limit=limit)
+    tasks = store.list(status=("done",), scope=scope, limit=limit)
 
     tallies: Counter[str] = Counter()
     unrecognised: Counter[str] = Counter()
@@ -285,6 +328,10 @@ def grooming_accuracy(store: TaskStore, limit: int = 25) -> dict[str, Any]:
     result = {
         "tasks_examined": len(tasks),
         "tasks_with_grooming": with_grooming,
+        # Always present, whichever way it was called — see loop_debt. A
+        # tally that does not say what it ranged over is a tally a reader
+        # will assume is complete.
+        "scope": scope or "global",
         "risks": {
             "total": risks_seen,
             **{g: tallies.get(g, 0) for g in GROOMING_GRADES},

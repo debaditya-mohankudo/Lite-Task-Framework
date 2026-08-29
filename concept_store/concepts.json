@@ -69,7 +69,7 @@
         "loop_debt_nudge and task_debt_nudge surface at tasks__set_active, not inside tasks__context's bundle and not on tasks__create — set_active is the earlier of the two documented lifecycle entry points, and tasks__context is already budget-constrained around per-task relevance.",
         "Both loop_debt_nudge and task_debt_nudge derive their counts from taskfw.accuracy._task_grading/loop_debt — the same classification tasks__grooming_accuracy itself uses — so none of the three can disagree about what counts as ungraded or skipped.",
         "loop_debt_nudge/task_debt_nudge are stateless and unthrottled — tasks__set_active is called far less often per session than every MCP tool call, so recomputing the debt on each call costs little.",
-        "loop_debt is computed over the whole shared task store, not scoped to the calling project — Task has no project/scope field, so a debt count surfaced while working in one repo can be driven by unrelated finished tasks in another (task:07f9270c's grooming, a known, accepted risk).",
+        "loop_debt is scoped to the calling project (task:a5bb2f45): _loop_debt_hook passes scope.derive(), so the debt behind this nudge is this repo's, and the result names the scope it counted. A scoped count excludes tasks written before Task.scope existed, which carry no scope to match, so it also reports unscoped_not_counted rather than letting that narrowing pass as a complete answer. Supersedes the earlier accepted risk that the count was global and said nothing about it.",
         "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires AFTER tasks__finish when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called (task:a6fb9f45 sat open at 4/4 until an unrelated review pass caught it).",
         "stale_memory_nudge never calls supersede()/forget() itself — advisory only, consistent with task-introspection's 'never unilaterally delete stale memories' rule.",
         "finish_reminder_nudge, stale_memory_nudge, and ungroomed_progress_nudge are all stateless by design: each checks current state on every qualifying call rather than firing once and remembering it fired, because check_item/update/link are infrequent enough that re-firing costs little.",
@@ -77,7 +77,7 @@
         "Every nudge here rides on the response of the taskfw call it comments on — none is wired onto a host hook or fires on calls taskfw does not own (task:00d9483f removed the one exception, drift_reflection_nudge, and its PostToolUse trigger).",
         "nudges.py imports is_groomed, is_implemented, and is_introspected from phase.py (one-directional, task:5a5fde0d) and imports nothing from chassis.py — every nudge here is a plain function returning str | None, wiring onto tool_called/apply_nudge happens only at the mcp_server.py call site, not inside this module."
       ],
-      "last_validated": "2026-08-23T13:13:11.419146+00:00",
+      "last_validated": "2026-08-29T09:46:04.980603+00:00",
       "module": "taskfw/dispatcher/nudges.py",
       "name": "advisory-nudge-policies",
       "related": [
@@ -1043,6 +1043,72 @@
         "taskstore-data-access-only"
       ]
     },
+    "scope-derivation": {
+      "confidence": 0.9,
+      "contracts": [
+        "normalise_remote(url) -> 'git:host/path' | None — pure, git-free, so the rule that decides whether two clones agree is testable without a repository. SSH and HTTPS spellings of one remote must produce the identical string.",
+        "derive(cwd=None) -> str — never raises, never returns empty. Prefers the git origin, falls back to `path:<resolved abs>`. TASKFW_SCOPE selects the directory asked about, not the answer.",
+        "for_repo(repo='') -> str — the sole writer of task_commits.repo. Empty derives cwd; a real directory derives that directory; anything else is kept verbatim under `hint:`.",
+        "reset_cache() — clears the per-directory memoisation; for tests that build repos mid-process.",
+        "Consumed by Task.scope (set once at tasks__create), TaskStore.add_commit, context._same_project, and accuracy.loop_debt/grooming_accuracy."
+      ],
+      "created_at": "2026-08-29T09:45:25.483284+00:00",
+      "description": "The single derivation of which project a record belongs to, and the only writer of that vocabulary. Produces a scheme-prefixed string from a working directory: `git:<host>/<path>` from the git origin, `path:<abs>` when there is no origin, `hint:<raw>` when a caller supplied a repo string that could not be resolved to a directory. Exists because project identity was already being answered by hand, inconsistently — task_commits.repo held five spellings of two projects — and because a task store that is global by default (config.DB_PATH) has no other way to tell one project's tasks from another's.",
+      "evidence": [
+        "taskfw/scope.py:normalise_remote",
+        "taskfw/scope.py:derive",
+        "taskfw/scope.py:for_repo",
+        "taskfw/task.py:Task.scope",
+        "taskfw/store.py:add_commit",
+        "taskfw/context.py:_same_project"
+      ],
+      "invariants": [
+        "The scheme prefix is load-bearing, not decoration: a fallback value must never be comparable to a derived one, so `path:` and `hint:` can never equal a `git:` scope. This is the local form of the project rule that an omission must not look like an absence.",
+        "Origin is coarser than the working directory. A monorepo has one origin for many sub-projects, so two sibling projects in one repo get the same scope — a real and accepted loss, taken in exchange for worktrees and second clones of one repo correctly resolving to a single scope, which a path-based answer gets wrong.",
+        "Fails open in every failure mode (not a repo, no origin, git absent, git hung) — a scope is a filter, and a missing filter must degrade to unscoped, never block a write. Mirrors backfill.git_log's established shape.",
+        "Derivation happens once, at record-creation time. A task's scope is never recomputed on read: a task does not change project because someone later read it from elsewhere.",
+        "Memoised per resolved directory, since a repository's origin does not change within a process lifetime and both writers call it on every write."
+      ],
+      "last_validated": "2026-08-29T09:45:25.483341+00:00",
+      "module": "taskfw/scope.py",
+      "name": "scope-derivation",
+      "related": [
+        "grooming-accuracy-aggregate"
+      ]
+    },
+    "scope-tests": {
+      "confidence": 0.9,
+      "contracts": [
+        "TestNormaliseRemote — SSH, HTTPS and ssh:// spellings collapse to one value; non-remotes return None rather than a guess.",
+        "TestDerive — origin wins; two clones of one repo share a scope (the case a path-based scope gets wrong); a non-repo falls back under a distinguishable prefix; git being unusable never raises.",
+        "TestForRepo — an unresolvable hint is kept verbatim under `hint:` and can never equal a derived scope.",
+        "TestTaskField — scope round-trips, a pre-field blob loads as '', scope is absent from search_text(), and store.list(scope=...) filters exactly.",
+        "TestCommitRepoNormalisation — the fragmented spellings of one repo path collapse to a single value.",
+        "TestRelatedIsScoped — cross-project neighbours excluded, same-project kept, unscoped never dropped.",
+        "TestLessonsAreMarkedNotFiltered — a foreign lesson is still returned, carrying cross_project: True.",
+        "TestLoopDebtIsHonestAboutWhatItCounted — scope is echoed either way, and a narrowed count reports unscoped_not_counted."
+      ],
+      "created_at": "2026-08-29T09:48:06.228364+00:00",
+      "description": "Pins the three ways scope could fail silently. (1) Normalisation: two spellings of one remote must produce one string — a divergence raises nothing, it just grows a sixth convention beside the five already in task_commits.repo while every scoped read quietly returns half its rows. (2) Unscoped survival: tasks written before Task.scope existed carry '', and a filter that reads that as 'belongs to no project' rather than 'project unknown' erases the entire pre-existing corpus from related/lessons at once, with no error. (3) Honest narrowing: a scoped count is smaller than the truth, and one that does not say so reads as complete.",
+      "evidence": [
+        "tests/test_scope.py:TestNormaliseRemote",
+        "tests/test_scope.py:TestRelatedIsScoped",
+        "tests/test_scope.py:TestLessonsAreMarkedNotFiltered",
+        "tests/test_scope.py:TestLoopDebtIsHonestAboutWhatItCounted",
+        "taskfw/scope.py"
+      ],
+      "invariants": [
+        "Derivation is exercised against real `git init` repositories with real remotes, not a mocked subprocess — the normalisation rule is only worth anything if it agrees with what git actually prints. The one mocked case is the fail-open path, where the point is precisely that git is unavailable.",
+        "scope_mod.reset_cache() runs around every test (autouse): derive() memoises per resolved directory, so a repo created mid-test would otherwise inherit the answer computed before `git init` ran.",
+        "The cross-project related tests deliberately give both tasks the SAME title and tags. If they differed, the term-overlap floor could pass the test on its own and the scope filter would never be exercised — the assertion has to fail for the right reason."
+      ],
+      "last_validated": "2026-08-29T09:48:06.228414+00:00",
+      "module": "tests/test_scope.py",
+      "name": "scope-tests",
+      "related": [
+        "scope-derivation"
+      ]
+    },
     "skills-tool-reference-and-host-neutrality-tested": {
       "confidence": 0.8,
       "contracts": [],
@@ -1400,6 +1466,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-29T05:52:25.295993+00:00"
+    "updated_at": "2026-08-29T09:48:06.228459+00:00"
   }
 }

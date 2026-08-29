@@ -13,7 +13,7 @@
     "Task": {
       "bounded_context": "Task Tracking",
       "form": "record",
-      "definition": "One unit of work: id, epic flag, status, resolution (checklist), tags, notes, grooming findings, introspection reports. The single typed object the whole domain is built around. 'epic' is a plain boolean on this record (default False), not a subtype and not a term of its own -- a boolean carries everything the earlier two-value 'type' enum did, with no malformable value left to validate. Its sole effect is that an epic Task takes no parent; teams set it to mark a Task that others are grouped beneath, but that grouping is a convention, not a rule -- nothing requires a child's parent to be an epic. The parent/child hierarchy is a self-referential link from a Task to at most one parent Task, and no Task may be its own parent.",
+      "definition": "One unit of work: id, epic flag, status, resolution (checklist), tags, notes, grooming findings, introspection reports. The single typed object the whole domain is built around. 'epic' is a plain boolean on this record (default False), not a subtype and not a term of its own -- a boolean carries everything the earlier two-value 'type' enum did, with no malformable value left to validate. Its sole effect is that an epic Task takes no parent; teams set it to mark a Task that others are grouped beneath, but that grouping is a convention, not a rule -- nothing requires a child's parent to be an epic. The parent/child hierarchy is a self-referential link from a Task to at most one parent Task, and no Task may be its own parent. A Task also carries a Scope naming the project it was created under, recorded at creation and never inferred afterwards.",
       "evidence": "taskfw/task.py:Task, taskfw/lifecycle.py:check_parent",
       "lifecycle": "A Task is walked through four skills, each with one intention: task-create to open it, task-grooming to remove uncertainty before work starts, task-implementation to do the work, task-introspection to grade how well grooming predicted it and feed Loop Memory. None is mandatory, but skipping one leaves a Nudge behind.",
       "lifecycle_evidence": "skills: task-create, task-grooming, task-implementation, task-introspection"
@@ -157,78 +157,243 @@
       "evidence": "taskfw/accuracy.py:GROOMING_GRADES",
       "lifecycle": "Assigned by a single Introspection pass, after Implementation, and carried by its Risk from then on. Re-grooming the same Task keeps the verdict rather than discarding it, so a judgement Introspection has already made is never lost.",
       "lifecycle_evidence": "docs/methodology/05-introspection.md, docs/methodology/04-implementation.md"
+    },
+    "Scope": {
+      "bounded_context": "Task Tracking",
+      "form": "attribute",
+      "definition": "Which project a record belongs to: a scheme-prefixed string derived from the working directory, never typed by hand. `git:<host>/<path>` when a git origin was readable, `path:<abs>` when there was none, `hint:<raw>` when a caller supplied a repo string that could not be resolved to a directory. An attribute, not an entity -- it has no identity of its own, only equality, which is the single operation every consumer needs. The prefix is part of the value because it records HOW the project was known: a fallback must never compare equal to a derived answer, or an omission becomes indistinguishable from an absence. The empty string is a fourth, distinct case meaning 'project unknown' -- carried by every Task written before the field existed, never backfilled, and treated as compatible with every scope rather than as a project of its own.",
+      "evidence": "taskfw/scope.py:derive, taskfw/scope.py:normalise_remote, taskfw/task.py:Task",
+      "lifecycle": "Derived once, at record creation, from the workspace in hand, and never recomputed on read -- a record does not change project because someone later read it from somewhere else."
     }
   },
   "relations": [
-    {"subject": "TaskStatus", "predicate": "part-of", "object": "Task",
-     "note": "The state field on the Task record. Its closed vocabulary (TASK_STATUSES) and its legal transitions are enforced only in the lifecycle layer, so no caller can validate status differently from another."},
-    {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
-     "note": "Nested inside task.resolution. Cardinality: zero or more -- resolution defaults to an empty list and nothing enforces a minimum, matching the framework's 'nothing is required' stance."},
-    {"subject": "TaskEdge", "predicate": "relates", "object": "Task",
-     "note": "A TaskEdge only exists in relation to two Tasks; it is never addressed by an id of its own, and removing one is deliberately ungated so a legacy relation type can't get stuck. The parent/child hierarchy is deliberately NOT a TaskEdge -- it is the self-referential Task.parent field, and 'parent_of' was left out of TASK_EDGE_RELATIONS so the hierarchy has exactly one home. Its only rules: an epic Task takes no parent (lifecycle.check_parent), and no Task is its own parent (lifecycle.check_save)."},
-    {"subject": "TaskStore", "predicate": "persists", "object": "Task",
-     "note": "The Repository for the Task aggregate; persistence and validation stay separable because TaskStore enforces no rules itself."},
-    {"subject": "ActiveTaskPointer", "predicate": "references", "object": "Task",
-     "note": "Names the currently-active task_id per scope; never a property stored on Task itself."},
-    {"subject": "MemoryRecord", "predicate": "references", "object": "Task",
-     "note": "Cited to the task it was learned from -- a pointer into Task Tracking from a different bounded context, never reachable by walking Task's own fields. The citation is one MemoryRelationship row ('learned_from'); see that term for the other two."},
-    {"subject": "MemoryKind", "predicate": "part-of", "object": "MemoryRecord",
-     "note": "The kind label on the MemoryRecord. Closed vocabulary (MEMORY_KINDS) of three values, validated only in the memory record path -- the same single-enforcement-home rule TaskStatus follows."},
-    {"subject": "MemoryRelationship", "predicate": "part-of", "object": "MemoryRecord",
-     "note": "The closed label (MEMORY_RELATIONSHIPS, three values) on each MemoryRecord-to-Task link; those links are what 'MemoryRecord references Task' is built from, and the counts of the 'confirmed_by' / 'contradicted_by' links are what MemoryRecord's derived 'standing' is computed from on every read. Validated only in the memory link path."},
-    {"subject": "Concept", "predicate": "describes", "object": "SourceModule",
-     "note": "SourceModule is deliberately NOT a defined term -- it is a placeholder for 'some file in the repo', declared as the one allowed non-term relation object (NON_TERM_OBJECTS in tests/test_ontology.py) rather than given a definition, because a source file is not a domain noun. Keyed by module path, not by task_id -- Architectural Knowledge shares no term with Task Tracking or Loop Memory; the only connection between the three bounded contexts is this ontology file itself."},
-    {"subject": "SkillInvocation", "predicate": "references", "object": "Task",
-     "note": "Carries an optional reference, but it is unvalidated and one-directional -- a Task has no field or list that points back to the skills invoked against it."},
-    {"subject": "Methodology", "predicate": "describes", "object": "Task",
-     "note": "One Task is walked through the loop; the Methodology's only footprint is what each pass writes onto the Task (grooming, introspection, decisions, commits) and into Loop Memory (lessons). 'describes' rather than 'part-of' because the practice is the larger thing and the Task is what it operates on -- the Task exists without ever being groomed, the loop does not exist without a Task to run against."},
-    {"subject": "Grooming", "predicate": "part-of", "object": "Methodology",
-     "note": "The falsifiable-claims half of the one feedback edge that separates this from a paperwork ritual (CLAUDE.md: 'Grooming makes falsifiable claims. Introspection grades them.'). Grooming is also 'part-of Task' -- the pass belongs to the Methodology, its recorded output belongs to the Task."},
-    {"subject": "Introspection", "predicate": "part-of", "object": "Methodology",
-     "note": "The grading half of the feedback edge, and the step CLAUDE.md names as the first to rot because skipping it always feels like progress. Like Grooming it is also 'part-of Task': the pass is the Methodology's, the appended report series is the Task's."},
-    {"subject": "Implementation", "predicate": "part-of", "object": "Methodology",
-     "note": "The pass between Grooming and Introspection -- create, groom, implement, introspect -- and the only one that changes the codebase. It owns no store of its own: its outputs are Decisions, Commits, and checked ResolutionItems on the Task, exactly as Grooming's output is the Task's grooming and Introspection's is the report series. Named as its own term so GroomingGrade can be defined as a verdict on what this pass did, rather than leaving 'implement' an unnamed step inside Methodology's definition."},
-    {"subject": "Introspection", "predicate": "references", "object": "Implementation",
-     "note": "Introspection grades every Risk against what Implementation actually did; a GroomingGrade is that comparison for one prediction. Before Implementation was a term the feedback edge had a verdict (Introspection), a thing predicted (Risk) and an aggregate (GroomingAccuracy), but no name for the reality the prediction was about."},
-    {"subject": "Grooming", "predicate": "part-of", "object": "Task",
-     "note": "Recorded as part of the Task and replaced wholesale each groom pass -- except its Risks, which merge by id (see 'Risk part-of Grooming')."},
-    {"subject": "Risk", "predicate": "part-of", "object": "Grooming",
-     "note": "The one exception to Grooming's wholesale-replace rule: risks merge by id across re-groom passes so a graded verdict is never silently lost, while every other Grooming field still replaces in place."},
-    {"subject": "Introspection", "predicate": "part-of", "object": "Task",
-     "note": "Recorded as part of the Task; an appended series rather than Grooming's replace-in-place snapshot, reflecting that each pass is a distinct piece of evidence."},
-    {"subject": "MemoryRecord", "predicate": "references", "object": "Introspection",
-     "note": "Introspection is where a lesson is surfaced for possible promotion into Loop Memory -- a report carrying a lesson with no cited memory triggers a Nudge, so the omission stays visible instead of silent."},
-    {"subject": "TaskContext", "predicate": "describes", "object": "Task",
-     "note": "One bundle is assembled per task_id on demand and has exactly one Task as its subject -- 'describes' rather than 'references' because that Task is what the whole bundle is about (the neighbour Tasks it also embeds are the separate 'references Task' edge)."},
-    {"subject": "TaskContext", "predicate": "references", "object": "TaskEdge",
-     "note": "The bundle's graph section pulls a Task's edges fresh on every call, capped per direction -- edges are read into the bundle, never duplicated into it."},
-    {"subject": "TaskContext", "predicate": "references", "object": "MemoryRecord",
-     "note": "The bundle's lessons section is the guaranteed read path back into Loop Memory (see MemoryRecord's Introspection link for the write side) -- without it, a lesson only reached an agent if it happened to look for it directly. Like related, this section is an approximate (bm25) match and among the first trimmed when the bundle is over budget, with any drop reported in `truncated` -- so the exact/approximate split is visible from both approximate sections' relations, not only from 'references Task'."},
-    {"subject": "Nudge", "predicate": "references", "object": "Task",
-     "note": "A nudge speaks only about the one task or memory the triggering call already touched, never some other record the caller didn't ask about -- it rides on a response, it does not fetch or add a fact of its own."},
-    {"subject": "Nudge", "predicate": "references", "object": "Introspection",
-     "note": "One nudge checks whether a just-recorded Introspection report's lessons have been promoted to a MemoryRecord yet, without itself writing to Loop Memory."},
-    {"subject": "Commit", "predicate": "relates", "object": "Task",
-     "note": "A Commit only exists in relation to the task it was recorded against, keyed by (task_id, sha) with an idempotent insert -- same shape as TaskEdge, never addressed by an id of its own."},
-    {"subject": "Decision", "predicate": "relates", "object": "Task",
-     "note": "Logged via the same generic Event path status changes use, distinguished only by its 'decision' kind label."},
-    {"subject": "Decision", "predicate": "is-a", "object": "Event",
-     "note": "A Decision is an Event with its kind label set to 'decision'; a status change is the same Event mechanism with a different label. The Decision term and this relation describe that entry from two angles: what a decision-kind Event is for (the Decision term) and that it is one value of a closed kind set on a uniform log (this relation)."},
-    {"subject": "Event", "predicate": "relates", "object": "Task",
-     "note": "An Event only exists on one Task's append-only log; it is never addressed by an id of its own, only read back through the Task -- the same shape as TaskEdge and Commit. The closed kind vocabulary is what tells a Decision-kind Event from a status-change Event."},
-    {"subject": "TaskContext", "predicate": "references", "object": "Commit",
-     "note": "The bundle's commits section pulls a Task's recorded commits fresh on every call, matching TaskContext's own definition -- without this relation the definition named a section the ontology did not otherwise back with a term."},
-    {"subject": "TaskContext", "predicate": "references", "object": "Decision",
-     "note": "The bundle's decisions section pulls a Task's decision-kind events fresh on every call, matching TaskContext's own definition -- without this relation the definition named a section the ontology did not otherwise back with a term."},
-    {"subject": "TaskContext", "predicate": "references", "object": "Task",
-     "note": "Distinct from 'describes': the bundle also embeds full Task summaries beyond the one it was built for, by two unlike paths. Parent and children arrive in the graph section as an exact deterministic traversal (store.get(parent), children WHERE parent=?) -- a wrong answer there would be misleading, not merely unhelpful. Full-text neighbours arrive in the related section as an approximate bm25 match, and related is the first section trimmed when the bundle is over budget. Neither path ever returns the same Task the bundle describes."},
-    {"subject": "GroomingAccuracy", "predicate": "references", "object": "Risk",
-     "note": "The per-Risk 'graded' verdicts across finished tasks are the sole source; the grooming_accuracy tally in an introspection report is recomputed from them every call and only cross-checked, never read back as truth. Same derive-don't-store reason as progress-from-checklist and standing-from-links -- a stored aggregate can drift from its own evidence."},
-    {"subject": "GroomingAccuracy", "predicate": "part-of", "object": "Methodology",
-     "note": "The aggregate form of the one feedback edge (CLAUDE.md: 'Grooming makes falsifiable claims. Introspection grades them.'). Risk carries that edge for a single task; GroomingAccuracy closes it for the loop itself -- repeated 'wrong' grades mean grooming asks the wrong questions, repeated 'missed' grades mean it asks too few, and both are signals to change grooming rather than note the miss."},
-    {"subject": "GroomingGrade", "predicate": "part-of", "object": "Risk",
-     "note": "The verdict label on a Risk's 'graded' field. Closed vocabulary (GROOMING_GRADES) of three values, absent until Introspection assigns it and merged forward by risk id across re-grooming passes so a graded verdict is never silently lost."},
-    {"subject": "GroomingAccuracy", "predicate": "references", "object": "GroomingGrade",
-     "note": "GroomingGrade is the unit GroomingAccuracy counts: its tallies, predictive_value, and the 'wrong'-share signal are all counts of GroomingGrade values across finished Tasks, where the sibling 'references Risk' edge is about which Risks it reads rather than what it tallies. A value outside GROOMING_GRADES is bucketed as 'unrecognised' and still reported, never dropped, so the grade count can never silently disagree with the risks seen."}
+    {
+      "subject": "TaskStatus",
+      "predicate": "part-of",
+      "object": "Task",
+      "note": "The state field on the Task record. Its closed vocabulary (TASK_STATUSES) and its legal transitions are enforced only in the lifecycle layer, so no caller can validate status differently from another."
+    },
+    {
+      "subject": "ResolutionItem",
+      "predicate": "part-of",
+      "object": "Task",
+      "note": "Nested inside task.resolution. Cardinality: zero or more -- resolution defaults to an empty list and nothing enforces a minimum, matching the framework's 'nothing is required' stance."
+    },
+    {
+      "subject": "TaskEdge",
+      "predicate": "relates",
+      "object": "Task",
+      "note": "A TaskEdge only exists in relation to two Tasks; it is never addressed by an id of its own, and removing one is deliberately ungated so a legacy relation type can't get stuck. The parent/child hierarchy is deliberately NOT a TaskEdge -- it is the self-referential Task.parent field, and 'parent_of' was left out of TASK_EDGE_RELATIONS so the hierarchy has exactly one home. Its only rules: an epic Task takes no parent (lifecycle.check_parent), and no Task is its own parent (lifecycle.check_save)."
+    },
+    {
+      "subject": "TaskStore",
+      "predicate": "persists",
+      "object": "Task",
+      "note": "The Repository for the Task aggregate; persistence and validation stay separable because TaskStore enforces no rules itself."
+    },
+    {
+      "subject": "ActiveTaskPointer",
+      "predicate": "references",
+      "object": "Task",
+      "note": "Names the currently-active task_id per scope; never a property stored on Task itself."
+    },
+    {
+      "subject": "MemoryRecord",
+      "predicate": "references",
+      "object": "Task",
+      "note": "Cited to the task it was learned from -- a pointer into Task Tracking from a different bounded context, never reachable by walking Task's own fields. The citation is one MemoryRelationship row ('learned_from'); see that term for the other two."
+    },
+    {
+      "subject": "MemoryKind",
+      "predicate": "part-of",
+      "object": "MemoryRecord",
+      "note": "The kind label on the MemoryRecord. Closed vocabulary (MEMORY_KINDS) of three values, validated only in the memory record path -- the same single-enforcement-home rule TaskStatus follows."
+    },
+    {
+      "subject": "MemoryRelationship",
+      "predicate": "part-of",
+      "object": "MemoryRecord",
+      "note": "The closed label (MEMORY_RELATIONSHIPS, three values) on each MemoryRecord-to-Task link; those links are what 'MemoryRecord references Task' is built from, and the counts of the 'confirmed_by' / 'contradicted_by' links are what MemoryRecord's derived 'standing' is computed from on every read. Validated only in the memory link path."
+    },
+    {
+      "subject": "Concept",
+      "predicate": "describes",
+      "object": "SourceModule",
+      "note": "SourceModule is deliberately NOT a defined term -- it is a placeholder for 'some file in the repo', declared as the one allowed non-term relation object (NON_TERM_OBJECTS in tests/test_ontology.py) rather than given a definition, because a source file is not a domain noun. Keyed by module path, not by task_id -- Architectural Knowledge shares no term with Task Tracking or Loop Memory; the only connection between the three bounded contexts is this ontology file itself."
+    },
+    {
+      "subject": "SkillInvocation",
+      "predicate": "references",
+      "object": "Task",
+      "note": "Carries an optional reference, but it is unvalidated and one-directional -- a Task has no field or list that points back to the skills invoked against it."
+    },
+    {
+      "subject": "Methodology",
+      "predicate": "describes",
+      "object": "Task",
+      "note": "One Task is walked through the loop; the Methodology's only footprint is what each pass writes onto the Task (grooming, introspection, decisions, commits) and into Loop Memory (lessons). 'describes' rather than 'part-of' because the practice is the larger thing and the Task is what it operates on -- the Task exists without ever being groomed, the loop does not exist without a Task to run against."
+    },
+    {
+      "subject": "Grooming",
+      "predicate": "part-of",
+      "object": "Methodology",
+      "note": "The falsifiable-claims half of the one feedback edge that separates this from a paperwork ritual (CLAUDE.md: 'Grooming makes falsifiable claims. Introspection grades them.'). Grooming is also 'part-of Task' -- the pass belongs to the Methodology, its recorded output belongs to the Task."
+    },
+    {
+      "subject": "Introspection",
+      "predicate": "part-of",
+      "object": "Methodology",
+      "note": "The grading half of the feedback edge, and the step CLAUDE.md names as the first to rot because skipping it always feels like progress. Like Grooming it is also 'part-of Task': the pass is the Methodology's, the appended report series is the Task's."
+    },
+    {
+      "subject": "Implementation",
+      "predicate": "part-of",
+      "object": "Methodology",
+      "note": "The pass between Grooming and Introspection -- create, groom, implement, introspect -- and the only one that changes the codebase. It owns no store of its own: its outputs are Decisions, Commits, and checked ResolutionItems on the Task, exactly as Grooming's output is the Task's grooming and Introspection's is the report series. Named as its own term so GroomingGrade can be defined as a verdict on what this pass did, rather than leaving 'implement' an unnamed step inside Methodology's definition."
+    },
+    {
+      "subject": "Introspection",
+      "predicate": "references",
+      "object": "Implementation",
+      "note": "Introspection grades every Risk against what Implementation actually did; a GroomingGrade is that comparison for one prediction. Before Implementation was a term the feedback edge had a verdict (Introspection), a thing predicted (Risk) and an aggregate (GroomingAccuracy), but no name for the reality the prediction was about."
+    },
+    {
+      "subject": "Grooming",
+      "predicate": "part-of",
+      "object": "Task",
+      "note": "Recorded as part of the Task and replaced wholesale each groom pass -- except its Risks, which merge by id (see 'Risk part-of Grooming')."
+    },
+    {
+      "subject": "Risk",
+      "predicate": "part-of",
+      "object": "Grooming",
+      "note": "The one exception to Grooming's wholesale-replace rule: risks merge by id across re-groom passes so a graded verdict is never silently lost, while every other Grooming field still replaces in place."
+    },
+    {
+      "subject": "Introspection",
+      "predicate": "part-of",
+      "object": "Task",
+      "note": "Recorded as part of the Task; an appended series rather than Grooming's replace-in-place snapshot, reflecting that each pass is a distinct piece of evidence."
+    },
+    {
+      "subject": "MemoryRecord",
+      "predicate": "references",
+      "object": "Introspection",
+      "note": "Introspection is where a lesson is surfaced for possible promotion into Loop Memory -- a report carrying a lesson with no cited memory triggers a Nudge, so the omission stays visible instead of silent."
+    },
+    {
+      "subject": "TaskContext",
+      "predicate": "describes",
+      "object": "Task",
+      "note": "One bundle is assembled per task_id on demand and has exactly one Task as its subject -- 'describes' rather than 'references' because that Task is what the whole bundle is about (the neighbour Tasks it also embeds are the separate 'references Task' edge)."
+    },
+    {
+      "subject": "TaskContext",
+      "predicate": "references",
+      "object": "TaskEdge",
+      "note": "The bundle's graph section pulls a Task's edges fresh on every call, capped per direction -- edges are read into the bundle, never duplicated into it."
+    },
+    {
+      "subject": "TaskContext",
+      "predicate": "references",
+      "object": "MemoryRecord",
+      "note": "The bundle's lessons section is the guaranteed read path back into Loop Memory (see MemoryRecord's Introspection link for the write side) -- without it, a lesson only reached an agent if it happened to look for it directly. Like related, this section is an approximate (bm25) match and among the first trimmed when the bundle is over budget, with any drop reported in `truncated` -- so the exact/approximate split is visible from both approximate sections' relations, not only from 'references Task'."
+    },
+    {
+      "subject": "Nudge",
+      "predicate": "references",
+      "object": "Task",
+      "note": "A nudge speaks only about the one task or memory the triggering call already touched, never some other record the caller didn't ask about -- it rides on a response, it does not fetch or add a fact of its own."
+    },
+    {
+      "subject": "Nudge",
+      "predicate": "references",
+      "object": "Introspection",
+      "note": "One nudge checks whether a just-recorded Introspection report's lessons have been promoted to a MemoryRecord yet, without itself writing to Loop Memory."
+    },
+    {
+      "subject": "Commit",
+      "predicate": "relates",
+      "object": "Task",
+      "note": "A Commit only exists in relation to the task it was recorded against, keyed by (task_id, sha) with an idempotent insert -- same shape as TaskEdge, never addressed by an id of its own."
+    },
+    {
+      "subject": "Decision",
+      "predicate": "relates",
+      "object": "Task",
+      "note": "Logged via the same generic Event path status changes use, distinguished only by its 'decision' kind label."
+    },
+    {
+      "subject": "Decision",
+      "predicate": "is-a",
+      "object": "Event",
+      "note": "A Decision is an Event with its kind label set to 'decision'; a status change is the same Event mechanism with a different label. The Decision term and this relation describe that entry from two angles: what a decision-kind Event is for (the Decision term) and that it is one value of a closed kind set on a uniform log (this relation)."
+    },
+    {
+      "subject": "Event",
+      "predicate": "relates",
+      "object": "Task",
+      "note": "An Event only exists on one Task's append-only log; it is never addressed by an id of its own, only read back through the Task -- the same shape as TaskEdge and Commit. The closed kind vocabulary is what tells a Decision-kind Event from a status-change Event."
+    },
+    {
+      "subject": "TaskContext",
+      "predicate": "references",
+      "object": "Commit",
+      "note": "The bundle's commits section pulls a Task's recorded commits fresh on every call, matching TaskContext's own definition -- without this relation the definition named a section the ontology did not otherwise back with a term."
+    },
+    {
+      "subject": "TaskContext",
+      "predicate": "references",
+      "object": "Decision",
+      "note": "The bundle's decisions section pulls a Task's decision-kind events fresh on every call, matching TaskContext's own definition -- without this relation the definition named a section the ontology did not otherwise back with a term."
+    },
+    {
+      "subject": "TaskContext",
+      "predicate": "references",
+      "object": "Task",
+      "note": "Distinct from 'describes': the bundle also embeds full Task summaries beyond the one it was built for, by two unlike paths. Parent and children arrive in the graph section as an exact deterministic traversal (store.get(parent), children WHERE parent=?) -- a wrong answer there would be misleading, not merely unhelpful. Full-text neighbours arrive in the related section as an approximate bm25 match, and related is the first section trimmed when the bundle is over budget. Neither path ever returns the same Task the bundle describes."
+    },
+    {
+      "subject": "GroomingAccuracy",
+      "predicate": "references",
+      "object": "Risk",
+      "note": "The per-Risk 'graded' verdicts across finished tasks are the sole source; the grooming_accuracy tally in an introspection report is recomputed from them every call and only cross-checked, never read back as truth. Same derive-don't-store reason as progress-from-checklist and standing-from-links -- a stored aggregate can drift from its own evidence."
+    },
+    {
+      "subject": "GroomingAccuracy",
+      "predicate": "part-of",
+      "object": "Methodology",
+      "note": "The aggregate form of the one feedback edge (CLAUDE.md: 'Grooming makes falsifiable claims. Introspection grades them.'). Risk carries that edge for a single task; GroomingAccuracy closes it for the loop itself -- repeated 'wrong' grades mean grooming asks the wrong questions, repeated 'missed' grades mean it asks too few, and both are signals to change grooming rather than note the miss."
+    },
+    {
+      "subject": "GroomingGrade",
+      "predicate": "part-of",
+      "object": "Risk",
+      "note": "The verdict label on a Risk's 'graded' field. Closed vocabulary (GROOMING_GRADES) of three values, absent until Introspection assigns it and merged forward by risk id across re-grooming passes so a graded verdict is never silently lost."
+    },
+    {
+      "subject": "GroomingAccuracy",
+      "predicate": "references",
+      "object": "GroomingGrade",
+      "note": "GroomingGrade is the unit GroomingAccuracy counts: its tallies, predictive_value, and the 'wrong'-share signal are all counts of GroomingGrade values across finished Tasks, where the sibling 'references Risk' edge is about which Risks it reads rather than what it tallies. A value outside GROOMING_GRADES is bucketed as 'unrecognised' and still reported, never dropped, so the grade count can never silently disagree with the risks seen."
+    },
+    {
+      "subject": "Scope",
+      "predicate": "part-of",
+      "object": "Task",
+      "note": "The project field on the Task record, written once at creation by tasks__create. Empty on every Task predating the field, which reads as 'project unknown' rather than as a project."
+    },
+    {
+      "subject": "Scope",
+      "predicate": "describes",
+      "object": "Commit",
+      "note": "task_commits.repo is normalised through the same derivation, so a commit's project and a task's project are the same kind of value and can be compared. This column is where free-text project identity was observed fragmenting into five spellings of two projects."
+    },
+    {
+      "subject": "TaskContext",
+      "predicate": "references",
+      "object": "Scope",
+      "note": "The bundle's two approximate sections read Scope, and diverge on it: `related` excludes a neighbour from another project outright, while `lessons` returns it marked cross_project, because loop memory exists to generalise across projects and hiding a foreign lesson would defeat the subsystem to enforce a boundary it was built to cross."
+    }
   ]
 }
