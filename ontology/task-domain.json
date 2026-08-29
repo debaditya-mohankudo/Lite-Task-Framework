@@ -5,7 +5,7 @@
     "created_at": "2026-08-25"
   },
   "bounded_contexts": {
-    "Task Tracking": "The core domain: tasks, epics, checklists, links between tasks, and which task is currently active.",
+    "Task Tracking": "The core domain: tasks (some flagged as epics), their checklists, the links between tasks, and which task is currently active.",
     "Loop Memory": "Lessons the grooming/introspection loop produces that nothing else can hold -- separate vocabulary, separate lifecycle, only loosely coupled to Task Tracking by citation.",
     "Architectural Knowledge": "What each source module promises, tracked in concept_store/concepts.json -- describes the codebase itself, not tasks or memories."
   },
@@ -13,16 +13,10 @@
     "Task": {
       "bounded_context": "Task Tracking",
       "form": "record",
-      "definition": "One unit of work: id, epic flag, status, resolution (checklist), tags, notes, grooming findings, introspection reports. The single typed object the whole domain is built around.",
-      "evidence": "taskfw/task.py:Task",
+      "definition": "One unit of work: id, epic flag, status, resolution (checklist), tags, notes, grooming findings, introspection reports. The single typed object the whole domain is built around. 'epic' is a plain boolean on this record (default False), not a subtype and not a term of its own -- a boolean carries everything the earlier two-value 'type' enum did, with no malformable value left to validate. Its sole effect is that an epic Task takes no parent; teams set it to mark a Task that others are grouped beneath, but that grouping is a convention, not a rule -- nothing requires a child's parent to be an epic. The parent/child hierarchy is a self-referential link from a Task to at most one parent Task, and no Task may be its own parent.",
+      "evidence": "taskfw/task.py:Task, taskfw/lifecycle.py:check_parent",
       "lifecycle": "A Task is walked through four skills, each with one intention: task-create to open it, task-grooming to remove uncertainty before work starts, task-implementation to do the work, task-introspection to grade how well grooming predicted it and feed Loop Memory. None is mandatory, but skipping one leaves a Nudge behind.",
       "lifecycle_evidence": "skills: task-create, task-grooming, task-implementation, task-introspection"
-    },
-    "Epic": {
-      "bounded_context": "Task Tracking",
-      "form": "attribute",
-      "definition": "A Task whose 'epic' boolean field is True, used to group other Tasks under it via their parent -- not a distinct kind of thing, and the default is False. It replaced a two-value 'type' string (epic / task): with only 'epic' carrying a rule and 'task' meaning merely 'not an epic', the enum and its runtime validator were a bad state that could be made unrepresentable -- a boolean cannot be malformed, so the type vocabulary and its check ceased to exist. The single rule the flag drives is that an epic cannot have a parent.",
-      "evidence": "taskfw/task.py:Task, taskfw/lifecycle.py:check_parent"
     },
     "TaskStatus": {
       "bounded_context": "Task Tracking",
@@ -172,16 +166,12 @@
     }
   },
   "relations": [
-    {"subject": "Task", "predicate": "part-of", "object": "Task",
-     "note": "The parent/child hierarchy, through the self-referential Task.parent field (not a TaskEdge). Each Task has at most one parent, which by rule must be an epic (lifecycle.check_parent); an epic groups zero or more children. 'parent_of' was left out of TASK_EDGE_RELATIONS because it would just duplicate this field -- the hierarchy has exactly one home. The container is an ordinary Task carrying the epic flag, not the Epic term itself: that term names the boolean, and its structural home is the next relation."},
-    {"subject": "Epic", "predicate": "part-of", "object": "Task",
-     "note": "The 'epic' boolean field on the Task record, with no independent object to fall out of sync with Task. The lone rule it drives -- an epic has no parent -- lives in lifecycle.check_parent and nowhere else. The grouping the flag enables is the self-referential 'Task part-of Task' relation above; this relation is only about where the flag lives."},
     {"subject": "TaskStatus", "predicate": "part-of", "object": "Task",
      "note": "The state field on the Task record. Its closed vocabulary (TASK_STATUSES) and its legal transitions are enforced only in the lifecycle layer, so no caller can validate status differently from another."},
     {"subject": "ResolutionItem", "predicate": "part-of", "object": "Task",
      "note": "Nested inside task.resolution. Cardinality: zero or more -- resolution defaults to an empty list and nothing enforces a minimum, matching the framework's 'nothing is required' stance."},
     {"subject": "TaskEdge", "predicate": "relates", "object": "Task",
-     "note": "A TaskEdge only exists in relation to two Tasks; it is never addressed by an id of its own, and removing one is deliberately ungated so a legacy relation type can't get stuck."},
+     "note": "A TaskEdge only exists in relation to two Tasks; it is never addressed by an id of its own, and removing one is deliberately ungated so a legacy relation type can't get stuck. The parent/child hierarchy is deliberately NOT a TaskEdge -- it is the self-referential Task.parent field, and 'parent_of' was left out of TASK_EDGE_RELATIONS so the hierarchy has exactly one home. Its only rules: an epic Task takes no parent (lifecycle.check_parent), and no Task is its own parent (lifecycle.check_save)."},
     {"subject": "TaskStore", "predicate": "persists", "object": "Task",
      "note": "The Repository for the Task aggregate; persistence and validation stay separable because TaskStore enforces no rules itself."},
     {"subject": "ActiveTaskPointer", "predicate": "references", "object": "Task",

@@ -1,8 +1,8 @@
 # Ontology
 
 This directory holds `task-domain.json`, the domain's ubiquitous language: the
-nouns of task-framework (Task, Epic, Grooming, MemoryRecord, ...) and the
-explicit, typed relations between them.
+nouns of task-framework (Task, Grooming, MemoryRecord, TaskContext, ...) and
+the explicit, typed relations between them.
 
 It exists to answer one question: **what is this thing, and what is it to the
 others?** Not how it's implemented — what it *is*, in the vocabulary anyone
@@ -26,9 +26,10 @@ answer different questions:
   The `form` value already carries whether the term is its own record or just
   a value on / a section inside another; a definition should not restate that
   — it adds what `form` cannot say: why the shape is that way, what rule a
-  flag drives, how the term differs from a sibling (e.g. that an Epic is just
-  a Task with one field set is worth a clause; that this makes it "not a
-  separate class" is already in `form: attribute`).
+  flag drives, how the term differs from a sibling (e.g. `Decision`'s
+  definition earns its place by saying why a decision-kind `Event` is worth
+  naming; that it is "not a separate class" is already carried by
+  `form: attribute`).
 - **`form`** — one value per term, from a closed set of five, naming what
   *shape* of thing the term is:
   - `record` — persisted as its own row/entry, with its own identity and
@@ -38,7 +39,9 @@ answer different questions:
     addressed on its own.
   - `attribute` — a value carried on another term: a flag, or a label from a
     closed set. Not a thing in its own right (e.g. `Decision` is an `Event`
-    whose `kind` is "decision"; `Epic` is the `epic` boolean on `Task`).
+    whose `kind` is "decision"). A borderline case may not warrant a term at
+    all — the `epic` boolean on `Task` is described inside the `Task` entry,
+    not given its own.
   - `transient` — a value that exists only for the duration of a call or a
     process: computed on read, or held in memory, never written to the
     database.
