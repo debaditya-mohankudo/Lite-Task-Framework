@@ -43,7 +43,7 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "500866b9d0b4e3faa43f1423f904bc83e1c6782f";
+        derivedFromCommit = "017d753b76b116cc980a59c1dd9784e81da8149e";
         derivedAt = "2026-08-29";
         modelledPaths = (
             "taskfw/scope.py",
@@ -258,6 +258,21 @@ package Requirements {
              * from an introspection report's self-reported count — the same
              * construction as DerivedProgressRequirement, for the same reason.
              * A stored count can disagree with what it counts.
+             *
+             * "Readable across executions" held only for GROOMED executions
+             * until task:fca95112. A finished task that predicted nothing
+             * contributed its recorded surprises to nothing, so the series was
+             * blindest to the executions where the loop had not run at all —
+             * and grew quieter as grooming was skipped more often. Those
+             * surprises are now counted, deliberately in a field of their own
+             * rather than added to the groomed tally: the existing ratio is
+             * missed/(graded+missed), and an ungroomed task supplies a
+             * numerator with no denominator to match, so summing them would
+             * move the percentage for a reason its own sentence does not
+             * describe. Two populations, two numbers, each naming what it
+             * ranged over — the same discipline `scope` already applies here
+             * and `truncated`/`grooming_truncated`/`edges_truncated` apply in
+             * TaskContext.
              *
              * Allocated to mcpTools, not store: this is a derivation over
              * persisted data, exactly as PullContextRequirement is, and the
