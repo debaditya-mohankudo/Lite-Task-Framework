@@ -36,9 +36,9 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 from pathlib import Path
 
+from taskfw.gitutil import run_git
 from taskfw.log import get_logger
 
 log = get_logger(__name__)
@@ -108,15 +108,13 @@ def _origin_url(cwd: str) -> str | None:
     Every failure is the same answer on purpose. A caller cannot act
     differently on "not a repo" than on "git is missing" — both mean no remote
     is knowable here — so distinguishing them would only add branches nobody
-    can use. The reason still reaches the log.
+    can use. run_git already logs a process-level failure (missing binary,
+    timeout); a clean non-zero exit is the common case for a scope derivation
+    (most directories are not git repos at all), so it is logged quieter here
+    than backfill's equivalent, which treats it as closer to an error.
     """
-    try:
-        out = subprocess.run(
-            ["git", "remote", "get-url", "origin"],
-            cwd=cwd, capture_output=True, text=True, timeout=TIMEOUT,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        log.warning("scope: git remote failed in %s (%s)", cwd, exc)
+    out = run_git(["remote", "get-url", "origin"], cwd=cwd, timeout=TIMEOUT)
+    if out is None:
         return None
     if out.returncode != 0:
         log.debug("scope: no origin in %s", cwd)

@@ -368,6 +368,30 @@
         "nudge-dispatch-chassis"
       ]
     },
+    "gitutil-subprocess-shape": {
+      "confidence": 0.9,
+      "contracts": [
+        "run_git(argv, cwd, timeout=30) -> CompletedProcess | None — None only for a process-level failure (OSError/SubprocessError), never for a non-zero exit. Logs the failure itself; callers add nothing for that case.",
+        "Callers own returncode handling and its logging, since the same non-zero exit means different things to each: backfill.git_log logs it as 'not a git repo or bad rev' (closer to an error), scope._origin_url logs it quieter at debug ('no origin') since most directories legitimately have none.",
+        "Consumed by taskfw/backfill.py:git_log and taskfw/scope.py:_origin_url."
+      ],
+      "created_at": "2026-08-29T10:00:31.678276+00:00",
+      "description": "The one place a module shells out to git. Factored out of taskfw.backfill and taskfw.scope after a reuse review found the two independently re-typing the same try/except/timeout shape around subprocess.run(['git', ...]) (task:a7a4742e). Both need the same process-level failure handling (missing binary, timeout, permissions) but disagree on what a non-zero exit means for their own purpose, so run_git only normalises the former and leaves returncode inspection to the caller.",
+      "evidence": [
+        "taskfw/gitutil.py:run_git",
+        "taskfw/backfill.py:git_log",
+        "taskfw/scope.py:_origin_url"
+      ],
+      "invariants": [
+        "Never raises. A caller that wants to shell out to git and treat every failure mode as 'could not ask' gets that for free; a caller that needs to distinguish failure modes still can, via the returncode on what run_git returns."
+      ],
+      "last_validated": "2026-08-29T10:00:31.678300+00:00",
+      "module": "taskfw/gitutil.py",
+      "name": "gitutil-subprocess-shape",
+      "related": [
+        "scope-derivation"
+      ]
+    },
     "grooming-accuracy-aggregate": {
       "confidence": 0.92,
       "contracts": [
@@ -1466,6 +1490,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-29T09:48:06.228459+00:00"
+    "updated_at": "2026-08-29T10:00:31.678365+00:00"
   }
 }

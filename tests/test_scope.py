@@ -91,8 +91,8 @@ class TestDerive:
     def test_never_raises_when_git_is_unusable(self, tmp_path, monkeypatch):
         """Fail open: a scope is a filter, and a missing filter must not block a write."""
         def boom(*a, **k):
-            raise OSError("git not found")
-        monkeypatch.setattr(scope_mod.subprocess, "run", boom)
+            return None
+        monkeypatch.setattr(scope_mod, "run_git", boom)
         assert scope_mod.derive(str(tmp_path)).startswith(scope_mod.PATH)
 
 

@@ -18,9 +18,9 @@ from __future__ import annotations
 
 import argparse
 import re
-import subprocess
 import sys
 
+from taskfw.gitutil import run_git
 from taskfw.log import get_logger
 from taskfw.store import TaskStore
 
@@ -44,13 +44,8 @@ def extract_task_ids(text: str) -> list[str]:
 def git_log(repo: str, since: str | None = None) -> list[tuple[str, str]]:
     """Return [(sha, message), ...] newest first. Empty list if repo is not git."""
     rev = f"{since}..HEAD" if since else "HEAD"
-    try:
-        out = subprocess.run(
-            ["git", "log", rev, f"--format=%H{_SEP}%B%x00"],
-            cwd=repo, capture_output=True, text=True, timeout=30,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        log.warning("backfill: git log failed in %s (%s)", repo, exc)
+    out = run_git(["log", rev, f"--format=%H{_SEP}%B%x00"], cwd=repo)
+    if out is None:
         return []
     if out.returncode != 0:
         log.warning("backfill: not a git repo or bad rev: %s", repo)
