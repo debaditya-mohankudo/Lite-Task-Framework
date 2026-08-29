@@ -43,7 +43,7 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "a1e255ad384cca021e125e1096463a03720cbb40";
+        derivedFromCommit = "94e5c99a943dd09a41ea433fd781f536c0003e67";
         derivedAt = "2026-08-29";
         modelledPaths = (
             "taskfw/scope.py",
@@ -190,7 +190,12 @@ package Requirements {
              * prompt injection. Fixed section order, a documented trim order
              * that drops whole sections least-useful-first, and a `truncated`
              * list so an omitted section is never indistinguishable from an
-             * empty one. The task itself is never trimmed.
+             * empty one. The task itself is never trimmed, and its section
+             * carries `scope` plus a `files_root` resolved from it
+             * (scope.local_root) so a reader turns the task's relative
+             * `files` into real paths instead of guessing the project root;
+             * `files_root` is null, never a guess, when the root is not
+             * knowable from the reading workspace (task:a5bb2f45).
              *
              * GROOMING IS THE ONE EXCEPTION to whole-section dropping: it is
              * trimmed field-by-field, least useful first (GROOMING_TRIM_ORDER),
