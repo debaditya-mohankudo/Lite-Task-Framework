@@ -84,9 +84,11 @@ Advisory nudges riding on a tool response (taskfw/dispatcher/) are not an
 exception to this. A nudge pushes no new fact — it only points back at
 context the agent already pulled, asking it to look again (e.g. "this
 memory is stale," "this task has no linked lessons"). Every nudge fires
-solely inside the response to a call the agent already made, and only about
-the record that call just touched, never about some other task or memory the
-caller didn't ask about — the timing is the caller's choice in every case.
+solely inside the response to a call the agent already made, and carries no
+content beyond the record that call just touched; the one thing it may add
+is a bare count over records it names none of (loop_debt_nudge tallies
+ungraded risks across recent finished tasks on tasks__set_active). The
+timing is the caller's choice in every case.
 An earlier active-task reminder that rode on the host's PostToolUse event
 instead (`drift_reflection_nudge`, via a `taskfw/drift_hook.py` subprocess)
 was removed (task:00d9483f): it fired on calls that touched nothing taskfw

@@ -118,13 +118,13 @@
     "Nudge": {
       "bounded_context": "The Loop",
       "form": "transient",
-      "definition": "A transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time. It never blocks the action or changes what gets stored; it only points back at context the caller already has (this task, this memory, this report) and asks it to be looked at again. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
+      "definition": "A transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time. It never blocks the action or changes what gets stored, and it never hands back the content of a record the caller did not touch. What it points at is either context the caller already has (this task, this memory, this report), or a bare COUNT over records it names none of -- `loop_debt_nudge` tallies ungraded risks across the last finished tasks in the project on `tasks__set_active`. The aggregate is admissible because a tally is not a fact about any one of the records it counts; returning those records' text would be a push. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
       "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge"
     },
     "TaskContext": {
       "bounded_context": "Task Tracking",
       "form": "transient",
-      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order -- assembled fresh on every call. Two of those sections -- related and lessons -- are approximate (full-text / bm25 matches) and are the first dropped when the bundle exceeds its size budget; every section above them (decisions, grooming, graph, commits) is an exact lookup where a wrong answer would mislead rather than merely disappoint. Exact is not the same as permanent: every section except task identity can still be dropped for budget, and anything dropped is named in the `truncated` field, so a caller can always tell an omission from an absence. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it.",
+      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order -- assembled fresh on every call. Two of those sections -- related and lessons -- are approximate (full-text / bm25 matches) and are the first dropped when the bundle exceeds its size budget; every section above them (decisions, grooming, graph, commits) is an exact lookup where a wrong answer would mislead rather than merely disappoint. Exact is not the same as permanent: every section except task identity can still be dropped for budget, and every drop is reported -- but through three distinct fields, not one. A whole section gone is named in `truncated`. Grooming is the exception that is trimmed in parts rather than dropped whole (it is a dict, and typically the largest section, so dropping it entire wasted budget), and the fields it sheds are named in `grooming_truncated`. The per-direction cap on graph edges is independent of the budget altogether and reports in `edges_truncated`. A caller reading only `truncated` would therefore miss two of the three ways a bundle can be short, which is exactly the omission-versus-absence collapse the field exists to prevent. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it.",
       "evidence": "taskfw/context.py:TaskContext"
     },
     "Commit": {
@@ -196,7 +196,7 @@
       "subject": "ActiveTaskPointer",
       "predicate": "references",
       "object": "Task",
-      "note": "Names the currently-active task_id per scope; never a property stored on Task itself."
+      "note": "Names the currently-active task_id keyed by working directory (`mcp_server._scope`); never a property stored on Task itself. Deliberately NOT keyed by the Scope term, despite that function's name: a `git:` scope collapses two worktrees of one repo onto one project, which is the right answer for 'which project owns this task' and the wrong one for 'which task is open in this window'."
     },
     {
       "subject": "MemoryRecord",
@@ -304,7 +304,7 @@
       "subject": "Nudge",
       "predicate": "references",
       "object": "Task",
-      "note": "A nudge speaks only about the one task or memory the triggering call already touched, never some other record the caller didn't ask about -- it rides on a response, it does not fetch or add a fact of its own."
+      "note": "A nudge either speaks about the one task or memory the triggering call already touched (`task_debt_nudge`, `stale_memory_nudge`, `finish_nudge`, `introspection_nudge`) or reports a bare count over records it does not name (`loop_debt_nudge`, over recent finished tasks in the project). Never the content of a record the caller didn't ask about -- it rides on a response, it does not fetch a fact for the caller to read."
     },
     {
       "subject": "Nudge",
