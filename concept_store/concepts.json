@@ -764,78 +764,6 @@
         "mcp-portable-interface"
       ]
     },
-    "migrate-hooks-idempotency-regression-pinned": {
-      "confidence": 0.8,
-      "contracts": [],
-      "created_at": "2026-08-23T15:11:57.560153+00:00",
-      "description": "Every assertion in this file corresponds to a claim the claude-hooks-to-taskfw migration makes about itself in prose, run rather than trusted. The idempotency test exists because that prose was wrong on the first live run: tasks upsert by id and edges/commits have natural keys, but task_events has an autoincrement id with nothing to collide against, so a second run silently duplicated 4072 event rows in a real database -- nothing caught it except actually running the migration twice and counting rows.",
-      "evidence": [
-        "tests/test_migrate_hooks.py:TestIdempotency",
-        "tests/test_migrate_hooks.py:TestAccounting",
-        "tests/test_migrate_hooks.py:TestOrdering"
-      ],
-      "invariants": [
-        "Running taskfw.migrate_hooks.migrate() two or three times against the same source produces identical table row counts each time (idempotency), including for task_events which has no natural key.",
-        "migrated + empty + orphaned counts must sum to the total source rows for events, edges, and commits -- a dropped row nothing reports is indistinguishable from one that never existed.",
-        "A parent cycle in the source is reported via report.unplaceable rather than silently reparented or dropped, and produces zero migrated tasks.",
-        "dry_run=True computes and reports counts without writing any row to the destination tables."
-      ],
-      "last_validated": "2026-08-23T15:11:57.560167+00:00",
-      "module": "tests/test_migrate_hooks.py",
-      "name": "migrate-hooks-idempotency-regression-pinned",
-      "related": [
-        "migration-writes-through-the-store",
-        "backfill-recovers-without-the-original-call"
-      ]
-    },
-    "migrate-hooks-type-collapse-preserves-relationships": {
-      "confidence": 0.8,
-      "contracts": [],
-      "created_at": "2026-08-23T15:12:03.044040+00:00",
-      "description": "Pins how the migration collapses claude-hooks' five issue types (epic/story/bug/subtask/feedback) and a 'review' status down into taskfw's model -- one epic boolean, four statuses -- without losing information: the dropped label is preserved as a data tag rather than discarded outright, and a structurally impossible shape (an epic with a parent) is demoted to a non-epic task while its real parent relationship is kept, never orphaned.",
-      "evidence": [
-        "tests/test_migrate_hooks.py:TestTypeCollapse",
-        "tests/test_migrate_hooks.py:TestContent"
-      ],
-      "invariants": [
-        "story/bug/subtask/feedback all become epic=False (a plain task) in taskfw, with the original type name preserved inside the task's data as a tag (e.g. 'was-story'). Only source type 'epic' maps to epic=True.",
-        "An epic that had a parent in the source is demoted to epic=False with its parent preserved and 'was-epic' recorded in data -- the relationship is never dropped to satisfy the epic-cannot-have-parent rule.",
-        "status='review' becomes 'open' with 'was-review' recorded in data.",
-        "Body checklist markup ('- [x]'/'- [ ]') is parsed into typed ResolutionItem entries and the raw body is also preserved verbatim in notes."
-      ],
-      "last_validated": "2026-08-23T15:12:03.044082+00:00",
-      "module": "tests/test_migrate_hooks.py",
-      "name": "migrate-hooks-type-collapse-preserves-relationships",
-      "related": [
-        "lifecycle-single-rule-implementation"
-      ]
-    },
-    "migration-writes-through-the-store": {
-      "confidence": 0.8,
-      "contracts": [],
-      "created_at": "2026-08-01T02:51:02.588824+00:00",
-      "description": "One-time import of claude-hooks' task store (~/.claude/proj_tasks.db) into taskfw. Every task is written through TaskStore.save() rather than by raw INSERT, because tasks.data holds the typed object while the scalar columns are projected from it, and save() is the sole writer of both. A bulk INSERT here would be a second writer whose rows disagree with themselves the moment either side changes. Side tables (events, edges, commits) are inserted directly since they carry no projected duplication. The type collapse is lossy by decision, not by accident: five claude-hooks issue types become taskfw's single epic boolean (True only for source 'epic'), with the original preserved as a tag, because the other four enforced no rule and were therefore already labels.",
-      "evidence": [
-        "taskfw/migrate_hooks.py",
-        "taskfw/store.py",
-        "taskfw/db/schema.py"
-      ],
-      "invariants": [
-        "Tasks are written only through TaskStore.save(), never by direct INSERT into tasks",
-        "Re-running changes nothing: save() upserts by id and side tables use INSERT OR IGNORE against their natural keys",
-        "Parents are saved before children; a row whose parent is missing or cyclic is reported as unplaceable, never silently reparented",
-        "Every source row is accounted for in the Report — migrated, empty, or orphaned — so a dropped row is never indistinguishable from one that never existed",
-        "No status outside TASK_STATUSES is ever written; an unrecognised one becomes open and is tagged with what it was"
-      ],
-      "last_validated": "2026-08-01T02:51:02.589879+00:00",
-      "module": "taskfw/migrate_hooks.py",
-      "name": "migration-writes-through-the-store",
-      "related": [
-        "taskstore-data-access-only",
-        "schema-single-source-additive-migration",
-        "typed-task-object"
-      ]
-    },
     "model-provenance-stamp-enforced-by-test": {
       "confidence": 0.8,
       "contracts": [
@@ -1464,7 +1392,7 @@
         "Task.progress -> (done, total), derived from resolution on every read",
         "Task.search_text() flattens the fields worth indexing",
         "TASK_EDGE_RELATIONS is the closed vocabulary for task_edges.rel (10 relations: depends_on, blocks, relates_to, duplicates, removes, implements, supersedes, reverts, writes_to, extends), enforced by lifecycle.check_link_rel on tasks__link. Confirmed against real usage in task_edges before being formalised (task:1c9d37d7) — 4 trace to Jira's issue-link-type vocabulary, the other 6 are this framework's own emergent vocabulary. parent_of was deliberately excluded as redundant with Task.parent.",
-        "TASK_EVENT_KINDS is the closed vocabulary for task_events.kind (note, decision, status, hooks_event), enforced by lifecycle.check_event_kind from the write path (task:dd4ceb01). 'hooks_event' is a member because migrate_hooks.py writes it as a literal through a raw INSERT; the set is closed against what is actually written. Nothing reads the column except context.py's kind=='decision' filter."
+        "TASK_EVENT_KINDS is the closed vocabulary for task_events.kind (note, decision, status, hooks_event), enforced by lifecycle.check_event_kind from the write path (task:dd4ceb01). 'hooks_event' is a legacy member: the one-time claude-hooks importer wrote it by raw INSERT during the 2026-08-01 migration and was removed afterwards (task:694e87f2), so no current code writes it; the migrated rows remain and the value stays valid on write rather than rejecting a re-derivation. Nothing reads the column except context.py's kind=='decision' filter."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "The single typed Task object and the closed vocabularies that live beside it (TASK_STATUSES, TASK_EDGE_RELATIONS, TASK_EVENT_KINDS).",
@@ -1489,7 +1417,7 @@
         "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent",
         "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck"
       ],
-      "last_validated": "2026-08-29T10:52:18.023968+00:00",
+      "last_validated": "2026-08-29T12:14:30.071245+00:00",
       "module": "taskfw/task.py",
       "name": "typed-task-object",
       "related": [
@@ -1503,6 +1431,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-29T10:52:35.892741+00:00"
+    "updated_at": "2026-08-29T12:14:30.071326+00:00"
   }
 }
