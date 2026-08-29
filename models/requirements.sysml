@@ -43,7 +43,7 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "736a24c9f7840737ade7d6b927968ffa0b7d9c8b";
+        derivedFromCommit = "c6606bd72d97b239121c07a8d43fdce217397b55";
         derivedAt = "2026-08-29";
         modelledPaths = (
             "taskfw/scope.py",
@@ -228,9 +228,16 @@ package Requirements {
              * `cross_project: true` — loop memory exists to generalise across
              * tasks, so hiding a foreign lesson would defeat the subsystem to
              * enforce a boundary it was built to cross. An unscoped record
-             * (every task written before Task.scope existed) is compatible
-             * with every scope, so neither filter can retroactively erase the
-             * pre-existing corpus. */
+             * is compatible with every scope, so neither filter can
+             * retroactively erase the pre-existing corpus. Note the
+             * compatibility is a property of the CANDIDATE, not the querying
+             * task: `_same_project` returns true whenever either side is
+             * empty, so a filter only begins excluding once the records being
+             * matched AGAINST carry scopes. Most of the corpus predates
+             * Task.scope and is still unscoped; task:e62cefe8 hand-stamped
+             * 105 of this repo's own pre-scope rows from its commit trailers,
+             * which is why "unscoped" and "written before Task.scope
+             * existed" are no longer the same set. */
     }
     satisfy requirement PullContextRequirement by system.mcpTools;
 
