@@ -5,7 +5,7 @@ silently: a term cites a symbol, the symbol gets renamed or the file moves,
 and nothing notices until a human happens to re-read the file. Unlike
 concept_store/concepts.json (enforced 1:1 against the file tree by
 tests/test_concepts.py) and models/*.sysml (checked against real source by
-tests/test_models.py), the ontology's own meta note says "nothing currently
+tests/test_sysml.py), the ontology's own meta note says "nothing currently
 tests it against the code, so treat it as a map that can drift, not a claim
 that's checked" -- this file is what makes that statement false.
 
