@@ -402,7 +402,7 @@
         "Exposed as tasks__grooming_accuracy",
         "GROOMING_GRADES is imported from taskfw.risk (moved there task:dd4ceb01, co-located with RISK_KEYS as part of the risk shape); accuracy.py uses it only for bucketing and tallying. The move is a one-line import change; test_sysml.py's paired grade check imports from taskfw.risk too.",
         "Surprises are returned under THREE keys, each naming the population it ranges over: `missed_surprises_groomed` (groomed tasks only, so it stays comparable with the graded-risk tallies beside it), `missed_surprises_ungroomed`, and `ungroomed_tasks_with_surprises`. The split was added task:fca95112; the first was renamed from the unqualified `missed_surprises` at task:703c3f26, with no alias kept — a renamed key fails loudly at the point of use where a redefined one would hand a stale reader a plausible larger number.",
-        "The RESULT key `missed_surprises_groomed` and the introspection REPORT field `missed_surprises` are different things and only the first was renamed. _missed() reads the report field (plus the legacy `surprises[].lesson` shape) as INPUT; renaming it would invalidate every report already stored. tests/test_accuracy.py::TestLegacyReportShape is what pins the distinction."
+        "The RESULT key `missed_surprises_groomed` and the introspection REPORT field `missed_surprises` are different things and only the first was renamed. _missed() reads the report field as INPUT and counts its entries (`len`), preferring canonical `missed_surprises` and falling back to the legacy `surprises` list — the two are never summed, and it never inspects `surprises[].lesson` (that is the LESSONS side, in taskfw/dispatcher/nudges.py:_lesson_texts — see `advisory-nudge-policies`). Renaming the report field would invalidate every report already stored. tests/test_accuracy.py::TestLegacyReportShape is what pins the distinction."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "Grooming accuracy aggregated across finished tasks — the loop's feedback edge read in aggregate. GROOMING_GRADES is imported from taskfw.risk, not defined here. Surprises are reported as three separately-named counts, split by whether the finished task was ever groomed.",
@@ -437,7 +437,7 @@
         "The ungroomed-surprise signal sits deliberately OUTSIDE the MIN_SAMPLE gate, because that threshold sizes itself on graded risks and an ungroomed task has none by definition.",
         "Every signal sentence names the population its number ranged over — the MISSED_SHARE sentence says 'of findings on groomed tasks' (task:703c3f26), so the human-readable half cannot claim a total the machine-readable half does not."
       ],
-      "last_validated": "2026-08-29T14:20:42.982586+00:00",
+      "last_validated": "2026-08-30T03:25:00+00:00",
       "module": "taskfw/accuracy.py",
       "name": "grooming-accuracy-aggregate",
       "related": [
