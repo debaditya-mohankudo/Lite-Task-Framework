@@ -446,6 +446,13 @@ def tasks__create(
     candidates = TaskContext(store()).related(task)
     if candidates:
         result["related_candidates"] = candidates
+        # Logged, never linked: the audit trail is "what was surfaced at
+        # create time", so a later reviewer can see which candidates a task
+        # was shown against without a tasks__link edge ever being written.
+        log.info(
+            "tasks__create task=%s related_candidates=%s",
+            task.id, ",".join(c["id"] for c in candidates),
+        )
     return result
 
 
