@@ -88,12 +88,8 @@ solely inside the response to a call the agent already made, and carries no
 content beyond the record that call just touched; the one thing it may add
 is a bare count over records it names none of (loop_debt_nudge tallies
 ungraded risks across recent finished tasks on tasks__set_active). The
-timing is the caller's choice in every case.
-An earlier active-task reminder that rode on the host's PostToolUse event
-instead (`drift_reflection_nudge`, via a `taskfw/drift_hook.py` subprocess)
-was removed (task:00d9483f): it fired on calls that touched nothing taskfw
-owned, and dragged a cross-repo call-count contract along to do it. The
-active task is announced once at `tasks__set_active` and not re-surfaced.
+timing is the caller's choice in every case. The active task is announced
+once at `tasks__set_active` and not re-surfaced.
 
 ## Structure only where it earns its keep
 
@@ -198,7 +194,7 @@ calc defs — transcribed by hand from the code they describe, not generated
 from it or bound to it at runtime. A doc comment saying "this is computed
 on read, never stored" is a claim someone has to trust; the same claim as a
 `calc def`, checked against the real source by a paired test in
-`tests/test_models.py`, is a claim that can be caught drifting. It exists
+`tests/test_sysml.py`, is a claim that can be caught drifting. It exists
 for the same reason the loop exists: an assertion nobody checks decays into
 theatre.
 
@@ -210,7 +206,7 @@ concept that turned out wrong, or writes one for a module nobody had
 understood well enough to describe yet.
 
 `ontology/task-domain.json` is the domain's ubiquitous language: the nouns
-(Task, Link, TaskStore, MemoryRecord, …) and the explicit typed
+(Task, TaskEdge, TaskStore, MemoryRecord, …) and the explicit typed
 relations between them — is-a, part-of, relates, persists, references,
 describes. It exists separately from concept_store because the two answer
 different questions and don't share a shape: concept_store is architecture
