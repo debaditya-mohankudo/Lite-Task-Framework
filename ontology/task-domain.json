@@ -19,6 +19,12 @@
       "lifecycle": "A Task is walked through four skills, each with one intention: task-create to open it, task-grooming to remove uncertainty before work starts, task-implementation to do the work, task-introspection to grade how well grooming predicted it and feed Loop Memory. None is mandatory, but skipping one leaves a Nudge behind.",
       "lifecycle_evidence": "skills: task-create, task-grooming, task-implementation, task-introspection"
     },
+    "Motivation": {
+      "bounded_context": "Task Tracking",
+      "form": "attribute",
+      "definition": "The 'why' carried on a Task: the user or system consequence the work exists to produce, and what breaks if it is never done. Free prose rather than a value from any closed set, and deliberately apart from the ResolutionItem checklist that says what 'done' looks like and from the Grooming snapshot that says how to get there -- motivation is the field meant to still make sense to a reader long after the plan it justified has been forgotten. A Grooming pass is allowed to rewrite it in place: sharpening a thin motivation counts as repair, not annotation, and it is the one piece of a Task's original framing grooming is encouraged to change rather than only add to. When a Task exists because something surprised whoever opened it, that is recorded here at creation -- the earliest home for a Surprise, before any Introspection pass exists to hold one.",
+      "evidence": "taskfw/task.py:motivation, taskfw/mcp_server.py:tasks__create, tasks__update"
+    },
     "TaskStatus": {
       "bounded_context": "Task Tracking",
       "form": "attribute",
@@ -174,6 +180,12 @@
     }
   },
   "relations": [
+    {
+      "subject": "Motivation",
+      "predicate": "part-of",
+      "object": "Task",
+      "note": "The free-text 'why' field on the Task record, written at creation by tasks__create and editable afterwards by tasks__update. Unlike TaskStatus or Scope it is drawn from no closed vocabulary and carries no lifecycle enforcement -- there is no malformable value for a caller to reject, so no rule needs a home. It is also the one part of a Task's original framing a Grooming pass may rewrite in place (docs/methodology/03-grooming.md: fixing a thin motivation is 'repair, not annotation'), even though Grooming otherwise only replaces its own snapshot and leaves the rest of the Task alone."
+    },
     {
       "subject": "TaskStatus",
       "predicate": "part-of",
