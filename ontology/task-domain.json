@@ -154,10 +154,16 @@
     "GroomingGrade": {
       "bounded_context": "The Loop",
       "form": "attribute",
-      "definition": "The verdict Introspection passes on a single predicted Risk, graded against what the Implementation pass actually did: did predicting this help -- did it come true with its mitigation ready, or force the change that avoided it -- or was the pass spent on noise. A label carried on the Risk, the way MemoryKind is a label on a MemoryRecord, absent until Introspection assigns it. Its vocabulary (GROOMING_GRADES: materialized, avoided, wrong) is closed for COUNTING but not enforced on write -- Introspection may record a grade outside the set, and GroomingAccuracy buckets that as `unrecognised` and still reports it rather than dropping it. This is a deliberate difference from TaskStatus or MemoryKind, where an off-vocabulary value is refused: a grade is an observation worth keeping, not a state that corrupts a machine. A surprise that no Risk predicted is deliberately not a GroomingGrade: with no prediction beneath it there is nothing for a verdict to be about, so it stays part of Introspection's account of what Grooming missed. One GroomingGrade is Introspection closing the Methodology's feedback edge for a single prediction; GroomingAccuracy is what those verdicts amount to across many finished Tasks.",
+      "definition": "The verdict Introspection passes on a single predicted Risk, graded against what the Implementation pass actually did: did predicting this help -- did it come true with its mitigation ready, or force the change that avoided it -- or was the pass spent on noise. A label carried on the Risk, the way MemoryKind is a label on a MemoryRecord, absent until Introspection assigns it. Its vocabulary (GROOMING_GRADES: materialized, avoided, wrong) is closed for COUNTING but not enforced on write -- Introspection may record a grade outside the set, and GroomingAccuracy buckets that as `unrecognised` and still reports it rather than dropping it. This is a deliberate difference from TaskStatus or MemoryKind, where an off-vocabulary value is refused: a grade is an observation worth keeping, not a state that corrupts a machine. A Surprise that no Risk predicted is deliberately not a GroomingGrade (see the `Surprise` term): with no prediction beneath it there is nothing for a verdict to be about. One GroomingGrade is Introspection closing the Methodology's feedback edge for a single prediction; GroomingAccuracy is what those verdicts amount to across many finished Tasks.",
       "evidence": "taskfw/risk.py:GROOMING_GRADES, taskfw/accuracy.py:grooming_accuracy",
       "lifecycle": "Assigned by a single Introspection pass, after Implementation, and carried by its Risk from then on. Re-grooming the same Task keeps the verdict rather than discarding it, so a judgement Introspection has already made is never lost.",
       "lifecycle_evidence": "docs/methodology/05-introspection.md, docs/methodology/04-implementation.md"
+    },
+    "Surprise": {
+      "bounded_context": "The Loop",
+      "form": "part",
+      "definition": "A finding an Introspection pass records that no Risk predicted -- the `missed` outcome in docs/methodology/05-introspection.md: 'a surprise no prediction anticipated'. It is stored as a free-text entry in the report's `missed_surprises` list (reports written before that field used `surprises`, a list of `{lesson}` dicts). Deliberately NOT a GroomingGrade: the closed GROOMING_GRADES set (materialized, avoided, wrong) each grade a prediction, and `missed` is kept out of that set -- the comment on GROOMING_GRADES in taskfw/risk.py says why -- because with no Risk beneath it there is nothing for a verdict to be about. `form: part` and not `attribute` because a Surprise carries its own free text rather than a label from a closed set, and not `record` because it has no id and no store of its own -- it is a section that lives inside the Introspection report and is appended with it. It is the missed-prediction item itself, not the lesson it may become: a Surprise does not imply a MemoryRecord (taskfw/dispatcher/nudges.py:_lesson_texts reads the legacy `surprises[].lesson` shape when promoting lessons, but promotion is a separate step and most surprises are never promoted).",
+      "evidence": "taskfw/accuracy.py:_missed, _signals, taskfw/risk.py:GROOMING_GRADES, taskfw/dispatcher/nudges.py:_lesson_texts, docs/methodology/05-introspection.md:missed_surprises"
     },
     "Scope": {
       "bounded_context": "Task Tracking",
@@ -395,6 +401,24 @@
       "predicate": "references",
       "object": "Scope",
       "note": "The bundle's two approximate sections read Scope, and diverge on it: `related` excludes a neighbour from another project outright, while `lessons` returns it marked cross_project, because loop memory exists to generalise across projects and hiding a foreign lesson would defeat the subsystem to enforce a boundary it was built to cross. The bundle's task section also carries Scope verbatim plus a files_root resolved from it (scope.local_root), so a reader can turn the task's relative files into real paths instead of guessing the project root; files_root is null, never a guess, when the root is not knowable from the reading workspace."
+    },
+    {
+      "subject": "Surprise",
+      "predicate": "part-of",
+      "object": "Introspection",
+      "note": "A free-text entry in the Introspection report's `missed_surprises` list (legacy reports: `surprises[].lesson`), appended with the report and never addressed on its own. The same shape as `GroomingGrade part-of Risk`, one level up: a GroomingGrade hangs off the Risk it grades, a Surprise hangs off the whole report because it is precisely the item that has no Risk to hang off."
+    },
+    {
+      "subject": "Surprise",
+      "predicate": "relates",
+      "object": "GroomingGrade",
+      "note": "The deliberate contrast, made an explicit edge rather than left only as prose inside GroomingGrade's definition. A GroomingGrade is a verdict on a Risk's prediction; a Surprise is what remains when there was no prediction, so `missed` is held out of the closed GROOMING_GRADES set (the comment on it in taskfw/risk.py says so) and lands in the report's `missed_surprises` field instead. Same feedback edge, opposite side: repeated wrong grades mean grooming asks the wrong questions, repeated surprises mean it asks too few."
+    },
+    {
+      "subject": "GroomingAccuracy",
+      "predicate": "references",
+      "object": "Surprise",
+      "note": "The negative-space unit GroomingAccuracy counts, sibling to `references GroomingGrade`: taskfw/accuracy.py:_missed tallies surprises per finished task into `missed_surprises_groomed`, `missed_surprises_ungroomed`, and `ungroomed_tasks_with_surprises`, and _signals turns a high groomed-surprise share into 'grooming is not asking enough questions'. The ungroomed tally is kept apart from the grade buckets and sits outside the MIN_SAMPLE gate, because an ungroomed task has no graded Risk to size that threshold on -- folding it into the missed/graded ratio would drive the percentage toward 100% for a reason the ratio's own sentence does not describe."
     }
   ]
 }
