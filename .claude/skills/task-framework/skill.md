@@ -61,15 +61,14 @@ Run [/task-grooming](../task-grooming/skill.md) with `task:<id>` or `epic:<id>`.
 
 Gaps caught in grooming cost nothing. Gaps caught mid-implementation cost a revert and a replan.
 
-### 4. Activate and pull context
+### 4. Pull context
 
 ```python
-tasks__set_active(task_id)
 tasks__log_skill_invocation(skill="task-framework/step-4-activate", task_id=task_id)
 tasks__context(task_id)      # ← you must call this
 ```
 
-`tasks__set_active` persists per workspace and survives restarts. It is a convenience so `tasks__context()` can be called with no argument — it is not a context mechanism in its own right.
+`tasks__create` already set this task active for the workspace — creation is the start of a loop pass, so there is no separate `tasks__set_active` step. The active pointer is a single in-memory value per workspace: not persisted, gone on restart. It is a convenience so `tasks__context()` can be called with no argument — not a context mechanism in its own right. If you are resuming an older task that was not created this session, call `tasks__set_active(task_id)` first.
 
 Confirm to the user:
 

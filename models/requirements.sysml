@@ -287,11 +287,13 @@ package Requirements {
              * grooming field is unaffected. Recurrence groups by id when
              * present, falling back to normalised text only for risks written
              * before this change. Second, the debt this requirement exists to
-             * make readable is now also surfaced proactively: tasks__set_active
+             * make readable is now also surfaced proactively: every activation
+             * path — tasks__set_active and tasks__create (task:356b3ada) —
              * carries loop_debt_nudge/task_debt_nudge, derived from the same
              * per-task classification (_task_grading) this aggregate uses, so
-             * skipped introspection is visible at the start of the next task
-             * rather than only on request. */
+             * skipped introspection is visible at the start of the next task,
+             * including when that task is reached by creating it and letting
+             * create activate it, rather than only on request. */
     }
     satisfy requirement GroomingFeedbackEdgeRequirement by system.mcpTools;
 

@@ -499,6 +499,18 @@ class TestActiveTask:
         m.tasks__finish(other["id"])
         assert m.tasks__active()["active"] == t["id"]
 
+    def test_checklist_auto_finish_leaves_the_task_active(self):
+        """task:1105f979: _finish_task no longer touches the pointer, and
+        ticking the last checklist item auto-finishes through that same path
+        (task:f302eb2b) — so a task finished by its last tick stays active
+        for introspection just like one finished via tasks__finish."""
+        t = create(resolution=["a", "b"])
+        m.tasks__set_active(t["id"])
+        m.tasks__check_item(t["id"], 0)
+        r = m.tasks__check_item(t["id"], 1)
+        assert r["status"] == "done"
+        assert m.tasks__active()["active"] == t["id"]
+
     def test_update_to_done_leaves_the_active_task_active(self):
         """task:1105f979: reaching a terminal status via update no longer
         auto-clears the pointer."""
@@ -579,6 +591,25 @@ class TestLoopDebtNudge:
         r = m.tasks__set_active(t["id"])
         assert skipped["id"] in m.tasks__grooming_accuracy()["skipped_introspection"]
         assert "1 of the last" in r["loop_debt_nudge"]
+
+    def test_creating_the_next_task_surfaces_loop_debt(self):
+        # task:356b3ada — create is now an activation path, so the
+        # finish-then-create-next flow keeps the loop-debt reminder that
+        # was previously only on the (now-discouraged) trailing set_active.
+        skipped = create(title="skipped")
+        m.tasks__update(skipped["id"], grooming={"risks": [{"text": "a", "graded": None}]})
+        m.tasks__update(skipped["id"], status="done")
+        r = create(title="the next task")
+        assert "1 of the last" in r["loop_debt_nudge"]
+
+    def test_a_fresh_task_carries_no_task_debt_of_its_own(self):
+        r = create(title="brand new")
+        assert "task_debt_nudge" not in r
+
+    def test_a_refused_create_does_not_reach_the_hook(self):
+        r = create(title="orphan", parent="nonexistent")
+        assert "error" in r
+        assert "loop_debt_nudge" not in r and "task_debt_nudge" not in r
 
 
 class TestClaudeHooksPush:
