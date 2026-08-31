@@ -120,19 +120,25 @@ package TaskFrameworkSystem {
              *     path, keyed off `progress` being present in the result: a
              *     plain decision changes no checklist state, so nudging about
              *     checklist state there would be noise on nearly every call.
-             *   - loop_debt_nudge / task_debt_nudge (tasks__set_active): the
-             *     earlier of the two calls every documented workflow makes at
-             *     the start of work, not tasks__context or tasks__create —
+             *   - loop_debt_nudge / task_debt_nudge (tasks__set_active AND
+             *     tasks__create — every activation path, task:356b3ada; the
+             *     hook resolves the task from result.active or result.id):
              *     surfaces, respectively, how many recent finished tasks
              *     graded no risks at all, and whether the task just made
-             *     active carries ungraded risks of its own. Both derive from
+             *     active carries ungraded risks of its own. task_debt_nudge
+             *     is always silent on a fresh tasks__create (no risks yet),
+             *     so only loop_debt_nudge speaks there — which is the point:
+             *     finishing a task and immediately creating the next one no
+             *     longer skips the debt reminder now that the trailing
+             *     tasks__set_active is discouraged (task:1105f979). Both
+             *     derive from
              *     taskfw/accuracy.py:_task_grading, the same per-task
              *     classification tasks__grooming_accuracy uses, so neither
              *     nudge can disagree with that tool about what COUNTS as
              *     graded (task:07f9270c). They can now differ on WHICH TASKS
              *     were counted, and deliberately so (task:a5bb2f45):
              *     loop_debt_nudge passes the derived Scope, because it fires
-             *     on every tasks__set_active and a debt figure driven by
+             *     on every activation and a debt figure driven by
              *     another repository's tasks would interrupt work here with
              *     no way to tell; tasks__grooming_accuracy stays global by
              *     default, because it is an occasional, deliberate read where

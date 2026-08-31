@@ -203,26 +203,36 @@ def _stale_memory_hook(result: dict[str, Any]) -> None:
         dispatcher.apply_nudge(result, "stale_memory_nudge", dispatcher.stale_memory_nudge(memory))
 
 
-#: Recent-finished-tasks window loop_debt walks on tasks__set_active — smaller
-#: than tasks__grooming_accuracy's default 25 because set_active is called
-#: far more often per session (task:07f9270c's grooming).
+#: Recent-finished-tasks window loop_debt walks on activation — smaller than
+#: tasks__grooming_accuracy's default 25 because the activation paths it rides
+#: (tasks__set_active, tasks__create) are hit far more often per session
+#: (task:07f9270c's grooming).
 _LOOP_DEBT_LIMIT = 10
 
 
 def _loop_debt_hook(result: dict[str, Any]) -> None:
-    """loop_debt_nudge / task_debt_nudge, for tasks__set_active — task:07f9270c.
+    """loop_debt_nudge / task_debt_nudge, for tasks__set_active and
+    tasks__create — task:07f9270c, create added task:356b3ada.
 
     Two independent nudges under two keys: one about recent finished tasks
     across the store, one about the specific task just made active. Both
     derive from taskfw.accuracy's _task_grading/loop_debt, the same
     classification tasks__grooming_accuracy uses, so none of the three can
     disagree about what counts as ungraded.
+
+    The just-activated task's id is under a different key per tool —
+    `active` from tasks__set_active, `id` from tasks__create — so both are
+    tried. This is what keeps the debt reminder alive across the
+    finish-A → create-B flow that task:1105f979 made the default by having
+    create activate and telling callers to drop the trailing set_active.
+    For a freshly created task task_debt_nudge is always silent (no risks
+    yet); only loop_debt_nudge has anything to say there.
     """
-    task = store().get(result.get("active", ""))
+    task = store().get(result.get("active") or result.get("id") or "")
     if task is None:
         return
     # Scoped to the project being worked in. This nudge fires on every
-    # tasks__set_active, so an unscoped count meant a debt figure driven by
+    # activation, so an unscoped count meant a debt figure driven by
     # another repo's tasks could interrupt work here with no way to tell —
     # the accepted risk recorded on concept:grooming-accuracy-aggregate.
     debt = loop_debt(store(), limit=_LOOP_DEBT_LIMIT, scope=derive_scope())
@@ -396,7 +406,7 @@ def tasks__search(query: str, limit: int = 25) -> list[dict]:
 # Write
 # ---------------------------------------------------------------------------
 
-@_tool()
+@_tool(hook=_loop_debt_hook)
 def tasks__create(
     title: str,
     epic: bool = False,
@@ -425,6 +435,11 @@ def tasks__create(
     being a separate step every caller has to remember. Nothing auto-clears
     the pointer again: it lives until tasks__clear_active is called
     explicitly, which the task-introspection skill does at its final step.
+
+    Because create is an activation path, it carries _loop_debt_hook too
+    (task:356b3ada) — finishing a task with ungraded risks and immediately
+    creating the next one still surfaces loop_debt_nudge, which would
+    otherwise be lost now that the trailing tasks__set_active is discouraged.
     """
     task = Task(
         title=title, epic=epic, parent=parent or None, motivation=motivation,
