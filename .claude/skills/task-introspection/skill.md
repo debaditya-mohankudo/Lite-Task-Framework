@@ -222,14 +222,13 @@ Skip where the change was test-only or doc-only with no new behaviour to capture
 
 A citation that no longer resolves means either the citation is stale (fix or drop it via `concept__upsert`) or the whole concept describes code that's gone (flag it to the user — **never delete a concept unilaterally**, per the rule above). This is cheap only because it's scoped to files the task actually touched; a full-repo sweep belongs to a dedicated task, not every introspection pass.
 
-## Step 9 — Output and deactivate
+## Step 9 — Output
 
 ```python
 tasks__log_skill_invocation(skill="task-introspection/step-9-output", task_id=task_id)
-tasks__clear_active()
 ```
 
-Active status is ephemeral and in-memory (task:f5ace343) — clearing it here ends the last leg of a task's life in the loop (groom → implement → introspect). No-op if the task was never active in this scope.
+You already filed the report in an earlier step. `tasks__add_introspection` clears the active pointer as it records the report (task:2d24165a) when the reported task is the active one — so recording the introspection IS the deactivation that ends a task's last leg in the loop (groom → implement → introspect). There is no separate clear call to make, and no standalone clear tool. Active status is ephemeral and in-memory (task:f5ace343); the clear is a no-op if the task was never active in this scope, and the result's `active_cleared` says which happened.
 
 ```text
 ## Introspection: <id> — <title>

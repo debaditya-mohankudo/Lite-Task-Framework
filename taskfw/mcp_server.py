@@ -433,8 +433,9 @@ def tasks__create(
     ephemeral in-memory value (task:f5ace343), and creating a task is the
     start of a pass through the loop — so activation belongs here rather than
     being a separate step every caller has to remember. Nothing auto-clears
-    the pointer again: it lives until tasks__clear_active is called
-    explicitly, which the task-introspection skill does at its final step.
+    the pointer again: it lives until tasks__add_introspection files a report
+    against it (task:2d24165a), which the task-introspection skill does at its
+    final step — the sole deactivation path.
 
     Because create is an activation path, it carries _loop_debt_hook too
     (task:356b3ada) — finishing a task with ungraded risks and immediately
@@ -617,9 +618,10 @@ def _set_and_broadcast(task_id: str, task_title: str, scope: str) -> None:
 def _clear_and_broadcast(scope: str) -> None:
     """Clear the active task for scope and tell claude-hooks it's gone.
 
-    tasks__clear_active is now the only caller — nothing auto-clears the
-    pointer on create or finish anymore (task:1105f979). Kept as a helper so
-    "clear, then tell claude-hooks there is no active task" stays one thing.
+    tasks__add_introspection is now the only caller (task:2d24165a) — nothing
+    auto-clears the pointer on create or finish (task:1105f979), and the
+    standalone tasks__clear_active tool is gone. Kept as a helper so "clear,
+    then tell claude-hooks there is no active task" stays one thing.
     """
     store().clear_active(scope)
     _push_active_task(scope, "")
@@ -638,8 +640,8 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
     the caller asked for.
 
     Does not touch the active pointer (task:1105f979). A finished task stays
-    active through introspection; tasks__clear_active — which task-introspection
-    calls at its final step — is the only thing that deactivates it.
+    active through introspection; tasks__add_introspection — the last pass of
+    the loop — is the only thing that deactivates it (task:2d24165a).
     """
     task = store().get(task_id)
     if task is None:
@@ -791,13 +793,32 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
     carries a lesson and the task has never cited a memory, the response
     carries a non-blocking `memory_nudge` so the omission is visible instead
     of silent.
+
+    Recording a report also CLEARS the active pointer when the reported task
+    is the one currently active (task:2d24165a) — introspection is the last
+    pass of the loop, so deactivation belongs here, symmetric with
+    tasks__create setting the pointer. This is the sole deactivation path;
+    there is no separate tasks__clear_active tool to remember. `active_cleared`
+    in the result says whether it happened — false when some other task (or
+    none) was active, which is not an error. The pointer is in-memory, so a
+    report filed against a non-active task simply leaves whatever was active
+    in place, and it self-heals on the next tasks__create / tasks__set_active.
     """
     task = store().get(task_id)
     if task is None:
         return {"error": f"No task {task_id!r}"}
     task.introspection.append(report)
     store().save(task)
-    return {"ok": True, "id": task_id, "reports": len(task.introspection)}
+    scope = _scope()
+    active_cleared = store().get_active(scope) == task_id
+    if active_cleared:
+        _clear_and_broadcast(scope)
+    return {
+        "ok": True,
+        "id": task_id,
+        "reports": len(task.introspection),
+        "active_cleared": active_cleared,
+    }
 
 
 def _resolved_item_hook(result: dict[str, Any]) -> None:
@@ -936,8 +957,9 @@ def _push_active_task(workspace: str, task_id: str, title: str = "") -> None:
     """Best-effort POST to claude-hooks' running FastAPI server (claude-hooks
     task:996cc8f0), telling it what the active task now is. Pushing is a
     courtesy, not a dependency — this store is the durable source of truth
-    regardless of whether that server is up, so tasks__set_active/clear_active
-    must succeed identically whether or not this call lands. Swallows every
+    regardless of whether that server is up, so tasks__set_active and the
+    add_introspection clear must succeed identically whether or not this call
+    lands. Swallows every
     failure (connection refused, timeout, DNS, non-2xx). Reads CLAUDE_HOOKS_URL
     fresh on every call rather than caching it at import time, so tests can
     point it at an unreachable port via monkeypatch.setenv.
@@ -983,14 +1005,6 @@ def tasks__active() -> dict[str, Any]:
     """The active task for this workspace, if any. In-memory only (task:f5ace343)."""
     scope = _scope()
     return {"active": store().get_active(scope), "scope": scope}
-
-
-@_tool()
-def tasks__clear_active() -> dict[str, Any]:
-    """Clear the active task for this workspace, if any."""
-    scope = _scope()
-    _clear_and_broadcast(scope)
-    return {"ok": True, "active": None, "scope": scope}
 
 
 # ---------------------------------------------------------------------------

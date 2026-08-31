@@ -114,11 +114,10 @@ Introspection grades every risk, so a risk that cannot be graded is noise.
 
 The first can be graded `materialized`, `avoided`, or `wrong`. The second cannot be graded at all, and so teaches nothing. `tasks__grooming_accuracy` counts the ungradeable ones against you.
 
-## Step 5 — Report and deactivate
+## Step 5 — Report
 
 ```python
 tasks__log_skill_invocation(skill="task-grooming/step-5-report", task_id=task_id)
-tasks__clear_active()
 ```
 
 ```
@@ -129,7 +128,7 @@ tasks__clear_active()
 N tasks groomed — M ready, K need updates.
 ```
 
-Clear active status once the batch is done, not after each task in a loop — the next task's `tasks__set_active` already replaces it, so clearing mid-loop only matters after the last one.
+Do not deactivate here. A task stays active from `tasks__create` through its introspection pass (task:1105f979, task:2d24165a) — grooming is a middle leg, not the end, and `tasks__add_introspection` is the only thing that clears the pointer. If you groomed a batch, just leave the last one active; implementation's `tasks__set_active` replaces it when work starts.
 
 ## Rules
 
