@@ -45,7 +45,7 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "8bef93c9eb55247a4560afa1ea277e4c85585208";
+        derivedFromCommit = "01ee6d9386f53af2415e8b8dc228a829d8bed537";
         derivedAt = "2026-08-31";
         modelledPaths = (
             "taskfw/scope.py",
@@ -191,12 +191,16 @@ package TaskFrameworkSystem {
              * auto-finish nor tasks__update reaching a terminal status
              * touches it, so a finished task stays named through
              * introspection — the window loop_debt_nudge and the
-             * introspection flow depend on. tasks__clear_active, called
-             * explicitly (the task-introspection skill does so at its final
-             * step), is the sole deactivation path. That mutation lives in
-             * mcp_server.py itself, not taskfw/dispatcher/ — it is a tool's own
-             * write, gated by LifecycleRules like any other, not an
-             * advisory annotation. */
+             * introspection flow depend on. DEACTIVATION HAS EXACTLY ONE
+             * PATH: tasks__add_introspection clears the pointer when the
+             * task it reports on is the active one (task:2d24165a), which
+             * the task-introspection skill triggers at its final step.
+             * There is no standalone tasks__clear_active tool — filing the
+             * report IS the deactivation, symmetric with tasks__create
+             * being the activation. That mutation lives in mcp_server.py
+             * itself, not taskfw/dispatcher/ — it is a tool's own write,
+             * gated by LifecycleRules like any other, not an advisory
+             * annotation. */
         part foundation : Foundation;
         part rules : LifecycleRules;
         part store : TaskStore;
