@@ -23,6 +23,11 @@ automatically. Look it over and either `tasks__link` (as `duplicates` or
 `relates_to`), fold the new task into the existing one, or consciously
 continue past it — but don't ignore it unseen.
 
+The new task is set active for the workspace on creation, so there is no
+separate `tasks__set_active` step — grooming and implementation pick it up
+directly. Scaffolding an epic with several children in one session leaves the
+last-created child active.
+
 ## Frame the task around behaviour, not implementation detail
 
 Describe the observable change: who or what experiences it, the outcome that

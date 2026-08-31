@@ -275,16 +275,17 @@ class TestChecklist:
 
     def test_checking_first_item_activates_the_task_when_nothing_else_is_active(self):
         t = create(resolution=["a", "b"])
+        m.tasks__clear_active()  # create now activates (task:1105f979); isolate the check-item path
         assert m.tasks__active()["active"] is None
         m.tasks__check_item(t["id"], 0)
         assert m.tasks__active()["active"] == t["id"]
 
-    def test_checking_the_only_item_finishes_without_ever_activating(self):
-        """task:f302eb2b: a single-item checklist skips activation entirely
-        and goes straight to auto-finish — there's no intermediate 'in
-        progress' state to push onto the stack for."""
+    def test_checking_the_only_item_finishes_without_going_through_activation(self):
+        """task:f302eb2b: a single-item checklist goes straight to auto-finish —
+        the last-item path never calls _auto_activate_on_checklist_progress, so
+        a quiescent pointer stays quiescent even as the task is finished."""
         t = create(resolution=["a"])
-        assert m.tasks__active()["active"] is None
+        m.tasks__clear_active()  # create now activates (task:1105f979)
         r = m.tasks__check_item(t["id"], 0)
         assert r["status"] == "done"
         assert m.tasks__active()["active"] is None
@@ -307,6 +308,7 @@ class TestChecklist:
 
     def test_unchecking_an_item_does_not_activate_the_task(self):
         t = create(resolution=["a"])
+        m.tasks__clear_active()  # create now activates (task:1105f979)
         m.tasks__check_item(t["id"], 0, done=False)
         assert m.tasks__active()["active"] is None
 
@@ -433,21 +435,29 @@ class TestFormatCommitMessage:
 
 
 class TestActiveTask:
-    def test_creating_a_task_clears_the_active_one(self):
-        """task:74bf3542: a fresh task is a clean break — it does not inherit
-        whatever was active, and the old active task is not left dangling."""
-        t = create()
-        m.tasks__set_active(t["id"])
-        create(title="a new task")
-        assert m.tasks__active()["active"] is None
+    def test_creating_a_task_activates_it_replacing_whatever_was_active(self):
+        """task:1105f979: creating a task sets it active for the scope, replacing
+        whatever was active. Creation is the start of a pass through the loop, so
+        activation belongs here rather than being a separate step every caller
+        has to remember (reverses task:74bf3542's clear-on-create)."""
+        first = create()
+        m.tasks__set_active(first["id"])
+        second = create(title="a new task")
+        assert m.tasks__active()["active"] == second["id"]
 
-    def test_creating_a_task_with_none_active_is_a_no_op(self):
+    def test_creating_a_task_with_none_active_activates_the_new_task(self):
         assert m.tasks__active()["active"] is None
-        create()
-        assert m.tasks__active()["active"] is None
+        t = create()
+        assert m.tasks__active()["active"] == t["id"]
+
+    def test_creating_an_epic_activates_it_too(self):
+        """Activation on create has no epic branch — it is unconditional."""
+        e = create(title="an epic", epic=True)
+        assert m.tasks__active()["active"] == e["id"]
 
     def test_set_get_clear(self):
         t = create()
+        m.tasks__clear_active()  # create now activates (task:1105f979)
         assert m.tasks__active()["active"] is None
         m.tasks__set_active(t["id"])
         assert m.tasks__active()["active"] == t["id"]
@@ -473,11 +483,14 @@ class TestActiveTask:
         assert m.tasks__set_active(t["id"])["ok"]
         assert m.tasks__active()["active"] == t["id"]
 
-    def test_finish_clears_the_active_task_it_finished(self):
+    def test_finish_leaves_the_task_it_finished_active(self):
+        """task:1105f979: a finished task stays active through introspection —
+        only tasks__clear_active (which task-introspection calls at its final
+        step) deactivates it. _finish_task no longer touches the pointer."""
         t = create()
         m.tasks__set_active(t["id"])
         m.tasks__finish(t["id"])
-        assert m.tasks__active()["active"] is None
+        assert m.tasks__active()["active"] == t["id"]
 
     def test_finish_leaves_a_different_active_task_untouched(self):
         t = create()
@@ -486,17 +499,19 @@ class TestActiveTask:
         m.tasks__finish(other["id"])
         assert m.tasks__active()["active"] == t["id"]
 
-    def test_update_to_done_clears_the_active_task(self):
+    def test_update_to_done_leaves_the_active_task_active(self):
+        """task:1105f979: reaching a terminal status via update no longer
+        auto-clears the pointer."""
         t = create()
         m.tasks__set_active(t["id"])
         m.tasks__update(t["id"], status="done")
-        assert m.tasks__active()["active"] is None
+        assert m.tasks__active()["active"] == t["id"]
 
-    def test_update_to_abandoned_pops_the_active_task(self):
+    def test_update_to_abandoned_leaves_the_active_task_active(self):
         t = create()
         m.tasks__set_active(t["id"])
         m.tasks__update(t["id"], status="abandoned")
-        assert m.tasks__active()["active"] is None
+        assert m.tasks__active()["active"] == t["id"]
 
     def test_update_to_done_leaves_a_different_active_task_untouched(self):
         t = create()
@@ -571,6 +586,9 @@ class TestClaudeHooksPush:
     /set-active-taskid (task:6906557f, claude-hooks task:996cc8f0)."""
 
     def test_set_active_pushes_workspace_task_id_and_title(self, monkeypatch):
+        # Create before monkeypatching: create now activates and broadcasts too
+        # (task:1105f979), and this test is about set_active's broadcast alone.
+        t = create(title="Push me")
         calls = []
 
         def fake_urlopen(req, timeout=None):
@@ -578,7 +596,6 @@ class TestClaudeHooksPush:
             return _DummyResponse()
 
         monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
-        t = create(title="Push me")
         m.tasks__set_active(t["id"])
 
         assert len(calls) == 1
@@ -586,6 +603,22 @@ class TestClaudeHooksPush:
         assert url == "http://127.0.0.1:1/set-active-taskid"
         assert body == {"workspace": "/test/workspace", "task_id": t["id"], "title": "Push me"}
         assert timeout == m._PUSH_TIMEOUT_S
+
+    def test_create_pushes_the_new_task_as_active(self, monkeypatch):
+        """task:1105f979: creating a task activates it, so it fires the
+        claude-hooks courtesy broadcast — exactly once, carrying the new
+        task's id and title."""
+        calls = []
+
+        def fake_urlopen(req, timeout=None):
+            calls.append(json.loads(req.data))
+            return _DummyResponse()
+
+        monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
+        r = m.tasks__create(title="Fresh")
+
+        assert len(calls) == 1
+        assert calls[0] == {"workspace": "/test/workspace", "task_id": r["id"], "title": "Fresh"}
 
     def test_clear_active_pushes_empty_task_id(self, monkeypatch):
         calls = []
