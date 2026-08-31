@@ -133,7 +133,7 @@ Do not deactivate here. A task stays active from `tasks__create` through its int
 ## Rules
 
 - **`tasks__context` is mandatory.** There is no activation that fetches it for you.
-- **Grooming is not starting.** A groomed task is not necessarily an active *implementation*. Active status here just marks "being groomed right now," and is cleared at the end of the pass — do not leave the task half-implemented because grooming went well. There is no task *status* to reset — grooming never changed it.
+- **Grooming is not starting.** A groomed task is not necessarily one under active *implementation*. Activating it here just marks "this is the task in hand"; the pointer stays on it past the end of grooming, into implementation, and is only released when introspection is recorded (task:2d24165a) — do not leave the task half-implemented because grooming went well. There is no task *status* to reset — grooming never changed it.
 - **Revise the prior grooming; do not overwrite it blind.**
 - **Every risk must be falsifiable.**
 - **Do not abandon a task unilaterally.** If it looks like a duplicate or orphan worth abandoning, surface it to the user first.
