@@ -59,4 +59,4 @@ Across tasks: `tasks__grooming_accuracy`
 Loop memory: `task_memory__record` `task_memory__recall` `task_memory__get` `task_memory__link` `task_memory__supersede` `task_memory__forget`
 Writing: `tasks__create` `tasks__update` `tasks__check_item` `tasks__finish` `tasks__add_decision` `tasks__add_introspection`
 Graph: `tasks__link` `tasks__unlink` `tasks__add_commit`
-Active: `tasks__set_active` `tasks__clear_active`
+Active: `tasks__set_active` `tasks__active` (deactivation is folded into `tasks__add_introspection`)

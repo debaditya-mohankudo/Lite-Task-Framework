@@ -38,6 +38,14 @@ def create(**kw):
     return m.tasks__create(**kw)
 
 
+def _deactivate():
+    """Reset the active pointer during arrange steps. There is no
+    tasks__clear_active tool anymore (task:2d24165a) — tasks__add_introspection
+    is the sole production deactivation path — so a test that isn't about
+    introspection clears through the store primitive directly."""
+    m.store().clear_active(m._scope())
+
+
 class TestCreate:
     def test_creates_a_task(self):
         r = create(title="Build it")
@@ -278,7 +286,7 @@ class TestChecklist:
         and the task-implementation skill are. A quiescent pointer stays
         quiescent."""
         t = create(resolution=["a", "b"])
-        m.tasks__clear_active()  # create now activates (task:1105f979)
+        _deactivate()  # create now activates (task:1105f979)
         assert m.tasks__active()["active"] is None
         m.tasks__check_item(t["id"], 0)
         assert m.tasks__active()["active"] is None
@@ -287,7 +295,7 @@ class TestChecklist:
         """task:f302eb2b: a single-item checklist goes straight to auto-finish.
         task:c88b8730: ticking never touches the active pointer either way."""
         t = create(resolution=["a"])
-        m.tasks__clear_active()  # create now activates (task:1105f979)
+        _deactivate()  # create now activates (task:1105f979)
         r = m.tasks__check_item(t["id"], 0)
         assert r["status"] == "done"
         assert m.tasks__active()["active"] is None
@@ -311,7 +319,7 @@ class TestChecklist:
 
     def test_unchecking_an_item_does_not_activate_the_task(self):
         t = create(resolution=["a"])
-        m.tasks__clear_active()  # create now activates (task:1105f979)
+        _deactivate()  # create now activates (task:1105f979)
         m.tasks__check_item(t["id"], 0, done=False)
         assert m.tasks__active()["active"] is None
 
@@ -458,14 +466,12 @@ class TestActiveTask:
         e = create(title="an epic", epic=True)
         assert m.tasks__active()["active"] == e["id"]
 
-    def test_set_get_clear(self):
+    def test_set_and_get(self):
         t = create()
-        m.tasks__clear_active()  # create now activates (task:1105f979)
+        _deactivate()  # create now activates (task:1105f979)
         assert m.tasks__active()["active"] is None
         m.tasks__set_active(t["id"])
         assert m.tasks__active()["active"] == t["id"]
-        m.tasks__clear_active()
-        assert m.tasks__active()["active"] is None
 
     def test_set_active_rejects_unknown_task(self):
         assert "error" in m.tasks__set_active("nosuch")
@@ -488,8 +494,9 @@ class TestActiveTask:
 
     def test_finish_leaves_the_task_it_finished_active(self):
         """task:1105f979: a finished task stays active through introspection —
-        only tasks__clear_active (which task-introspection calls at its final
-        step) deactivates it. _finish_task no longer touches the pointer."""
+        only tasks__add_introspection (task:2d24165a), which the
+        task-introspection skill calls at its final step, deactivates it.
+        _finish_task no longer touches the pointer."""
         t = create()
         m.tasks__set_active(t["id"])
         m.tasks__finish(t["id"])
@@ -541,12 +548,24 @@ class TestActiveTask:
         m.tasks__update(t["id"], title="renamed while active")
         assert m.tasks__active()["active"] == t["id"]
 
-    def test_clear_active_clears_it(self):
+    def test_add_introspection_clears_the_active_task(self):
+        """task:2d24165a: filing a report against the active task is the sole
+        deactivation path — symmetric with tasks__create setting the pointer."""
         t = create()
         m.tasks__set_active(t["id"])
-        result = m.tasks__clear_active()
-        assert result["active"] is None
+        result = m.tasks__add_introspection(t["id"], report={"date": "2026-08-31"})
+        assert result["active_cleared"] is True
         assert m.tasks__active()["active"] is None
+
+    def test_add_introspection_leaves_a_different_active_task_alone(self):
+        """A report on a non-active task does not touch the pointer, and says
+        so with active_cleared=False rather than an error."""
+        t = create()
+        other = create(title="other")
+        m.tasks__set_active(t["id"])
+        result = m.tasks__add_introspection(other["id"], report={"date": "2026-08-31"})
+        assert result["active_cleared"] is False
+        assert m.tasks__active()["active"] == t["id"]
 
     def test_context_falls_back_to_the_active_task(self):
         t = create(title="the active one")
@@ -616,8 +635,8 @@ class TestLoopDebtNudge:
 
 
 class TestClaudeHooksPush:
-    """tasks__set_active/clear_active best-effort POST to claude-hooks'
-    /set-active-taskid (task:6906557f, claude-hooks task:996cc8f0)."""
+    """tasks__set_active and the tasks__add_introspection clear best-effort POST
+    to claude-hooks' /set-active-taskid (task:6906557f, claude-hooks task:996cc8f0)."""
 
     def test_set_active_pushes_workspace_task_id_and_title(self, monkeypatch):
         # Create before monkeypatching: create now activates and broadcasts too
@@ -654,7 +673,7 @@ class TestClaudeHooksPush:
         assert len(calls) == 1
         assert calls[0] == {"workspace": "/test/workspace", "task_id": r["id"], "title": "Fresh"}
 
-    def test_clear_active_pushes_empty_task_id(self, monkeypatch):
+    def test_add_introspection_clear_pushes_empty_task_id(self, monkeypatch):
         calls = []
 
         def fake_urlopen(req, timeout=None):
@@ -664,7 +683,7 @@ class TestClaudeHooksPush:
         monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
         t = create()
         m.tasks__set_active(t["id"])
-        m.tasks__clear_active()
+        m.tasks__add_introspection(t["id"], report={"date": "2026-08-31"})
 
         assert calls[-1] == {"workspace": "/test/workspace", "task_id": "", "title": ""}
 
@@ -944,7 +963,7 @@ class TestRegistration:
             "tasks__context", "tasks__get", "tasks__list", "tasks__search",
             "tasks__create", "tasks__update", "tasks__check_item", "tasks__finish",
             "tasks__add_decision", "tasks__link", "tasks__unlink", "tasks__edges",
-            "tasks__add_commit", "tasks__set_active", "tasks__active", "tasks__clear_active",
+            "tasks__add_commit", "tasks__set_active", "tasks__active",
             "tasks__grooming_accuracy",
             "task_memory__record", "task_memory__recall", "task_memory__get",
             "task_memory__link", "task_memory__supersede", "task_memory__forget",
@@ -1016,7 +1035,7 @@ class TestDecisionResolvesItem:
         """task:c88b8730: the shared _apply_check_item path is not an activation
         path, so neither the resolve path nor plain check_item touches it."""
         t = create(resolution=["a", "b"])
-        m.tasks__clear_active()
+        _deactivate()
         m.tasks__add_decision(t["id"], "answered a", resolves=0)
         assert m.tasks__active()["active"] is None
 

@@ -47,8 +47,10 @@ activate the same way). The active pointer is a single in-memory value per
 workspace: not persisted, gone on restart. It is a convenience so
 `tasks__context()` can be called with no argument — not a context mechanism in
 its own right. Nothing clears it automatically; it names its task until
-`tasks__clear_active` is called explicitly (introspection does this at its
-final step).
+`tasks__add_introspection` files a report against it, which the introspection
+pass does at its final step. Recording the introspection IS the deactivation —
+there is no standalone clear tool, symmetric with `tasks__create` being the
+activation.
 
 ## Resuming work
 
