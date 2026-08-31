@@ -273,17 +273,19 @@ class TestChecklist:
         r = m.tasks__check_item(t["id"], 0)
         assert "ungroomed_progress_nudge" not in r
 
-    def test_checking_first_item_activates_the_task_when_nothing_else_is_active(self):
+    def test_checking_an_item_does_not_activate_the_task(self):
+        """task:c88b8730: ticking is no longer an activation path — tasks__create
+        and the task-implementation skill are. A quiescent pointer stays
+        quiescent."""
         t = create(resolution=["a", "b"])
-        m.tasks__clear_active()  # create now activates (task:1105f979); isolate the check-item path
+        m.tasks__clear_active()  # create now activates (task:1105f979)
         assert m.tasks__active()["active"] is None
         m.tasks__check_item(t["id"], 0)
-        assert m.tasks__active()["active"] == t["id"]
+        assert m.tasks__active()["active"] is None
 
-    def test_checking_the_only_item_finishes_without_going_through_activation(self):
-        """task:f302eb2b: a single-item checklist goes straight to auto-finish —
-        the last-item path never calls _auto_activate_on_checklist_progress, so
-        a quiescent pointer stays quiescent even as the task is finished."""
+    def test_checking_the_only_item_finishes_the_task(self):
+        """task:f302eb2b: a single-item checklist goes straight to auto-finish.
+        task:c88b8730: ticking never touches the active pointer either way."""
         t = create(resolution=["a"])
         m.tasks__clear_active()  # create now activates (task:1105f979)
         r = m.tasks__check_item(t["id"], 0)
@@ -297,14 +299,15 @@ class TestChecklist:
         assert "active_task_notice" not in r
         assert m.tasks__active()["active"] == t["id"]
 
-    def test_checking_an_item_on_a_different_task_replaces_the_active_task(self):
-        """task:f5ace343: checking off an item on a non-active task simply
-        replaces the active task rather than being refused."""
+    def test_checking_an_item_on_a_different_task_leaves_the_active_task_alone(self):
+        """task:f5ace343 made ticking a non-active task replace the pointer;
+        task:c88b8730 removed ticking as an activation path entirely, so the
+        pointer is now left where it was."""
         a = create(resolution=["a"])
         b = create(resolution=["b", "c"])
         m.tasks__set_active(a["id"])
         m.tasks__check_item(b["id"], 0)
-        assert m.tasks__active()["active"] == b["id"]
+        assert m.tasks__active()["active"] == a["id"]
 
     def test_unchecking_an_item_does_not_activate_the_task(self):
         t = create(resolution=["a"])
@@ -1009,11 +1012,13 @@ class TestDecisionResolvesItem:
         assert r["status"] == "done"
         assert m.tasks__get(t["id"])["status"] == "done"
 
-    def test_resolving_a_non_final_item_activates_the_task_like_check_item(self):
+    def test_resolving_a_non_final_item_does_not_activate_the_task_like_check_item(self):
+        """task:c88b8730: the shared _apply_check_item path is not an activation
+        path, so neither the resolve path nor plain check_item touches it."""
         t = create(resolution=["a", "b"])
         m.tasks__clear_active()
         m.tasks__add_decision(t["id"], "answered a", resolves=0)
-        assert m.tasks__active()["active"] == t["id"]
+        assert m.tasks__active()["active"] is None
 
     def test_an_out_of_range_index_leaves_no_trace(self):
         """A rejected call must not record the decision either.

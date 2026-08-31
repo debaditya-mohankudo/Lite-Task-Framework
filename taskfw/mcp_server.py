@@ -600,29 +600,15 @@ def tasks__update(
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 
-def _auto_activate_on_checklist_progress(task_id: str, task_title: str) -> None:
-    """Checking off a checklist item is unambiguous evidence of implementation
-    starting on task_id -- so this removes the "forgot to call set_active"
-    failure mode at its source instead of relying on the caller to remember a
-    separate step (task:718204e5's grooming in bee-bug-hunter surfaced this:
-    a task was groomed, implemented, and finished without set_active ever
-    being called, so nothing tied the work to a tracked task).
-
-    Sets task_id as the active task (task:f5ace343) unconditionally -- active
-    status is a single ephemeral pointer, not a stack, so checking an item on
-    a task other than the current active one simply replaces it. set_active
-    is itself a no-op when task_id is already active, so this call is safe
-    every time an item is checked.
-    """
-    _set_and_broadcast(task_id, task_title, _scope())
-
-
 def _set_and_broadcast(task_id: str, task_title: str, scope: str) -> None:
     """Set the active task for scope and tell claude-hooks about it.
 
-    Shared by tasks__create, _auto_activate_on_checklist_progress, and
-    tasks__set_active — all need "set, then tell claude-hooks what's active"
-    and nothing more.
+    Shared by tasks__create and tasks__set_active — both need "set, then tell
+    claude-hooks what's active" and nothing more. Ticking a checklist item
+    used to be a third caller (task:c88b8730 removed it): tasks__create now
+    activates the new task (task:1105f979) and the task-implementation skill
+    calls tasks__set_active when work begins, so ticking no longer needs to
+    stand in for a forgotten activation.
     """
     store().set_active(task_id, scope)
     _push_active_task(scope, task_id, task_title)
@@ -730,9 +716,9 @@ def _apply_check_item(task_id: str, index: int, done: bool) -> dict[str, Any]:
 
     Shared by tasks__check_item and tasks__add_decision's resolve path
     (task:1f400ecf), so the two cannot enforce different rules about what
-    ticking an item does. Both auto-activate on progress and both auto-finish
-    on the last open item because there is one path here, not two that happen
-    to agree today.
+    ticking an item does. Both auto-finish on the last open item because
+    there is one path here, not two that happen to agree today. Ticking does
+    NOT touch the active pointer (task:c88b8730).
     """
     task = store().get(task_id)
     if task is None:
@@ -748,16 +734,12 @@ def _apply_check_item(task_id: str, index: int, done: bool) -> dict[str, Any]:
     )
     d, total = task.progress
     result: dict[str, Any] = {"ok": True, "id": task_id, "progress": {"done": d, "total": total}}
-    if not done:
-        return result
-    if total > 0 and d == total:
+    if done and total > 0 and d == total:
         finish_result = _finish_task(task_id, reason="last checklist item checked off")
         if "error" in finish_result:
             result["finish_notice"] = finish_result["error"]
         else:
             result["status"] = finish_result["status"]
-        return result
-    _auto_activate_on_checklist_progress(task_id, task.title)
     return result
 
 
@@ -765,10 +747,10 @@ def _apply_check_item(task_id: str, index: int, done: bool) -> dict[str, Any]:
 def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
     """Tick or untick one resolution checklist item by its zero-based index.
 
-    Ticking an item on (done=True) also sets task_id as the active task for
-    this scope — see _auto_activate_on_checklist_progress. Ticking the last
-    open item finishes the task the same way tasks__finish would
-    (task:f302eb2b) — see _finish_task. Unticking never triggers either.
+    Ticking the last open item finishes the task the same way tasks__finish
+    would (task:f302eb2b) — see _finish_task. Unticking never triggers that.
+    Ticking does not touch the active pointer (task:c88b8730): tasks__create
+    and the task-implementation skill are the activation paths now.
 
     Logs the item's text alongside its index: the generic `tool=tasks__check_item
     OK` line from tool_called (dispatcher.py) says a call happened but not which
