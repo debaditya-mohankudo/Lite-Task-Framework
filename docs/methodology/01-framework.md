@@ -38,17 +38,22 @@ an already-finished task succeeds rather than erroring.
 ```
 tasks__create(title=..., epic=True, motivation=...)        # if grouping
 tasks__create(title=..., parent=<parent>, motivation=..., resolution=[...])
-tasks__set_active(task_id)
 tasks__context(task_id)      # ← you must call this; nothing is injected
 ```
 
-`tasks__set_active` persists per workspace and survives restarts. It is a
-convenience so `tasks__context()` can be called with no argument — it is not a
-context mechanism in its own right.
+`tasks__create` sets the new task active for the workspace — creation is the
+start of a loop pass, so you do not call `tasks__set_active` after it (epics
+activate the same way). The active pointer is a single in-memory value per
+workspace: not persisted, gone on restart. It is a convenience so
+`tasks__context()` can be called with no argument — not a context mechanism in
+its own right. Nothing clears it automatically; it names its task until
+`tasks__clear_active` is called explicitly (introspection does this at its
+final step).
 
 ## Resuming work
 
 ```
+tasks__set_active(task_id)   # resuming an older task — create didn't run this session
 tasks__active()              # what was I on?
 tasks__context()             # the whole bundle for it
 ```
@@ -67,8 +72,10 @@ Use `verbosity="summary"` for identity, status, and open checklist items only.
 tasks__finish(task_id, reason="what actually shipped")
 ```
 
-Then run [introspection](05-introspection.md). It is the step that makes the
-next task cheaper, and the easiest one to skip.
+`tasks__finish` does not deactivate the task — it stays active so introspection
+can pick it up without a lookup. Then run [introspection](05-introspection.md),
+which clears the pointer at its final step. It is the step that makes the next
+task cheaper, and the easiest one to skip.
 
 ## When not to use this
 

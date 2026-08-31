@@ -158,7 +158,9 @@ package TaskFrameworkSystem {
              * started, so it removes the "forgot to call set_active" failure
              * mode instead of merely nudging about it. Ticking a checklist's
              * LAST open item goes further and finishes the task outright,
-             * through the same path tasks__finish uses.
+             * through the same path tasks__finish uses — and, since
+             * task:1105f979, that path no longer clears the active pointer,
+             * so a task finished this way stays active for introspection.
              *
              * Two tools reach that behaviour, not one (task:1f400ecf):
              * tasks__check_item, and tasks__add_decision when given a
@@ -173,9 +175,20 @@ package TaskFrameworkSystem {
              * entry per scope (task:f5ace343) — not persisted, not a stack —
              * so setting a different task simply overwrites whatever was
              * active; there is nothing to protect against losing, and
-             * nothing survives a server restart. tasks__finish and
-             * tasks__clear_active just clear the pointer — there is no
-             * underlying task to restore. This mutation lives in
+             * nothing survives a server restart.
+             *
+             * tasks__create ALSO sets its new task active (task:1105f979),
+             * for the same reason ticking does: creation is the start of a
+             * loop pass, so activation belongs there rather than as a
+             * separate tasks__set_active every caller must remember. epic
+             * tasks activate the same way — there is no epic branch. Once
+             * set, NOTHING auto-clears the pointer: neither tasks__finish /
+             * checklist auto-finish nor tasks__update reaching a terminal
+             * status touches it, so a finished task stays named through
+             * introspection — the window loop_debt_nudge and the
+             * introspection flow depend on. tasks__clear_active, called
+             * explicitly (the task-introspection skill does so at its final
+             * step), is the sole deactivation path. This mutation lives in
              * mcp_server.py itself, not taskfw/dispatcher/ — it is a tool's own
              * write, gated by LifecycleRules like any other, not an
              * advisory annotation. */

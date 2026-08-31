@@ -418,10 +418,13 @@ def tasks__create(
     words with an existing task, surfaced for a human to review. Nothing here
     ever creates a tasks__link edge; that stays a deliberate, separate call.
 
-    Clears whatever task was active for this scope, if any (task:74bf3542):
-    starting a new task is a clean break from what came before, so the new
-    task is not auto-activated and the old one is not left dangling as
-    active either. Calling this repeatedly is harmless.
+    Sets the new task as the active one for this scope (task:1105f979),
+    replacing whatever was active before it. The active pointer is a single
+    ephemeral in-memory value (task:f5ace343), and creating a task is the
+    start of a pass through the loop — so activation belongs here rather than
+    being a separate step every caller has to remember. Nothing auto-clears
+    the pointer again: it lives until tasks__clear_active is called
+    explicitly, which the task-introspection skill does at its final step.
     """
     task = Task(
         title=title, epic=epic, parent=parent or None, motivation=motivation,
@@ -440,8 +443,7 @@ def tasks__create(
         return _denied(decision)
     store().save(task)
     scope = _scope()
-    if store().get_active(scope):
-        _clear_and_broadcast(scope)
+    _set_and_broadcast(task.id, task.title, scope)
     result: dict[str, Any] = {"ok": True, "id": task.id, "epic": task.epic, "status": task.status}
     candidates = TaskContext(store()).related(task)
     if candidates:
@@ -580,10 +582,6 @@ def tasks__update(
     if not decision:
         return _denied(decision)
     store().save(updated)
-    if updated.status in lifecycle.TERMINAL and current.status not in lifecycle.TERMINAL:
-        scope = _scope()
-        if store().get_active(scope) == task_id:
-            _clear_and_broadcast(scope)
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 
@@ -607,8 +605,9 @@ def _auto_activate_on_checklist_progress(task_id: str, task_title: str) -> None:
 def _set_and_broadcast(task_id: str, task_title: str, scope: str) -> None:
     """Set the active task for scope and tell claude-hooks about it.
 
-    Shared by _auto_activate_on_checklist_progress and tasks__set_active —
-    both need "set, then tell claude-hooks what's active" and nothing more.
+    Shared by tasks__create, _auto_activate_on_checklist_progress, and
+    tasks__set_active — all need "set, then tell claude-hooks what's active"
+    and nothing more.
     """
     store().set_active(task_id, scope)
     _push_active_task(scope, task_id, task_title)
@@ -617,16 +616,16 @@ def _set_and_broadcast(task_id: str, task_title: str, scope: str) -> None:
 def _clear_and_broadcast(scope: str) -> None:
     """Clear the active task for scope and tell claude-hooks it's gone.
 
-    Shared by _finish_task, tasks__create, tasks__update, and
-    tasks__clear_active — all need "clear, then tell claude-hooks there is no
-    active task" and nothing more.
+    tasks__clear_active is now the only caller — nothing auto-clears the
+    pointer on create or finish anymore (task:1105f979). Kept as a helper so
+    "clear, then tell claude-hooks there is no active task" stays one thing.
     """
     store().clear_active(scope)
     _push_active_task(scope, "")
 
 
 def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
-    """Mark a task done and clear it as the active task if it is active.
+    """Mark a task done.
 
     Shared by tasks__finish and the auto-finish-on-last-item path in
     tasks__check_item (task:f302eb2b) so there is exactly one implementation
@@ -637,7 +636,9 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
     an abandoned task IS refused — abandoned is terminal and is not the state
     the caller asked for.
 
-    If task_id is not the active task, active status is left untouched.
+    Does not touch the active pointer (task:1105f979). A finished task stays
+    active through introspection; tasks__clear_active — which task-introspection
+    calls at its final step — is the only thing that deactivates it.
     """
     task = store().get(task_id)
     if task is None:
@@ -653,9 +654,6 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
     store().save(task)
     if reason:
         store().add_event(task_id, reason, kind="status")
-    scope = _scope()
-    if store().get_active(scope) == task_id:
-        _clear_and_broadcast(scope)
     return {"ok": True, "id": task_id, "status": "done"}
 
 

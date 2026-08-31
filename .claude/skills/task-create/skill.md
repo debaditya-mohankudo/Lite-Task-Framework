@@ -135,4 +135,4 @@ Skip silently if the repo has no store.
   as verifiable behavioural outcomes; name files or modules only when that
   genuinely constrains scope — otherwise that belongs in `files`. Keep
   implementation choices flexible unless they are a real constraint.
-- Activate after creating: `tasks__set_active(task_id)` — then call `tasks__context`.
+- `tasks__create` sets the new task active for the workspace — no separate `tasks__set_active` call. Just call `tasks__context` next. (Scaffolding an epic with several children leaves the last-created child active; set the one you mean to work on if it isn't that.)
