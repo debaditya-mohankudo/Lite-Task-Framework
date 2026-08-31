@@ -6,4 +6,4 @@ same rules, so there is exactly one implementation of each rule and no way
 to reach the database around it.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
