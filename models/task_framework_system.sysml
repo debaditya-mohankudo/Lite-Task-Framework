@@ -45,7 +45,7 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "8cd92c0e7d3367fb6f976af502414f8ffa8b1c3d";
+        derivedFromCommit = "8bef93c9eb55247a4560afa1ea277e4c85585208";
         derivedAt = "2026-08-31";
         modelledPaths = (
             "taskfw/scope.py",
@@ -157,44 +157,43 @@ package TaskFrameworkSystem {
              * which is trimmed field-by-field before it is dropped whole —
              * see PullContextRequirement.
              *
-             * TICKING A CHECKLIST ITEM IS THE EXCEPTION TO "dispatcher never
-             * changes what is stored": it also sets its task as the active
-             * task for the current scope as a direct side effect — a
-             * checked-off item is unambiguous evidence implementation
-             * started, so it removes the "forgot to call set_active" failure
-             * mode instead of merely nudging about it. Ticking a checklist's
-             * LAST open item goes further and finishes the task outright,
-             * through the same path tasks__finish uses — and, since
-             * task:1105f979, that path no longer clears the active pointer,
-             * so a task finished this way stays active for introspection.
+             * TICKING A CHECKLIST ITEM DOES NOT TOUCH THE ACTIVE POINTER
+             * (task:c88b8730). It once did — a checked-off item is
+             * unambiguous evidence implementation started, so it stood in
+             * for a "forgot to call set_active". That safety net became
+             * redundant once tasks__create activates the new task
+             * (task:1105f979) and the task-implementation skill calls
+             * tasks__set_active when work begins in a fresh session; the
+             * silent repoint it caused — ticking an item on task B while A
+             * was active would steal the pointer — cost more clarity than
+             * the vanished failure mode was worth. Ticking a checklist's
+             * LAST open item still finishes the task outright, through the
+             * same path tasks__finish uses — and, since task:1105f979, that
+             * path no longer clears the active pointer, so a task finished
+             * this way stays active for introspection.
              *
-             * Two tools reach that behaviour, not one (task:1f400ecf):
-             * tasks__check_item, and tasks__add_decision when given a
-             * `resolves` index naming the item the decision answers. They
-             * share it rather than each implementing it — both call
-             * _apply_check_item, which is why the exception is stated here
-             * as a property of ticking rather than of one tool. add_decision
-             * carries it because an item whose completion criterion IS a
-             * recorded judgement is completed by the decision, and recording
-             * the decision alone ticks nothing. Neither set nor finish needs a gate to
-             * mirror: the active-task pointer is a single in-memory dict
-             * entry per scope (task:f5ace343) — not persisted, not a stack —
-             * so setting a different task simply overwrites whatever was
-             * active; there is nothing to protect against losing, and
-             * nothing survives a server restart.
+             * Two tools reach the shared ticking path, not one
+             * (task:1f400ecf): tasks__check_item, and tasks__add_decision
+             * when given a `resolves` index naming the item the decision
+             * answers. Both call _apply_check_item, so neither can drift
+             * from the other on what ticking does — including not activating.
              *
-             * tasks__create ALSO sets its new task active (task:1105f979),
-             * for the same reason ticking does: creation is the start of a
-             * loop pass, so activation belongs there rather than as a
-             * separate tasks__set_active every caller must remember. epic
-             * tasks activate the same way — there is no epic branch. Once
-             * set, NOTHING auto-clears the pointer: neither tasks__finish /
-             * checklist auto-finish nor tasks__update reaching a terminal
-             * status touches it, so a finished task stays named through
+             * tasks__create sets its new task active (task:1105f979):
+             * creation is the start of a loop pass, so activation belongs
+             * there rather than as a separate tasks__set_active every caller
+             * must remember. epic tasks activate the same way — there is no
+             * epic branch. The active-task pointer is a single in-memory
+             * dict entry per scope (task:f5ace343) — not persisted, not a
+             * stack — so setting a different task simply overwrites whatever
+             * was active; there is nothing to protect against losing, and
+             * nothing survives a server restart. Once set, NOTHING
+             * auto-clears the pointer: neither tasks__finish / checklist
+             * auto-finish nor tasks__update reaching a terminal status
+             * touches it, so a finished task stays named through
              * introspection — the window loop_debt_nudge and the
              * introspection flow depend on. tasks__clear_active, called
              * explicitly (the task-introspection skill does so at its final
-             * step), is the sole deactivation path. This mutation lives in
+             * step), is the sole deactivation path. That mutation lives in
              * mcp_server.py itself, not taskfw/dispatcher/ — it is a tool's own
              * write, gated by LifecycleRules like any other, not an
              * advisory annotation. */
