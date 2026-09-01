@@ -10,8 +10,6 @@ different set than a hook does.
 """
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from taskfw import mcp_server as m
@@ -23,11 +21,6 @@ def store(tmp_path, monkeypatch):
     s = TaskStore(tmp_path / "t.db")
     m.set_store(s)
     monkeypatch.setenv("TASKFW_SCOPE", "/test/workspace")
-    # Point the claude-hooks push at a port nothing listens on, so tests never
-    # depend on (or pollute) a real claude-hooks server that happens to be
-    # running on this machine. connection-refused is fast and swallowed by
-    # _push_active_task exactly like any other unreachable-server case.
-    monkeypatch.setenv("CLAUDE_HOOKS_URL", "http://127.0.0.1:1")
     yield s
     s.close()
     m.set_store(None)
@@ -632,84 +625,6 @@ class TestLoopDebtNudge:
         r = create(title="orphan", parent="nonexistent")
         assert "error" in r
         assert "loop_debt_nudge" not in r and "task_debt_nudge" not in r
-
-
-class TestClaudeHooksPush:
-    """tasks__set_active and the tasks__add_introspection clear best-effort POST
-    to claude-hooks' /set-active-taskid (task:6906557f, claude-hooks task:996cc8f0)."""
-
-    def test_set_active_pushes_workspace_task_id_and_title(self, monkeypatch):
-        # Create before monkeypatching: create now activates and broadcasts too
-        # (task:1105f979), and this test is about set_active's broadcast alone.
-        t = create(title="Push me")
-        calls = []
-
-        def fake_urlopen(req, timeout=None):
-            calls.append((req.full_url, json.loads(req.data), timeout))
-            return _DummyResponse()
-
-        monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
-        m.tasks__set_active(t["id"])
-
-        assert len(calls) == 1
-        url, body, timeout = calls[0]
-        assert url == "http://127.0.0.1:1/set-active-taskid"
-        assert body == {"workspace": "/test/workspace", "task_id": t["id"], "title": "Push me"}
-        assert timeout == m._PUSH_TIMEOUT_S
-
-    def test_create_pushes_the_new_task_as_active(self, monkeypatch):
-        """task:1105f979: creating a task activates it, so it fires the
-        claude-hooks courtesy broadcast — exactly once, carrying the new
-        task's id and title."""
-        calls = []
-
-        def fake_urlopen(req, timeout=None):
-            calls.append(json.loads(req.data))
-            return _DummyResponse()
-
-        monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
-        r = m.tasks__create(title="Fresh")
-
-        assert len(calls) == 1
-        assert calls[0] == {"workspace": "/test/workspace", "task_id": r["id"], "title": "Fresh"}
-
-    def test_add_introspection_clear_pushes_empty_task_id(self, monkeypatch):
-        calls = []
-
-        def fake_urlopen(req, timeout=None):
-            calls.append(json.loads(req.data))
-            return _DummyResponse()
-
-        monkeypatch.setattr(m.urllib.request, "urlopen", fake_urlopen)
-        t = create()
-        m.tasks__set_active(t["id"])
-        m.tasks__add_introspection(t["id"], report={"date": "2026-08-31"})
-
-        assert calls[-1] == {"workspace": "/test/workspace", "task_id": "", "title": ""}
-
-    def test_set_active_still_succeeds_when_push_raises(self, monkeypatch):
-        def raising_urlopen(req, timeout=None):
-            raise ConnectionRefusedError("no server")
-
-        monkeypatch.setattr(m.urllib.request, "urlopen", raising_urlopen)
-        t = create()
-        result = m.tasks__set_active(t["id"])
-
-        assert result["ok"]
-        assert m.tasks__active()["active"] == t["id"]
-
-    def test_set_active_unreachable_url_does_not_raise(self):
-        # No monkeypatch here — exercises the real urllib path against the
-        # unreachable CLAUDE_HOOKS_URL set by the store fixture, proving the
-        # actual network/connection-refused exception (not a mock) is caught.
-        t = create()
-        result = m.tasks__set_active(t["id"])
-        assert result["ok"]
-
-
-class _DummyResponse:
-    def close(self):
-        pass
 
 
 class TestDecisions:

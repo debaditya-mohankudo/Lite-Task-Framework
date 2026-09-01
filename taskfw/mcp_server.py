@@ -11,11 +11,8 @@ neither owns the rules.
 from __future__ import annotations
 
 import functools
-import json
 import os
 from datetime import datetime, timezone
-import urllib.error
-import urllib.request
 from typing import Any, Callable
 
 from mcp.server import MCPServer
@@ -459,7 +456,7 @@ def tasks__create(
         return _denied(decision)
     store().save(task)
     scope = _scope()
-    _set_and_broadcast(task.id, task.title, scope)
+    store().set_active(task.id, scope)
     result: dict[str, Any] = {"ok": True, "id": task.id, "epic": task.epic, "status": task.status}
     candidates = TaskContext(store()).related(task)
     if candidates:
@@ -599,32 +596,6 @@ def tasks__update(
         return _denied(decision)
     store().save(updated)
     return {"ok": True, "id": updated.id, "status": updated.status}
-
-
-def _set_and_broadcast(task_id: str, task_title: str, scope: str) -> None:
-    """Set the active task for scope and tell claude-hooks about it.
-
-    Shared by tasks__create and tasks__set_active — both need "set, then tell
-    claude-hooks what's active" and nothing more. Ticking a checklist item
-    used to be a third caller (task:c88b8730 removed it): tasks__create now
-    activates the new task (task:1105f979) and the task-implementation skill
-    calls tasks__set_active when work begins, so ticking no longer needs to
-    stand in for a forgotten activation.
-    """
-    store().set_active(task_id, scope)
-    _push_active_task(scope, task_id, task_title)
-
-
-def _clear_and_broadcast(scope: str) -> None:
-    """Clear the active task for scope and tell claude-hooks it's gone.
-
-    tasks__add_introspection is now the only caller (task:2d24165a) — nothing
-    auto-clears the pointer on create or finish (task:1105f979), and the
-    standalone tasks__clear_active tool is gone. Kept as a helper so "clear,
-    then tell claude-hooks there is no active task" stays one thing.
-    """
-    store().clear_active(scope)
-    _push_active_task(scope, "")
 
 
 def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
@@ -812,7 +783,7 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
     scope = _scope()
     active_cleared = store().get_active(scope) == task_id
     if active_cleared:
-        _clear_and_broadcast(scope)
+        store().clear_active(scope)
     return {
         "ok": True,
         "id": task_id,
@@ -950,36 +921,6 @@ def tasks__add_commit(task_id: str, sha: str, repo: str = "") -> dict[str, Any]:
 # Active task
 # ---------------------------------------------------------------------------
 
-_PUSH_TIMEOUT_S = 0.5
-
-
-def _push_active_task(workspace: str, task_id: str, title: str = "") -> None:
-    """Best-effort POST to claude-hooks' running FastAPI server (claude-hooks
-    task:996cc8f0), telling it what the active task now is. Pushing is a
-    courtesy, not a dependency — this store is the durable source of truth
-    regardless of whether that server is up, so tasks__set_active and the
-    add_introspection clear must succeed identically whether or not this call
-    lands. Swallows every
-    failure (connection refused, timeout, DNS, non-2xx). Reads CLAUDE_HOOKS_URL
-    fresh on every call rather than caching it at import time, so tests can
-    point it at an unreachable port via monkeypatch.setenv.
-
-    Logged at debug, not warning: firing with no claude-hooks server running
-    is the expected common case, not an anomaly worth a human's attention.
-    """
-    base_url = os.environ.get("CLAUDE_HOOKS_URL", "http://127.0.0.1:8766")
-    body = json.dumps({"workspace": workspace, "task_id": task_id, "title": title}).encode()
-    req = urllib.request.Request(
-        f"{base_url}/set-active-taskid",
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        urllib.request.urlopen(req, timeout=_PUSH_TIMEOUT_S).close()
-    except (urllib.error.URLError, OSError, ValueError) as exc:
-        log.debug("push to claude-hooks /set-active-taskid failed (non-fatal): %s", exc)
-
 
 @_tool(hook=_loop_debt_hook)
 def tasks__set_active(task_id: str) -> dict[str, Any]:
@@ -996,7 +937,7 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
     if task is None:
         return {"error": f"No task {task_id!r}"}
     scope = _scope()
-    _set_and_broadcast(task_id, task.title, scope)
+    store().set_active(task_id, scope)
     return {"ok": True, "active": task_id, "scope": scope}
 
 
