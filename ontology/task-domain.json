@@ -129,6 +129,18 @@
       "definition": "A transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time. It never blocks the action or changes what gets stored, and it never hands back the content of a record the caller did not touch. What it points at is either context the caller already has (this task, this memory, this report), or a bare COUNT over records it names none of -- `loop_debt_nudge` tallies ungraded risks across the last finished tasks in the project on `tasks__set_active`. The aggregate is admissible because a tally is not a fact about any one of the records it counts; returning those records' text would be a push. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
       "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge, loop_debt_nudge"
     },
+    "IntrospectionNudge": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "The Nudge that rides on the response to `tasks__add_introspection`. Fires only when the just-recorded report carries at least one lesson -- `new_knowledge`, or the legacy `surprises[].lesson` shape -- AND the Task has never cited a MemoryRecord (`memory_links` row with relation `learned_from`). It points only at context the caller already has -- the report it just wrote and the Task it wrote it against -- and never returns a MemoryRecord's content; whether a lesson generalises is the caller's judgement, not a threshold this enforces, and a Task that already promoted one lesson is not nudged again for a later report. It is the concrete case the `Nudge` term names first: the defect it exists to fix is that 'nothing worth promoting to Loop Memory' otherwise looks identical to 'lessons dropped on the floor'.",
+      "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge, _lesson_texts, _cited_in_memory"
+    },
+    "LoopDebtNudge": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "The Nudge that rides on the response to `tasks__set_active`. Reports a bare COUNT -- how many of the last N finished Tasks in the project carried predicted Risks that were never graded -- over records it names none of, recomputed from `taskfw/accuracy.py:loop_debt` on every call so it can never disagree with what `tasks__grooming_accuracy` reports about the same Tasks. The aggregate is admissible for exactly the reason the `Nudge` term gives: a tally is not a fact about any one of the records it counts, so returning it is not a push. Fires only when the count is non-zero; a clean loop is silent, not a zero report. Companion to `task_debt_nudge`, which rides on the same call but speaks about the one Task just made active rather than the loop across recent ones.",
+      "evidence": "taskfw/dispatcher/nudges.py:loop_debt_nudge, taskfw/accuracy.py:loop_debt"
+    },
     "TaskContext": {
       "bounded_context": "Task Tracking",
       "form": "transient",
@@ -331,6 +343,30 @@
       "predicate": "references",
       "object": "Introspection",
       "note": "One nudge checks whether a just-recorded Introspection report's lessons have been promoted to a MemoryRecord yet, without itself writing to Loop Memory."
+    },
+    {
+      "subject": "IntrospectionNudge",
+      "predicate": "is-a",
+      "object": "Nudge",
+      "note": "`Nudge` names a mechanism -- advisory text attached to a response -- and on its own stays close to the code symbol it cites. `IntrospectionNudge` is domain vocabulary because the compound binds that mechanism to the `Introspection` term: it names a standing fact about the loop -- 'an introspection pass produced a lesson that never reached Loop Memory, and the loop says so' -- not an implementation detail. It is not sugar over `Nudge`; it is the edge that connects `Nudge` to `Introspection`, which is why it carries its own `references Introspection` relation. Same triple form as `Decision is-a Event`, but what earns it an entry is the association with another term, not merely being one instance of the parent."
+    },
+    {
+      "subject": "IntrospectionNudge",
+      "predicate": "references",
+      "object": "Introspection",
+      "note": "Reads the report just appended by `tasks__add_introspection` (`task.introspection[-1]`) for lesson-shaped entries, and the Task's `memory_links` for an existing `learned_from` citation. Points back at both -- context the caller already pulled -- and writes to neither; promotion to a MemoryRecord stays a separate, explicit `task_memory__record` call."
+    },
+    {
+      "subject": "LoopDebtNudge",
+      "predicate": "is-a",
+      "object": "Nudge",
+      "note": "Vocabulary for the same reason as `IntrospectionNudge`: the compound binds the nudge mechanism to a domain concept -- the loop reporting its own debt, the count of finished Tasks whose predicted Risks were never graded. Its anchor is the ungraded-`GroomingGrade` aggregate rather than a single term, which is also why it is the one nudge that returns a bare count instead of pointing at a record the caller touched -- the exception `Nudge`'s definition calls out now has a term to hang off instead of only a clause."
+    },
+    {
+      "subject": "LoopDebtNudge",
+      "predicate": "references",
+      "object": "GroomingGrade",
+      "note": "Counts finished Tasks whose predicted Risks have no GroomingGrade -- the ungraded-risk tally comes straight from `taskfw/accuracy.py:loop_debt`, the same source `tasks__grooming_accuracy` reads, so the nudge's number and the accuracy report's number are recomputed from one place and cannot drift apart. It names none of the counted Tasks; the count is all that crosses back."
     },
     {
       "subject": "Commit",
