@@ -84,9 +84,10 @@
         "finish_reminder_nudge, stale_memory_nudge, and ungroomed_progress_nudge are all stateless by design: each checks current state on every qualifying call rather than firing once and remembering it fired, because check_item/update/link are infrequent enough that re-firing costs little.",
         "ungroomed_progress_nudge and finish_nudge call task-phase-derivation's is_groomed/is_introspected (task:5a5fde0d) rather than testing task.grooming/task.introspection directly, so they and task_phase() (see [[task-phase-derivation]]) can never disagree about what those words mean.",
         "Every nudge here rides on the response of the taskfw call it comments on — none is wired onto a host hook or fires on calls taskfw does not own (task:00d9483f removed the one exception, drift_reflection_nudge, and its PostToolUse trigger).",
-        "nudges.py imports is_groomed, is_implemented, and is_introspected from phase.py (one-directional, task:5a5fde0d) and imports nothing from chassis.py — every nudge here is a plain function returning str | None, wiring onto tool_called/apply_nudge happens only at the mcp_server.py call site, not inside this module."
+        "nudges.py imports is_groomed, is_implemented, and is_introspected from phase.py (one-directional, task:5a5fde0d) and imports nothing from chassis.py — every nudge here is a plain function returning str | None, wiring onto tool_called/apply_nudge happens only at the mcp_server.py call site, not inside this module.",
+        "introspection_nudge and loop_debt_nudge are the sole code embodiment of ontology terms IntrospectionNudge and LoopDebtNudge (ontology/task-domain.json); those terms earn their own entry -- rather than folding into the parent Nudge term -- because each binds the nudge mechanism to another vocabulary term (Introspection, and the ungraded-GroomingGrade aggregate). The other nudges here back only the generic Nudge term. Renaming or removing either function breaks tests/test_ontology.py via that term's evidence citation."
       ],
-      "last_validated": "2026-08-29T09:46:04.980603+00:00",
+      "last_validated": "2026-09-01T01:39:11.938759+00:00",
       "module": "taskfw/dispatcher/nudges.py",
       "name": "advisory-nudge-policies",
       "related": [
@@ -1457,6 +1458,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-08-31T14:48:06.170098+00:00"
+    "updated_at": "2026-09-01T01:39:11.938759+00:00"
   }
 }
