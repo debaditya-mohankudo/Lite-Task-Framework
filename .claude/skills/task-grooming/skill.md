@@ -2,7 +2,7 @@
 name: task-grooming
 description: Pre-implementation grooming pass. Removes uncertainty before implementation by pulling context, verifying premises, and recording falsifiable risks. Invoke with /task-grooming, /task-grooming task:<id>, or /task-grooming epic:<id>.
 user-invocable: true
-updated: 2026-08-08
+updated: 2026-09-01
 doc: docs/methodology/03-grooming.md
 repo: ~/workspace/task-framework/.claude/skills/task-grooming/skill.md
 deployed: ~/.claude/skills/task-grooming/skill.md
@@ -78,6 +78,8 @@ concept__uncovered(repo="<abs repo path>", modules=["<file>", "..."])
 
 For every claim the task's plan rests on — "X is the authoritative file", "Y calls Z", "this is the production path", "this duplication is accidental" — **spend one concrete verification step before accepting it.** Read the file. Grep for callers. Check `git log`. Inspect the running system. This applies as much to a premise you wrote yourself an hour ago as to one you inherited — self-authored premises are exactly as unexamined and feel more trustworthy, which makes them worse.
 
+**Name the blast radius.** For every symbol or file the plan changes, ask what already depends on it — callers, subclasses, serialised formats, tests that assert the current behaviour — and whether the change could alter what that dependent observes. Where the answer is "possibly", that is a falsifiable `risk` ("changing X will not affect Y's behaviour"), **not** a `hidden_assumption`: assumptions are never graded, so a regression parked there is invisible to introspection. This is what lets the next pass grade a regression instead of never seeing it. Size the pass to the task — a one-line config change has almost no radius; a change to a shared type or a public tool signature has a lot.
+
 When a claim is contested enough that a future reader would need to trust it without re-checking, say plainly how well-supported it is: `fact` (read and confirmed), `inference` (implied but not stated), `assumption` (believed, unverified), or `unknown` (flagged, not yet checked). Most claims don't need the label spelled out — only the ones where the distinction changes what happens next.
 
 Consult the task graph rather than search hits alone when judging whether this is a duplicate, an orphan, or blocked on something else. If another task owns the same work, consolidate to one owner and link the rest with `tasks__link(..., rel="duplicates")` — but don't abandon a task unilaterally; surface it to the user first.
@@ -136,5 +138,6 @@ Do not deactivate here. A task stays active from `tasks__create` through its int
 - **Grooming is not starting.** A groomed task is not necessarily one under active *implementation*. Activating it here just marks "this is the task in hand"; the pointer stays on it past the end of grooming, into implementation, and is only released when introspection is recorded (task:2d24165a) — do not leave the task half-implemented because grooming went well. There is no task *status* to reset — grooming never changed it.
 - **Revise the prior grooming; do not overwrite it blind.**
 - **Every risk must be falsifiable.**
+- **What the change could break is a risk, not a `hidden_assumption`** — the latter is never graded, so a regression left there never reaches introspection.
 - **Do not abandon a task unilaterally.** If it looks like a duplicate or orphan worth abandoning, surface it to the user first.
 - If nothing needs changing, still write the findings and say "ready as-is".

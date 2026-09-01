@@ -73,6 +73,17 @@ as much to a premise you wrote yourself an hour ago as to one you inherited —
 self-authored premises are exactly as unexamined as inherited ones, and feel
 more trustworthy, which makes them worse.
 
+The second habit, skipped for the same reason: **name what the change could
+break.** For every symbol or file the plan touches, ask what depends on it —
+callers, subclasses, serialised formats, tests pinned to the current
+behaviour — and whether the change alters what that dependent observes. A
+"possibly" is a falsifiable risk — "changing X will not affect Y" — and
+belongs in `risks`, not `hidden_assumptions`, which introspection never
+grades. A regression that no risk predicted has nowhere else to surface once
+the work is done. Size this to the task, the same way premise-checking is
+sized: a config tweak has almost no radius; a shared type or a tool signature
+has a lot.
+
 When a claim is contested enough that a future reader would trust it without
 re-checking, say plainly how well-supported it is: `fact`, `inference`,
 `assumption`, or `unknown`. Most claims don't need the label — only the ones

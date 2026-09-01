@@ -90,13 +90,18 @@ lessons, not a transcript of implementation details.
 1. **Did the intended behaviour hold?** Compare the promised outcomes,
    boundaries, failure behaviour, and invariants to what callers actually
    experienced.
-2. **Where did the uncertainty come from?** Could grooming have removed it?
-3. **What decisions were never recorded?** Compare the plan to what was built.
+2. **Did anything outside this task's promise change?** Walk the callers,
+   subclasses, and tests of what the change touched. A regression here that no
+   grooming risk predicted is a `missed` — it goes in `missed_surprises`.
+   Repeated misses of this kind mean grooming's blast-radius pass is running
+   too shallow.
+3. **Where did the uncertainty come from?** Could grooming have removed it?
+4. **What decisions were never recorded?** Compare the plan to what was built.
    Log every gap — this is the highest-value part of the pass.
-4. **What surprised us?** Should it become durable knowledge?
-5. **What should already exist next time?** Prefer improving the system over
+5. **What surprised us?** Should it become durable knowledge?
+6. **What should already exist next time?** Prefer improving the system over
    documenting history.
-6. **What became obsolete?** Flag it; do not delete it unilaterally.
+7. **What became obsolete?** Flag it; do not delete it unilaterally.
 
 ## Record
 
