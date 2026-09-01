@@ -81,7 +81,7 @@ tasks__update(task_id, grooming={
 })
 ```
 
-**`grooming` replaces wholesale**, so pass the other keys back unchanged or they are lost. `risks` is the one exception (task:f24be6e4): it merges by `id`, so an omitted risk that was already graded is carried forward automatically, and rewording `text` no longer resets its history — the `id` is what recurrence and grading key on now.
+**`grooming` replaces wholesale**, so pass the other keys back unchanged or they are lost. `risks` is the one exception (task:f24be6e4): it merges by `id`, so an omitted risk that was already graded is carried forward automatically, and rewording `text` no longer resets its history — grading and the carry-forward both key on the `id`, not the wording. Cross-task recurrence in `tasks__grooming_accuracy` still groups by normalised `text`, though — there the `id` only disambiguates a reworded risk that ended up under two of them.
 
 Be honest about *materialized* versus *unresolved*. A risk that said "decide X now" and was simply not decided has not materialized — it is still open, and grading it as inevitable launders a skipped decision into a recorded outcome. If grading surfaces a decision you skipped, **make it now**; that is the loop working.
 
@@ -257,7 +257,7 @@ If a pass produces none of those, it was probably not worth running — say so r
 ## Rules
 
 - **Never skip decision-logging.** It is the highest-value part of the pass.
-- **Keep each risk's `id` when grading** — grading and recurrence key on it, not the wording, so a risk can be reworded without losing its history.
+- **Keep each risk's `id` when grading** — grading and the carry-forward merge key on it, not the wording, so a risk can be reworded without losing its grade. Cross-task recurrence still matches on normalised `text`.
 - **Pass the whole grooming object back** — every field replaces except `risks`, which merges by `id`.
 - **Record behaviour, not incidental detail.** Preserve observable promises and
   causal lessons; leave implementation choices flexible unless they affect a

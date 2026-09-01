@@ -42,7 +42,10 @@ tasks__update(task_id, grooming={
 they are lost. `risks` is the one exception (task:f24be6e4): it merges by
 `id`, so a risk you omit here is carried forward automatically if it was
 already graded, and rewording a risk's `text` no longer resets its history —
-the `id` is what recurrence and grading key on now, not the wording.
+grading and the carry-forward both key on the `id` now, not the wording.
+Cross-task recurrence in `tasks__grooming_accuracy` still groups by
+normalised `text`, though — there the `id` only disambiguates a reworded
+risk that ended up under two of them.
 
 Repeated `wrong` grades mean grooming is asking the wrong questions. Repeated
 `missed` grades mean it is not asking enough of them. Both are signals to
