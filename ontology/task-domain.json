@@ -179,6 +179,12 @@
       "lifecycle": "Assigned by a single Introspection pass, after Implementation, and carried by its Risk from then on. Re-grooming the same Task keeps the verdict rather than discarding it, so a judgement Introspection has already made is never lost.",
       "lifecycle_evidence": "docs/methodology/05-introspection.md, docs/methodology/04-implementation.md"
     },
+    "GroomingGradePredictiveValue": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "The share of graded Risks whose prediction paid off: `(materialized + avoided) / graded_total`, rounded to two places and reported as `predictive_value` in the GroomingAccuracy result. `USEFUL = (materialized, avoided)` names the two GroomingGrade values that count as a prediction earning its keep -- it came true with its mitigation ready, or it forced the change that avoided it; `wrong` is the only grade left out, because it is the one that marks a Grooming pass spent on noise. The denominator is recognised grades only -- `graded_total` is the sum of the GROOMING_GRADES tallies -- so an `unrecognised` grade and an `ungraded` Risk both sit outside it, and the ratio answers 'of the Risks Introspection actually judged, how many were worth predicting' and nothing wider. It is `None`, never `0.0`, when no Risk was graded: 'no evidence yet' is kept distinct from 'everything predicted was wrong', the same way an empty Scope is not a project. A headline figure for a reader, not a control input -- the 'grooming is asking the wrong questions' signal is recomputed in `_signals` from the `wrong` share against WRONG_SHARE and does not read this value, so rounding or omitting it changes what a caller sees but never what the loop flags.",
+      "evidence": "taskfw/accuracy.py:predictive_value, USEFUL, grooming_accuracy"
+    },
     "Surprise": {
       "bounded_context": "The Loop",
       "form": "part",
@@ -433,6 +439,18 @@
       "predicate": "references",
       "object": "GroomingGrade",
       "note": "GroomingGrade is the unit GroomingAccuracy counts: its tallies, predictive_value, and the 'wrong'-share signal are all counts of GroomingGrade values across finished Tasks, where the sibling 'references Risk' edge is about which Risks it reads rather than what it tallies. A value outside GROOMING_GRADES is bucketed as 'unrecognised' and still reported, never dropped, so the grade count can never silently disagree with the risks seen."
+    },
+    {
+      "subject": "GroomingGradePredictiveValue",
+      "predicate": "part-of",
+      "object": "GroomingAccuracy",
+      "note": "One field of the GroomingAccuracy result, computed on the same read from the same graded-Risk tallies. It sits beside the raw `risks` counts as their one-line summary: a caller that distrusts the ratio can drop it and re-derive its own from `risks.materialized`, `risks.avoided` and the grade total, which is why it is carried as a convenience rather than a stored number that could drift from the counts next to it."
+    },
+    {
+      "subject": "GroomingGradePredictiveValue",
+      "predicate": "references",
+      "object": "GroomingGrade",
+      "note": "Built from GroomingGrade values only: the numerator counts the two USEFUL grades (materialized, avoided) and the denominator is every recognised GroomingGrade in the window. An `unrecognised` grade is reported by GroomingAccuracy but excluded from both parts of this ratio, so the figure can never be pulled around by a value outside GROOMING_GRADES -- it describes exactly the grades Introspection assigned from the closed set and no others."
     },
     {
       "subject": "Scope",
