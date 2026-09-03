@@ -62,7 +62,7 @@
     "MemoryRecord": {
       "bounded_context": "Loop Memory",
       "form": "record",
-      "definition": "A durable takeaway the loop exists to accumulate -- a constraint, a technique, or a recurring pitfall that Grooming's falsifiable predictions and Introspection's grades produced, and that nothing in Task Tracking can hold. doc 05 and CLAUDE.md call this a 'lesson'; there is no separate Lesson term because there is no separate thing -- a lesson's only persisted form is a MemoryRecord, so the two names would carry identical evidence and identical rules. Its 'standing' (confirmed/contradicted/disputed/superseded) is derived from its confirming and contradicting links to later Tasks, never a value it holds in its own right; its citation to the Task it came from is mandatory, and its 'kind' is a closed vocabulary.",
+      "definition": "A durable takeaway the loop exists to accumulate -- a constraint, a technique, or a recurring pitfall that Grooming's falsifiable predictions and Introspection's grades produced, and that nothing in Task Tracking can hold. doc 05 and CLAUDE.md call this a 'lesson'; there is no separate Lesson term because there is no separate thing -- a lesson's only persisted form is a MemoryRecord, so the two names would carry identical evidence and identical rules. Its 'standing' is a derived label, never a value it holds in its own right (see MemoryStanding); its citation to the Task it came from is mandatory, and its 'kind' is a closed vocabulary.",
       "evidence": "taskfw/memory.py:MemoryStore"
     },
     "MemoryKind": {
@@ -80,6 +80,12 @@
       "evidence": "taskfw/memory.py:MEMORY_RELATIONSHIPS",
       "lifecycle": "Written when a MemoryRecord is recorded ('learned_from', implicitly) and when it is linked to a Task (any of the three, idempotently); validated in exactly one place -- the link path raises Rejected for a value outside the set. Links are never updated or deleted except by a forget, which cascades. Standing is recomputed from the surviving links on every read.",
       "lifecycle_evidence": "taskfw/memory.py:MemoryStore.link, taskfw/memory.py:MemoryStore.recall"
+    },
+    "MemoryStanding": {
+      "bounded_context": "Loop Memory",
+      "form": "transient",
+      "definition": "How much a MemoryRecord can currently be trusted, expressed as one of five words (unverified, confirmed, contradicted, disputed, superseded). It is earned, not asserted: a lesson starts 'unverified' and gains or loses weight only as later Tasks re-encounter it and grade it confirmed or contradicted. Standing is always read off that track record rather than stored, so it can never disagree with the history it summarises -- the same reason the loop computes progress and grooming accuracy on read. 'unverified' is the honest default for a lesson nobody has tested again, stated plainly rather than dressed up as reliable. 'disputed' -- a lesson both confirmed and contradicted -- is surfaced rather than smoothed over, because a contradicted memory returned as though sound is an omission indistinguishable from an absence, and only the Task reading it can tell which side is right.",
+      "evidence": "taskfw/memory.py:_standing"
     },
     "Concept": {
       "bounded_context": "Architectural Knowledge",
@@ -108,7 +114,7 @@
     "Risk": {
       "bounded_context": "The Loop",
       "form": "part",
-      "definition": "One falsifiable prediction inside a Grooming pass, and the one part of Grooming that is not wholesale-replaced. A Risk has its own identity and an optional 'graded' verdict that Introspection assigns on whether it held; across re-grooming passes Risks are carried forward and merged by that identity, so a graded Risk -- the loop's primary evidence -- is never silently dropped because a later pass omitted it. Stored as a plain dict inside Grooming. Two shared shape PRIMITIVES -- coercing a raw entry to the canonical dict, and collapsing its text to an identity key -- live in one place, taskfw/risk.py, so no consumer re-derives them. The merge that carries a graded verdict forward is a separate, single-caller algorithm and lives at its call site in taskfw/mcp_server.py, not in risk.py, which disclaims it by name; whether that merge should move behind a shared write path is an open question tracked as its own task, not a claim this ontology makes.",
+      "definition": "One falsifiable prediction a Grooming pass makes about the work ahead -- a thing that might go wrong, or a claim that might not hold -- written so that Introspection can later say plainly whether it did. It is the one part of Grooming that is not thrown away and rewritten each pass: a Risk keeps its own identity, so a prediction Introspection has already graded is carried forward when the plan is re-groomed rather than lost because a later pass did not restate it. That surviving, graded Risk is the loop's primary evidence -- the falsifiable half of 'Grooming makes falsifiable claims, Introspection grades them'. Whether the machinery that carries a grade forward belongs behind a shared write path is an open question tracked as its own task, not a claim this ontology makes.",
       "evidence": "taskfw/risk.py:coerce, normalise_text, taskfw/mcp_server.py:_merge_grooming_risks"
     },
     "Introspection": {
@@ -132,7 +138,7 @@
     "IntrospectionNudge": {
       "bounded_context": "The Loop",
       "form": "transient",
-      "definition": "The Nudge that rides on the response to `tasks__add_introspection`. Fires only when the just-recorded report carries at least one lesson -- `new_knowledge`, or the legacy `surprises[].lesson` shape -- AND the Task has never cited a MemoryRecord (`memory_links` row with relation `learned_from`). It points only at context the caller already has -- the report it just wrote and the Task it wrote it against -- and never returns a MemoryRecord's content; whether a lesson generalises is the caller's judgement, not a threshold this enforces, and a Task that already promoted one lesson is not nudged again for a later report. It is the concrete case the `Nudge` term names first: the defect it exists to fix is that 'nothing worth promoting to Loop Memory' otherwise looks identical to 'lessons dropped on the floor'.",
+      "definition": "The Nudge that rides on the response to recording an Introspection report. It fires when the report carries a lesson but the Task has never cited a Loop Memory record -- the case where 'nothing here was worth promoting' would otherwise look identical to 'a lesson was dropped on the floor'. It points only at what the caller just wrote and the Task they wrote it against, never at a memory's content; whether a lesson generalises is the caller's judgement, not a bar this enforces, and a Task that has already promoted one lesson is not nudged again. It is the first concrete case the `Nudge` term names.",
       "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge, _lesson_texts, _cited_in_memory"
     },
     "LoopDebtNudge": {
@@ -144,7 +150,7 @@
     "TaskContext": {
       "bounded_context": "Task Tracking",
       "form": "transient",
-      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- task identity, decisions, grooming, graph (parent/children/edges), commits, related tasks, and matching loop-memory lessons, in one fixed section order -- assembled fresh on every call. Two of those sections -- related and lessons -- are approximate (full-text / bm25 matches) and are the first dropped when the bundle exceeds its size budget; every section above them (decisions, grooming, graph, commits) is an exact lookup where a wrong answer would mislead rather than merely disappoint. Exact is not the same as permanent: every section except task identity can still be dropped for budget, and every drop is reported -- but through three distinct fields, not one. A whole section gone is named in `truncated`. Grooming is the exception that is trimmed in parts rather than dropped whole (it is a dict, and typically the largest section, so dropping it entire wasted budget), and the fields it sheds are named in `grooming_truncated`. The per-direction cap on graph edges is independent of the budget altogether and reports in `edges_truncated`. A caller reading only `truncated` would therefore miss two of the three ways a bundle can be short, which is exactly the omission-versus-absence collapse the field exists to prevent. This is the concrete mechanism behind 'context is pulled, never pushed' -- nothing about a Task reaches an agent automatically, only through this bundle, and only because the agent asked for it.",
+      "definition": "The whole pull-based working bundle assembled for one Task in a single call -- its identity, decisions, grooming, graph of neighbours, commits, related tasks, and matching loop-memory lessons, in one fixed order, built fresh every time. Some sections are exact lookups where a wrong answer would mislead; two -- related tasks and lessons -- are approximate matches and the first to go when the bundle outgrows its size budget. Every shortfall is reported, and by a route specific enough that a caller can always tell a section trimmed for space from one that was genuinely empty -- collapsing that distinction into silence is the one thing a pull interface cannot afford. This is the concrete shape of 'context is pulled, never pushed': nothing about a Task reaches an agent on its own, only through this bundle, and only because the agent asked.",
       "evidence": "taskfw/context.py:TaskContext, grooming_truncated, edges_truncated"
     },
     "Commit": {
@@ -182,13 +188,13 @@
     "GroomingGradePredictiveValue": {
       "bounded_context": "The Loop",
       "form": "transient",
-      "definition": "The share of graded Risks whose prediction paid off: `(materialized + avoided) / graded_total`, rounded to two places and reported as `predictive_value` in the GroomingAccuracy result. `USEFUL = (materialized, avoided)` names the two GroomingGrade values that count as a prediction earning its keep -- it came true with its mitigation ready, or it forced the change that avoided it; `wrong` is the only grade left out, because it is the one that marks a Grooming pass spent on noise. The denominator is recognised grades only -- `graded_total` is the sum of the GROOMING_GRADES tallies -- so an `unrecognised` grade and an `ungraded` Risk both sit outside it, and the ratio answers 'of the Risks Introspection actually judged, how many were worth predicting' and nothing wider. It is `None`, never `0.0`, when no Risk was graded: 'no evidence yet' is kept distinct from 'everything predicted was wrong', the same way an empty Scope is not a project. A headline figure for a reader, not a control input -- the 'grooming is asking the wrong questions' signal is recomputed in `_signals` from the `wrong` share against WRONG_SHARE and does not read this value, so rounding or omitting it changes what a caller sees but never what the loop flags.",
+      "definition": "The one-line answer to 'are Grooming's predictions earning their keep' -- the share of graded Risks whose prediction paid off, whether by coming true with its mitigation ready or by forcing the change that avoided it. A Risk graded as noise is the only kind that counts against it. It is deliberately absent, not zero, when nothing has been graded yet: 'no evidence' is a different statement from 'everything predicted was wrong', kept distinct the same way an empty Scope is not a project. It is a headline for a human reader, never a control input -- the loop's own 'grooming is asking the wrong questions' signal is derived separately and does not read this figure, so how it is rounded or whether it is shown at all changes what a caller sees but never what the loop acts on.",
       "evidence": "taskfw/accuracy.py:predictive_value, USEFUL, grooming_accuracy"
     },
     "Surprise": {
       "bounded_context": "The Loop",
       "form": "part",
-      "definition": "A finding an Introspection pass records that no Risk predicted -- the `missed` outcome in docs/methodology/05-introspection.md: 'a surprise no prediction anticipated'. It is stored as a free-text entry in the report's `missed_surprises` list (reports written before that field used `surprises`, a list of `{lesson}` dicts). Deliberately NOT a GroomingGrade: the closed GROOMING_GRADES set (materialized, avoided, wrong) each grade a prediction, and `missed` is kept out of that set -- the comment on GROOMING_GRADES in taskfw/risk.py says why -- because with no Risk beneath it there is nothing for a verdict to be about. `form: part` and not `attribute` because a Surprise carries its own free text rather than a label from a closed set, and not `record` because it has no id and no store of its own -- it is a section that lives inside the Introspection report and is appended with it. It is the missed-prediction item itself, not the lesson it may become: a Surprise does not imply a MemoryRecord (taskfw/dispatcher/nudges.py:_lesson_texts reads the legacy `surprises[].lesson` shape when promoting lessons, but promotion is a separate step and most surprises are never promoted).",
+      "definition": "A finding an Introspection pass records that no Risk predicted -- 'a surprise no prediction anticipated', in the words of the introspection methodology. It is the negative space of the feedback edge: a GroomingGrade is a verdict on a prediction that was made, a Surprise is what remains when there was none, which is why it is deliberately kept out of the closed grade vocabulary -- with no prediction beneath it there is nothing for a verdict to be about. It carries its own free text rather than a label from a set, and has no identity or store of its own: it lives inside the Introspection report and travels with it. It is the missed item itself, not the lesson it might become -- promotion into Loop Memory is a separate, deliberate step, and most surprises are never promoted. Repeated Surprises are a signal in their own right: grooming is not asking enough questions.",
       "evidence": "taskfw/accuracy.py:_missed, _signals, taskfw/risk.py:GROOMING_GRADES, taskfw/dispatcher/nudges.py:_lesson_texts, docs/methodology/05-introspection.md:missed_surprises"
     },
     "Scope": {
@@ -252,7 +258,19 @@
       "subject": "MemoryRelationship",
       "predicate": "part-of",
       "object": "MemoryRecord",
-      "note": "The closed label (MEMORY_RELATIONSHIPS, three values) on each MemoryRecord-to-Task link; those links are what 'MemoryRecord references Task' is built from, and the counts of the 'confirmed_by' / 'contradicted_by' links are what MemoryRecord's derived 'standing' is computed from on every read. Validated only in the memory link path."
+      "note": "The closed label (MEMORY_RELATIONSHIPS, three values) on each MemoryRecord-to-Task link; those links are what 'MemoryRecord references Task' is built from, and the counts of the 'confirmed_by' / 'contradicted_by' links are what MemoryStanding is computed from on every read. Validated only in the memory link path."
+    },
+    {
+      "subject": "MemoryStanding",
+      "predicate": "part-of",
+      "object": "MemoryRecord",
+      "note": "The trust label on the MemoryRecord, parallel to 'MemoryKind part-of MemoryRecord' and 'TaskStatus part-of Task' -- but where those are fields a caller sets, this one is nothing a caller can set: it is only ever what the record's history with later Tasks adds up to, kept derived so it cannot drift from that history."
+    },
+    {
+      "subject": "MemoryStanding",
+      "predicate": "references",
+      "object": "Task",
+      "note": "Standing is a reading of how later Tasks have graded the lesson -- confirmed when it held again, contradicted when it did not -- mirroring 'GroomingAccuracy references Risk': which records it reads, not what it stores. Same derive-don't-store reason as progress-from-checklist: a stored judgement can drift from the evidence it claims to summarise."
     },
     {
       "subject": "Concept",
@@ -444,13 +462,13 @@
       "subject": "GroomingGradePredictiveValue",
       "predicate": "part-of",
       "object": "GroomingAccuracy",
-      "note": "One field of the GroomingAccuracy result, computed on the same read from the same graded-Risk tallies. It sits beside the raw `risks` counts as their one-line summary: a caller that distrusts the ratio can drop it and re-derive its own from `risks.materialized`, `risks.avoided` and the grade total, which is why it is carried as a convenience rather than a stored number that could drift from the counts next to it."
+      "note": "One field of the GroomingAccuracy result, computed on the same read from the same graded-Risk counts. It is their one-line summary and nothing more -- a caller that distrusts it can ignore it and re-derive its own from the counts sitting beside it, which is why it is carried as a convenience rather than a stored number that could fall out of step with them."
     },
     {
       "subject": "GroomingGradePredictiveValue",
       "predicate": "references",
       "object": "GroomingGrade",
-      "note": "Built from GroomingGrade values only: the numerator counts the two USEFUL grades (materialized, avoided) and the denominator is every recognised GroomingGrade in the window. An `unrecognised` grade is reported by GroomingAccuracy but excluded from both parts of this ratio, so the figure can never be pulled around by a value outside GROOMING_GRADES -- it describes exactly the grades Introspection assigned from the closed set and no others."
+      "note": "Built from GroomingGrade values only -- the grades that count as useful over every recognised grade in the window. A grade outside the closed set is reported elsewhere but left out of both halves of this ratio, so a stray value can never pull the figure around; it describes exactly the grades Introspection assigned from the set and no others."
     },
     {
       "subject": "Scope",
@@ -486,7 +504,7 @@
       "subject": "GroomingAccuracy",
       "predicate": "references",
       "object": "Surprise",
-      "note": "The negative-space unit GroomingAccuracy counts, sibling to `references GroomingGrade`: taskfw/accuracy.py:_missed tallies surprises per finished task into `missed_surprises_groomed`, `missed_surprises_ungroomed`, and `ungroomed_tasks_with_surprises`, and _signals turns a high groomed-surprise share into 'grooming is not asking enough questions'. The ungroomed tally is kept apart from the grade buckets and sits outside the MIN_SAMPLE gate, because an ungroomed task has no graded Risk to size that threshold on -- folding it into the missed/graded ratio would drive the percentage toward 100% for a reason the ratio's own sentence does not describe."
+      "note": "The negative-space unit GroomingAccuracy counts, sibling to `references GroomingGrade`: surprises are tallied per finished task, and a high share of them across groomed tasks becomes the loop's 'grooming is not asking enough questions' signal. Surprises from tasks that were never groomed are counted apart and kept out of that ratio -- an ungroomed task has no prediction it could have missed, so folding it in would push the number toward 100% for a reason the signal does not mean."
     }
   ]
 }
