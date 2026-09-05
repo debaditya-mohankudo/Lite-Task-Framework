@@ -19,6 +19,7 @@ from mcp.server import MCPServer
 
 from taskfw import dispatcher, lifecycle
 from taskfw.accuracy import _task_grading, grooming_accuracy, loop_debt
+from taskfw.change_graph import DEFAULT_COMMIT_LIMIT, blast_radius
 from taskfw.concepts import ConceptStore
 from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.context import TaskContext
@@ -1025,6 +1026,30 @@ def concept__uncovered(repo: str, modules: list[str]) -> dict[str, Any]:
     describes while silently falling behind what exists.
     """
     return {"uncovered": ConceptStore(repo).uncovered(modules)}
+
+
+# ---------------------------------------------------------------------------
+# Change graph
+#
+# What grooming's "name the blast radius" step (docs/methodology/03-grooming.md)
+# currently does by hand: what a file/symbol touches, is touched by, and has
+# actually co-changed with in real commits. Computed fresh from the AST and
+# git log on every call — see taskfw/change_graph.py for why nothing here is
+# persisted or hand-authored (task:a1324b82).
+# ---------------------------------------------------------------------------
+
+@_tool()
+def change_graph__blast_radius(repo: str, target: str, commit_limit: int = DEFAULT_COMMIT_LIMIT) -> dict[str, Any]:
+    """Blast radius for a file or `file.py::symbol`, derived from real structure and history.
+
+    `imports`/`calls_out` and `imported_by`/`called_by` are static edges read
+    straight from the AST at HEAD. `co_changed_with` is what has actually
+    changed alongside `target` in commits that touched it, ranked by count.
+    `corroborated` is the subset of static edges that are ALSO backed by real
+    co-change history — the strongest blast-radius signal, since it means the
+    relationship has mattered in practice, not just in principle.
+    """
+    return blast_radius(repo, target, commit_limit)
 
 
 # ---------------------------------------------------------------------------

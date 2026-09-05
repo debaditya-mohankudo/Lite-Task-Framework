@@ -215,6 +215,7 @@ class TestMcpInterfaceMatchesCode:
         tasks_block = text.split("port def TasksPort")[1].split("port def")[0]
         concept_block = text.split("port def ConceptPort")[1].split("port def")[0]
         memory_block = text.split("port def TaskMemoryPort")[1].split("port def")[0]
+        change_graph_block = text.split("port def ChangeGraphPort")[1].split("port def")[0]
         for name in live_tool_names:
             if name.startswith("tasks__"):
                 assert f"item {name};" in tasks_block, f"{name} missing from TasksPort"
@@ -222,5 +223,7 @@ class TestMcpInterfaceMatchesCode:
                 assert f"item {name};" in concept_block, f"{name} missing from ConceptPort"
             elif name.startswith("task_memory__"):
                 assert f"item {name};" in memory_block, f"{name} missing from TaskMemoryPort"
+            elif name.startswith("change_graph__"):
+                assert f"item {name};" in change_graph_block, f"{name} missing from ChangeGraphPort"
             else:
-                pytest.fail(f"{name} matches none of the three known tool-name prefixes")
+                pytest.fail(f"{name} matches none of the four known tool-name prefixes")

@@ -112,6 +112,34 @@
       "name": "backfill-recovers-without-the-original-call",
       "related": []
     },
+    "change-graph-blast-radius": {
+      "confidence": 0.7,
+      "contracts": [
+        "blast_radius(repo, target, commit_limit=DEFAULT_COMMIT_LIMIT) -> dict with target, commits_touching_target, imports, imported_by, calls_out, called_by, co_changed_with (ranked by count), corroborated. Returns {'error': ...} for a target file that does not exist or a symbol that is not a top-level def/class in it.",
+        "target is 'path/to/file.py' for file-level edges, or 'path/to/file.py::symbol' to narrow calls_out/called_by to one top-level function or class.",
+        "Every call re-derives its answer from the working tree (ast.parse) and git log directly -- nothing is cached or stored, so nothing here can disagree with the code or history it reads.",
+        "Per-target scoping is what keeps a query cheap regardless of total repo size: git log -- <path> is bounded by that file's own churn, not the whole repo's history; commit_limit only guards against a pathological single-file history."
+      ],
+      "created_at": "2026-09-05T03:45:35.554850+00:00",
+      "description": "Computes a file/symbol's blast radius on read from real structure and history, never persisted: import/call edges from the AST at HEAD, and file-level co-change counts from git log scoped to commits that actually touched the target. `corroborated` is the intersection -- a static edge that also co-changed in real history, the strongest signal. Exposed via mcp_server.change_graph__blast_radius(repo, target, commit_limit). Derived from the task:a1324b82 spike, which tried and rejected two alternatives first: a hand-authored plan-graph (drifts from reality, exactly the unchecked-claim failure mode this framework avoids), and symbol-level churn via before/after AST name-diff (only catches a def being added/removed, silently missed this repo's own busiest hotspot -- taskfw/mcp_server.py, 8 real touches, 0 symbol nodes -- because most edits change a function's body, not its name).",
+      "evidence": [
+        "taskfw/change_graph.py:blast_radius",
+        "taskfw/change_graph.py:_parse",
+        "taskfw/change_graph.py:_co_change",
+        "taskfw/mcp_server.py:change_graph__blast_radius"
+      ],
+      "invariants": [
+        "Call resolution matches by bare Name/Attribute call-target text only (no import-alias or scope resolution), the same fidelity the task:a1324b82 spike used -- a known, accepted limitation, not new here.",
+        "imported_by/called_by are found via `git grep` for the module's dotted import form, then confirmed by re-parsing each candidate's own imports -- a text match alone is never trusted.",
+        "corroborated only ever contains FILE-level entries (imports union imported_by intersected with co-change files), even when target is symbol-scoped -- co-change history is inherently file-granular, so a symbol query's corroboration is still reported at the file level its calls_out/called_by resolve into."
+      ],
+      "last_validated": "2026-09-05T03:45:35.555322+00:00",
+      "module": "taskfw/change_graph.py",
+      "name": "change-graph-blast-radius",
+      "related": [
+        "pull-context-bundle"
+      ]
+    },
     "commit-backfill-recovery": {
       "confidence": 0.92,
       "contracts": [
@@ -1434,6 +1462,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-09-01T01:39:11.938759+00:00"
+    "updated_at": "2026-09-05T03:45:35.555420+00:00"
   }
 }
