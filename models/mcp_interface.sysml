@@ -4,7 +4,7 @@ package McpInterface {
          * @_tool-registered functions in taskfw/mcp_server.py.
          *
          * One port def per tool-name prefix (tasks__, concept__,
-         * task_memory__), each declaring one item per tool so the identifier
+         * task_memory__, change_graph__), each declaring one item per tool so the identifier
          * list is a checkable claim, not prose. One interface def per port
          * def, connecting an agent end to a server end — modelling that
          * every call crosses the same boundary in both directions (a tool
@@ -41,8 +41,8 @@ package McpInterface {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "bf9812ff19041b5edb0ea86894eeef933186ba3d";
-        derivedAt = "2026-09-01";
+        derivedFromCommit = "a7519a57c3acf2cfefd3e0773a5167365c8be0dc";
+        derivedAt = "2026-09-05";
         modelledPaths = (
             "taskfw/mcp_server.py"
         );
@@ -110,5 +110,16 @@ package McpInterface {
         doc /* The agent<->server boundary for the task_memory__* family. */
         end agent : TaskMemoryPort;
         end server : TaskMemoryPort;
+    }
+
+    port def ChangeGraphPort {
+        doc /* One item per change_graph__* tool registered in taskfw/mcp_server.py. */
+        item change_graph__blast_radius;
+    }
+
+    interface def ChangeGraphInterface {
+        doc /* The agent<->server boundary for the change_graph__* family. */
+        end agent : ChangeGraphPort;
+        end server : ChangeGraphPort;
     }
 }
