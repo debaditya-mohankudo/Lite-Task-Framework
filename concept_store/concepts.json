@@ -381,17 +381,14 @@
     "grooming-accuracy-aggregate": {
       "confidence": 0.92,
       "contracts": [
-        "loop_debt(store, limit=10) -> {tasks_examined, skipped_introspection, ungraded_risks} — the cheap window mcp_server._loop_debt_hook reads on every tasks__set_active call (task:07f9270c), using a smaller limit than grooming_accuracy's default 25 since set_active fires far more often per session.",
-        "grooming_accuracy(store, limit) -> tallies, recurring risks, skipped introspections, self-report disagreements, and signals",
-        "Scoped to status='done' only",
-        "Everything except `signals` is a raw count or a list of task ids",
-        "Exposed as tasks__grooming_accuracy",
-        "GROOMING_GRADES is imported from taskfw.risk (moved there task:dd4ceb01, co-located with RISK_KEYS as part of the risk shape); accuracy.py uses it only for bucketing and tallying. The move is a one-line import change; test_sysml.py's paired grade check imports from taskfw.risk too.",
-        "Surprises are returned under THREE keys, each naming the population it ranges over: `missed_surprises_groomed` (groomed tasks only, so it stays comparable with the graded-risk tallies beside it), `missed_surprises_ungroomed`, and `ungroomed_tasks_with_surprises`. The split was added task:fca95112; the first was renamed from the unqualified `missed_surprises` at task:703c3f26, with no alias kept — a renamed key fails loudly at the point of use where a redefined one would hand a stale reader a plausible larger number.",
-        "The RESULT key `missed_surprises_groomed` and the introspection REPORT field `missed_surprises` are different things and only the first was renamed. _missed() reads the report field as INPUT and counts its entries (`len`), preferring canonical `missed_surprises` and falling back to the legacy `surprises` list — the two are never summed, and it never inspects `surprises[].lesson` (that is the LESSONS side, in taskfw/dispatcher/nudges.py:_lesson_texts — see `advisory-nudge-policies`). Renaming the report field would invalidate every report already stored. tests/test_accuracy.py::TestLegacyReportShape is what pins the distinction."
+        "loop_debt(store, limit=10, scope=None) -> {tasks_examined, skipped_introspection, ungraded_risks, scope} plus unscoped_not_counted when scoped and non-empty — the cheap window mcp_server._loop_debt_hook reads on every activation (tasks__set_active and tasks__create), using a smaller limit than grooming_accuracy's default 25 since activation fires far more often per session. The scope parameter and the remainder key have been present since task:a5bb2f45.",
+        "grooming_accuracy(store, limit, scope=None) -> tallies, recurring risks, skipped introspections, self-report disagreements, signals, the scope it counted, and — when scoped and non-empty — unscoped_not_counted. Scoped to status='done' only. Everything except `signals` is a raw count or a list of task ids. Exposed as tasks__grooming_accuracy.",
+        "GROOMING_GRADES is imported from taskfw.risk (moved there task:dd4ceb01, co-located with RISK_KEYS as part of the risk shape); accuracy.py uses it only for bucketing and tallying.",
+        "Surprises are returned under THREE keys, each naming the population it ranges over: `missed_surprises_groomed` (groomed tasks only, so it stays comparable with the graded-risk tallies beside it), `missed_surprises_ungroomed`, and `ungroomed_tasks_with_surprises`. The RESULT key `missed_surprises_groomed` and the introspection REPORT field `missed_surprises` are different things and only the first was renamed (task:703c3f26); _missed() reads the report field as input, preferring canonical `missed_surprises` and falling back to the legacy `surprises` list, never summing them. tests/test_accuracy.py::TestLegacyReportShape pins the distinction.",
+        "_unscoped_remainder(store, limit, scope) -> {skipped_introspection, ungraded_risks} | None is the ONE home for the remainder rule, shared by loop_debt and grooming_accuracy (task:de2b48b1). Returns None when scope is falsy (an unscoped call excluded nothing) or when the remainder is empty, so a caller adds the key only when there is something to report and silence means 'nothing was left out', never 'not checked'. Taking scope as a parameter lets both call sites be one line: `if (remainder := _unscoped_remainder(store, limit, scope)): result[...] = remainder`."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
-      "description": "Grooming accuracy aggregated across finished tasks — the loop's feedback edge read in aggregate. GROOMING_GRADES is imported from taskfw.risk, not defined here. Surprises are reported as three separately-named counts, split by whether the finished task was ever groomed.",
+      "description": "Grooming accuracy aggregated across finished tasks — the loop's feedback edge read in aggregate. GROOMING_GRADES is imported from taskfw.risk, not defined here. Surprises are reported as three separately-named counts, split by whether the finished task was ever groomed. Both reads that narrow by scope (grooming_accuracy and loop_debt) report the remainder they excluded, through one shared helper.",
       "evidence": [
         "taskfw/accuracy.py:_task_grading",
         "taskfw/accuracy.py:loop_debt",
@@ -405,25 +402,29 @@
         "tests/test_accuracy.py:TestRecurring",
         "taskfw/accuracy.py:_missed",
         "tests/test_accuracy.py:TestUngroomedSurprises",
-        "tests/test_accuracy.py:TestLegacyReportShape"
+        "tests/test_accuracy.py:TestLegacyReportShape",
+        "taskfw/accuracy.py:_debt_counts",
+        "taskfw/accuracy.py:_unscoped_remainder",
+        "tests/test_scope.py:TestLoopDebtIsHonestAboutWhatItCounted",
+        "tests/test_scope.py:TestGroomingAccuracyIsHonestAboutWhatItCounted",
+        "models/derived_values.sysml:GroomingAccuracyTally"
       ],
       "invariants": [
         "_task_grading(task) -> (risks, ungraded_count, any_graded) is the single per-task classification both grooming_accuracy and loop_debt call — factored out (task:07f9270c) so the two reads can never disagree about what counts as skipped or ungraded.",
-        "Tallies are DERIVED from per-risk `graded` values and never read from an introspection report's self-reported grooming_accuracy count — the same reason progress is derived from the checklist",
-        "A disagreement between the self-reported tally and the derived one is reported, never silently resolved",
-        "risks.total counts every risk seen, independently of the grade buckets, so an unrecognised grade cannot make a risk vanish from the total",
-        "An unrecognised grade is bucketed and reported rather than dropped",
-        "Only a FINISHED task with ungraded risks is a skipped introspection; an open one is work in progress",
-        "predictive_value excludes ungraded risks from its denominator, so skipping the grading never flatters the score",
-        "Ratio signals require MIN_SAMPLE graded risks; the skipped-introspection signal requires no sample, because one is already the loop not running",
-        "A risk recurs only across DISTINCT tasks — a repeat within one task is a duplicate, not a pattern",
-        "Recurrence groups by a risk's id when it has one (task:f24be6e4) and falls back to normalised text only for id-less (pre-migration) risks; each recurring_risks entry reports keyed_by so a caller can tell which grouping produced it.",
+        "Tallies are DERIVED from per-risk `graded` values and never read from an introspection report's self-reported grooming_accuracy count.",
+        "A disagreement between the self-reported tally and the derived one is reported, never silently resolved.",
+        "risks.total counts every risk seen, independently of the grade buckets, so an unrecognised grade cannot make a risk vanish from the total; an unrecognised grade is bucketed and reported rather than dropped.",
+        "Only a FINISHED task with ungraded risks is a skipped introspection; an open task with ungraded risks never is.",
+        "predictive_value excludes ungraded risks from its denominator, so skipping the grading never flatters the score.",
+        "Ratio signals require MIN_SAMPLE graded risks; the skipped-introspection signal requires no sample, because one is already the loop not running.",
+        "A risk recurs only across DISTINCT tasks. Recurrence groups by a risk's id when it has one (task:f24be6e4) and falls back to normalised text only for id-less (pre-migration) risks; each recurring_risks entry reports keyed_by.",
         "Because ids are assigned per-risk rather than shared across tasks, two occurrences of the 'same' risk written independently in different tasks will not recur under id-keying unless one was reworded forward from the other — a known, accepted limitation recorded as an open risk on task:f24be6e4, not yet resolved.",
-        "Ungroomed surprises are never folded into the groomed count. The MISSED_SHARE ratio is missed_groomed / (graded_total + missed_groomed), and an ungroomed task contributes surprises with no graded risks to balance them, so summing them would drive that percentage toward 100% for a reason its own sentence does not describe.",
-        "The ungroomed-surprise signal sits deliberately OUTSIDE the MIN_SAMPLE gate, because that threshold sizes itself on graded risks and an ungroomed task has none by definition.",
-        "Every signal sentence names the population its number ranged over — the MISSED_SHARE sentence says 'of findings on groomed tasks' (task:703c3f26), so the human-readable half cannot claim a total the machine-readable half does not."
+        "Ungroomed surprises are never folded into the groomed count: the MISSED_SHARE ratio is missed_groomed / (graded_total + missed_groomed), and summing ungroomed surprises in would drive that percentage toward 100% for a reason its own sentence does not describe. That signal sits deliberately outside the MIN_SAMPLE gate, since an ungroomed task has no graded risks by definition.",
+        "A scoped read reports the remainder it excluded, not merely the scope it counted. store.list(scope=...) is an exact match, so it drops every task written before Task.scope existed — the large majority of the corpus — and naming the scope tells a reader nothing about that unless they already know unscoped rows exist. loop_debt has done this since task:a5bb2f45; grooming_accuracy stated the exclusion only in its docstring until task:de2b48b1, closing a model/code divergence models/task_framework_system.sysml had already asserted was resolved. See [[scope-derivation]] for the filter itself.",
+        "Both remainders come from _unscoped_remainder, which counts through _debt_counts — the same code that counts the scoped window. grooming_accuracy and loop_debt can differ on WHICH tasks they counted (different limits by design) but never on what neither of them saw. tests/test_scope.py::TestGroomingAccuracyIsHonestAboutWhatItCounted::test_it_cannot_disagree_with_loop_debt_about_the_remainder pins this.",
+        "An unscoped (global) call claims no remainder at all — it excluded nothing, so there is nothing to account for."
       ],
-      "last_validated": "2026-08-30T03:25:00+00:00",
+      "last_validated": "2026-09-07T16:15:18.846416+00:00",
       "module": "taskfw/accuracy.py",
       "name": "grooming-accuracy-aggregate",
       "related": [
@@ -998,17 +999,19 @@
       ]
     },
     "scope-derivation": {
-      "confidence": 0.9,
+      "confidence": 0.92,
       "contracts": [
         "normalise_remote(url) -> 'git:host/path' | None — pure, git-free, so the rule that decides whether two clones agree is testable without a repository. SSH and HTTPS spellings of one remote must produce the identical string.",
         "derive(cwd=None) -> str — never raises, never returns empty. Prefers the git origin, falls back to `path:<resolved abs>`. TASKFW_SCOPE selects the directory asked about, not the answer.",
         "for_repo(repo='') -> str — the sole writer of task_commits.repo. Empty derives cwd; a real directory derives that directory; anything else is kept verbatim under `hint:`.",
-        "reset_cache() — clears the per-directory memoisation; for tests that build repos mid-process.",
         "Consumed by Task.scope (set once at tasks__create), TaskStore.add_commit, context._same_project, and accuracy.loop_debt/grooming_accuracy.",
-        "local_root(scope) -> str | None — the local directory a scope's relative paths resolve against. path:<abs> returns that dir when it still exists; git:<id> returns the git toplevel of cwd ONLY when derive() == that same scope (a git scope names a repo, not a checkout, and the only checkout this process can point at is its own); hint: and '' return None. Never raises, never guesses — a foreign git scope returns None rather than the current repo's root."
+        "local_root(scope) -> str | None — the local directory a scope's relative paths resolve against. path:<abs> returns that dir when it still exists; git:<id> returns the git toplevel of cwd ONLY when derive() == that same scope (a git scope names a repo, not a checkout, and the only checkout this process can point at is its own); hint: and '' return None. Never raises, never guesses — a foreign git scope returns None rather than the current repo's root.",
+        "_toplevel(cwd) -> str | None — `git rev-parse --show-toplevel`, memoised per resolved directory (task:de2b48b1). Split out of local_root so the memoisation has the same shape, key and lifetime as derive()'s. Reached only from inside local_root's derive()==scope guard.",
+        "reset_cache() — clears BOTH _cache (origins) and _toplevel_cache (toplevels); for tests that build repos mid-process.",
+        "_resolve_key(cwd) -> str — the shared cache-key resolution both derive() and _toplevel() use: the resolved absolute path, or `cwd` itself if resolve() raises. Extracted (task:de2b48b1 simplify pass) because the two callers had each written this same three-line try/except independently — the same duplication gitutil.run_git already exists to prevent one layer down, for the subprocess calls themselves."
       ],
       "created_at": "2026-08-29T09:45:25.483284+00:00",
-      "description": "The single derivation of which project a record belongs to, and the only writer of that vocabulary. Produces a scheme-prefixed string from a working directory: git:<host>/<path> from the git origin, path:<abs> when there is no origin, hint:<raw> when a caller supplied a repo string that could not be resolved to a directory. Also turns a stored scope back into a local directory (local_root) for resolving a task's relative files. Exists because project identity was already being answered by hand, inconsistently.",
+      "description": "The single derivation of which project a record belongs to, and the only writer of that vocabulary. Produces a scheme-prefixed string from a working directory: git:<host>/<path> from the git origin, path:<abs> when there is no origin, hint:<raw> when a caller supplied a repo string that could not be resolved to a directory. Also turns a stored scope back into a local directory (local_root) for resolving a task's relative files. Both subprocess-backed answers are memoised per resolved directory. Exists because project identity was already being answered by hand, inconsistently.",
       "evidence": [
         "taskfw/scope.py:normalise_remote",
         "taskfw/scope.py:derive",
@@ -1016,7 +1019,12 @@
         "taskfw/task.py:Task.scope",
         "taskfw/store.py:add_commit",
         "taskfw/context.py:_same_project",
-        "taskfw/scope.py:local_root"
+        "taskfw/scope.py:local_root",
+        "taskfw/scope.py:_toplevel",
+        "taskfw/scope.py:reset_cache",
+        "tests/test_scope.py:TestLocalRoot",
+        "tests/test_scope.py:TestLocalRootMemoisation",
+        "taskfw/scope.py:_resolve_key"
       ],
       "invariants": [
         "The scheme prefix is load-bearing, not decoration: a fallback value must never be comparable to a derived one, so `path:` and `hint:` can never equal a `git:` scope. This is the local form of the project rule that an omission must not look like an absence.",
@@ -1025,9 +1033,17 @@
         "Derivation happens once, at record-creation time. A task's scope is never recomputed on read: a task does not change project because someone later read it from elsewhere.",
         "Memoised per resolved directory, since a repository's origin does not change within a process lifetime and both writers call it on every write.",
         "Scope filtering is SUPPLY-side, not demand-side. context._same_project(a, b) returns True whenever EITHER side is empty, so scoping a task changes which OTHER stores' bundles can exclude it; it does not change what that task's own bundle draws in. A candidate with no scope stays compatible with every query. Consequence measured on task:e62cefe8: hydrating 105 of this repo's rows left tasks__context's `related` byte-identical, because the 1630 foreign candidates it was drawing from are still unscoped. Scope only starts filtering a bundle once the CANDIDATES carry scopes, which means per-repo hydration pays off in other repos, not the one doing it.",
-        "Derivation-once is a property of the CODE, and as of task:e62cefe8 no longer a property of the DATA. 105 pre-scope rows were stamped by hand from this repo's own commit trailers; no function does this and none should. A row carries no marker distinguishing a hydrated scope from a derived one, so task:e62cefe8's record is the only provenance for those 105 — see the note in taskfw/task.py on Task.scope."
+        "Derivation-once is a property of the CODE, and as of task:e62cefe8 no longer a property of the DATA. 105 pre-scope rows were stamped by hand from this repo's own commit trailers; no function does this and none should. A row carries no marker distinguishing a hydrated scope from a derived one, so task:e62cefe8's record is the only provenance for those 105 — see the note in taskfw/task.py on Task.scope.",
+        "Both subprocess answers are memoised per resolved directory, since neither a repository's origin nor its toplevel changes within a process lifetime. derive() was memoised from the start; local_root forked `git rev-parse --show-toplevel` on EVERY call until task:de2b48b1, costing ~20ms on every full tasks__context bundle — the sole pull path an agent has — for a constant. The rule was stated on derive() and simply had not reached its twin.",
+        "The toplevel cache is keyed on the resolved CWD, never on the scope string. The git branch's answer depends on where the process is standing (derive() and run_git(cwd=...)), not on the scope it was asked about; keying on the scope would survive a chdir and hand back the previous checkout's root — precisely the borrowed answer local_root exists to refuse.",
+        "The derive()==scope guard stays OUTSIDE the cache, so a foreign git: scope never consults it at all. Warming the cache on this workspace therefore cannot leak its root to a scope naming another repository — pinned by tests/test_scope.py::TestLocalRootMemoisation::test_a_foreign_git_scope_still_never_borrows_a_cached_root.",
+        "local_root's path: branch is deliberately NOT cached: it is one is_dir() stat with no subprocess, and a directory can appear or vanish inside a single process.",
+        "A failed toplevel lookup is cached as None, not retried — a directory that is not a repo now will not become one mid-process, and re-forking to rediscover that is the cost the cache exists to remove.",
+        "Fails open in every failure mode (not a repo, no origin, git absent, git hung) — a scope is a filter, and a missing filter must degrade to unscoped, never block a write.",
+        "Derivation-once is a property of the CODE, and as of task:e62cefe8 no longer a property of the DATA. 105 pre-scope rows were stamped by hand from this repo's own commit trailers; no function does this and none should. A row carries no marker distinguishing a hydrated scope from a derived one, so task:e62cefe8's record is the only provenance for those 105. The ontology's Scope term denied this outright ('never backfilled') until task:de2b48b1 corrected it; models/requirements.sysml had recorded it correctly all along.",
+        "Scope filtering is SUPPLY-side, not demand-side. context._same_project(a, b) returns True whenever EITHER side is empty, so scoping a task changes which OTHER stores' bundles can exclude it; it does not change what that task's own bundle draws in."
       ],
-      "last_validated": "2026-08-29T13:10:31.398508+00:00",
+      "last_validated": "2026-09-07T16:05:35.969203+00:00",
       "module": "taskfw/scope.py",
       "name": "scope-derivation",
       "related": [
@@ -1434,6 +1450,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-09-01T01:39:11.938759+00:00"
+    "updated_at": "2026-09-07T16:15:18.846517+00:00"
   }
 }

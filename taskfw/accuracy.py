@@ -178,6 +178,34 @@ def _debt_counts(tasks: list[Task]) -> tuple[int, int]:
     return skipped, ungraded
 
 
+def _unscoped_remainder(store: TaskStore, limit: int, scope: str | None) -> dict[str, int] | None:
+    """What a scoped count over the same window left out, or None if nothing
+    to report — including when `scope` itself is falsy, since an unscoped
+    (global) call excluded nothing and so has no remainder to account for.
+
+    THE ONE HOME FOR THE REMAINDER RULE, shared by `loop_debt` and
+    `grooming_accuracy` (task:de2b48b1). Both narrow with the same
+    `store.list(scope=...)` exact match, so both exclude every task written
+    before `Task.scope` existed, and both owe the caller the same account of
+    it. `loop_debt` had this inline and `grooming_accuracy` had nothing at
+    all — the second copy this function exists to never be. Taking `scope`
+    as a parameter, rather than leaving the `if scope:` guard to each caller,
+    means the same one-line `if (remainder := _unscoped_remainder(...)):`
+    works at both call sites instead of each repeating the guard around it.
+
+    Counts through `_debt_counts`, so the remainder and the window it is a
+    remainder OF are tallied by literally the same code. Returns None rather
+    than a zero dict, so a caller adds the key only when there is something
+    to report: silence means "nothing was left out", never "not checked".
+    """
+    if not scope:
+        return None
+    skipped, ungraded = _debt_counts(store.list(status=("done",), scope="", limit=limit))
+    if not (skipped or ungraded):
+        return None
+    return {"skipped_introspection": skipped, "ungraded_risks": ungraded}
+
+
 def loop_debt(store: TaskStore, limit: int = 10,
               scope: str | None = None) -> dict[str, Any]:
     """A cheap window onto the same debt `grooming_accuracy` reports in full.
@@ -212,14 +240,8 @@ def loop_debt(store: TaskStore, limit: int = 10,
         "ungraded_risks": ungraded,
         "scope": scope or "global",
     }
-    if scope:
-        unscoped = store.list(status=("done",), scope="", limit=limit)
-        un_skipped, un_ungraded = _debt_counts(unscoped)
-        if un_skipped or un_ungraded:
-            result["unscoped_not_counted"] = {
-                "skipped_introspection": un_skipped,
-                "ungraded_risks": un_ungraded,
-            }
+    if remainder := _unscoped_remainder(store, limit, scope):
+        result["unscoped_not_counted"] = remainder
     return result
 
 
@@ -279,8 +301,17 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
 
     `scope` narrows to one project and is echoed in the result; omitted, the
     aggregate stays global and says so. See `loop_debt` for why the echo is
-    not optional. Note that a scoped aggregate excludes every task written
-    before `Task.scope` existed, since those carry no scope to match.
+    not optional.
+
+    A scoped call additionally reports `unscoped_not_counted`, on exactly the
+    terms `loop_debt` already reports it and through the same
+    `_unscoped_remainder` (task:de2b48b1). A scoped aggregate excludes every
+    task written before `Task.scope` existed, and that exclusion used to be
+    stated here, in a docstring, where no caller could see it — which is the
+    same omission-looks-like-absence failure this module exists to prevent,
+    committed by the one tool whose whole job is grading the loop.
+    `models/task_framework_system.sysml` already claimed both tools did this;
+    only one of them did.
     """
     tasks = store.list(status=("done",), scope=scope, limit=limit)
 
@@ -386,6 +417,8 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
             missed_ungroomed, ungroomed_with_surprises,
         ),
     }
+    if remainder := _unscoped_remainder(store, limit, scope):
+        result["unscoped_not_counted"] = remainder
     log.info("grooming accuracy: tasks=%d graded=%d ungraded=%d missed_groomed=%d signals=%d",
              len(tasks), graded_total, ungraded, missed_groomed, len(result["signals"]))
     return result

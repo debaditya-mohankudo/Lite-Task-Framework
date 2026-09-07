@@ -174,7 +174,7 @@
     "GroomingAccuracy": {
       "bounded_context": "The Loop",
       "form": "transient",
-      "definition": "The Methodology's feedback edge read in aggregate: how well a Grooming pass's Risks predicted, gathered across many finished Tasks instead of one. Introspection grades each Risk against a single Task; GroomingAccuracy is what those grades amount to once collected -- the loop's report on itself. Computed from the graded Risks on every read.",
+      "definition": "The Methodology's feedback edge read in aggregate: how well a Grooming pass's Risks predicted, gathered across many finished Tasks instead of one. Introspection grades each Risk against a single Task; GroomingAccuracy is what those grades amount to once collected -- the loop's report on itself. Computed from the graded Risks on every read. Reads either the whole corpus or one project: narrowed by Scope, it names the Scope it counted AND reports the remainder it excluded, because a scoped read leaves out every record carrying the empty Scope and a count that does not say so reads as complete. That is the same account LoopDebtNudge's source gives of the same narrowing, computed by the same code, so the loop's two readings of its own debt can differ on which Tasks they counted but never on what neither of them saw.",
       "evidence": "taskfw/accuracy.py:grooming_accuracy"
     },
     "GroomingGrade": {
@@ -200,7 +200,7 @@
     "Scope": {
       "bounded_context": "Task Tracking",
       "form": "attribute",
-      "definition": "Which project a record belongs to: a scheme-prefixed string derived from the working directory, never typed by hand. `git:<host>/<path>` when a git origin was readable, `path:<abs>` when there was none, `hint:<raw>` when a caller supplied a repo string that could not be resolved to a directory. An attribute, not an entity -- it has no identity of its own, only equality, which is the single operation every consumer needs. The prefix is part of the value because it records HOW the project was known: a fallback must never compare equal to a derived answer, or an omission becomes indistinguishable from an absence. The empty string is a fourth, distinct case meaning 'project unknown' -- carried by every Task written before the field existed, never backfilled, and treated as compatible with every scope rather than as a project of its own.",
+      "definition": "Which project a record belongs to: a scheme-prefixed string derived from the working directory, never typed by hand. `git:<host>/<path>` when a git origin was readable, `path:<abs>` when there was none, `hint:<raw>` when a caller supplied a repo string that could not be resolved to a directory. An attribute, not an entity -- it has no identity of its own, only equality, which is the single operation every consumer needs. The prefix is part of the value because it records HOW the project was known: a fallback must never compare equal to a derived answer, or an omission becomes indistinguishable from an absence. The empty string is a fourth, distinct case meaning 'project unknown', and it is treated as compatible with every scope rather than as a project of its own. No code path backfills it: nothing derives a scope for a record that was written without one, because deriving it later would answer from wherever the reader happens to be standing rather than from where the work happened. It is NOT, however, true that the unscoped set and the written-before-the-field set are the same -- task:e62cefe8 hand-stamped 105 of this repository's own pre-scope rows from their commit trailers, and those rows carry no marker distinguishing a hand-stamped scope from a derived one, so that task's record is their only provenance. See models/requirements.sysml:PullContextRequirement and concept:scope-derivation, which both record the same thing.",
       "evidence": "taskfw/scope.py:derive, taskfw/scope.py:normalise_remote, taskfw/scope.py:local_root, taskfw/task.py:Task",
       "lifecycle": "Derived once, at record creation, from the workspace in hand, and never recomputed on read -- a record does not change project because someone later read it from somewhere else."
     }
@@ -505,6 +505,12 @@
       "predicate": "references",
       "object": "Surprise",
       "note": "The negative-space unit GroomingAccuracy counts, sibling to `references GroomingGrade`: surprises are tallied per finished task, and a high share of them across groomed tasks becomes the loop's 'grooming is not asking enough questions' signal. Surprises from tasks that were never groomed are counted apart and kept out of that ratio -- an ungroomed task has no prediction it could have missed, so folding it in would push the number toward 100% for a reason the signal does not mean."
+    },
+    {
+      "subject": "GroomingAccuracy",
+      "predicate": "references",
+      "object": "Scope",
+      "note": "GroomingAccuracy is read either globally or narrowed to one Scope, and the narrowing is lossy in a way only Scope explains: the filter is an exact match, so it excludes every record whose Scope is the empty 'project unknown' value -- most of the corpus. The result therefore carries both the Scope it counted and, when narrowed, the remainder it did not, which is Scope's own 'a fallback must never compare equal to a derived answer' rule applied to a count rather than to a value. This relation was missing while every neighbouring term had one (Scope part-of Task, Scope describes Commit, TaskContext references Scope, and LoopDebtNudge naming the project in its own definition), and the code matched the gap: the aggregate stated its exclusion only in a docstring until task:de2b48b1."
     }
   ]
 }

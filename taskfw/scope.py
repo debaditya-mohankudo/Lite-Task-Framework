@@ -70,6 +70,16 @@ _URL_RE = re.compile(r"^[a-z][a-z0-9+.-]*://(?:[^@/]+@)?([^:/]+)(?::\d+)?/(.+)$"
 #: the resolved directory, so two worktrees of one repo still each pay once.
 _cache: dict[str, str] = {}
 
+#: `local_root`'s git toplevel, memoised on exactly the terms `_cache` above
+#: states. Same subprocess cost, same unchanging answer, same key — the
+#: resolved directory — because the toplevel is a property of where we are
+#: standing, not of the scope string we were asked about (task:de2b48b1).
+#: Keying it on the scope instead would survive a chdir and hand back the
+#: previous checkout's root, which is the one answer `local_root` refuses.
+#: Holds None for a directory with no readable toplevel, so a failure is
+#: remembered rather than re-forked on every call.
+_toplevel_cache: dict[str, str | None] = {}
+
 
 def normalise_remote(url: str) -> str | None:
     """`git:<host>/<path>` for a remote URL, or None if it is not one.
@@ -102,6 +112,24 @@ def normalise_remote(url: str) -> str | None:
     return f"{GIT}{host.lower()}/{path.lower()}"
 
 
+def _resolve_key(cwd: str) -> str:
+    """The cache key for a directory: its resolved absolute path, or `cwd`
+    itself if resolution fails.
+
+    One home for the fallback both `derive()` and `_toplevel()` need — each
+    memoises a subprocess result per directory and must agree on what
+    "the same directory" means, including the unlikely case where `resolve()`
+    itself raises (a broken symlink, a permissions error). Two independent
+    copies of this same three-line block is exactly the kind of duplication
+    `gitutil.run_git` was already factored out to remove for the subprocess
+    calls themselves; this removes it one layer up, for their shared key.
+    """
+    try:
+        return str(Path(cwd).resolve())
+    except OSError:
+        return str(cwd)
+
+
 def _origin_url(cwd: str) -> str | None:
     """`git remote get-url origin` in cwd, or None for any failure at all.
 
@@ -132,10 +160,7 @@ def derive(cwd: str | None = None) -> str:
     sixth spelling of a project name.
     """
     cwd = cwd or os.environ.get("TASKFW_SCOPE") or os.getcwd()
-    try:
-        key = str(Path(cwd).resolve())
-    except OSError:
-        key = str(cwd)
+    key = _resolve_key(cwd)
     if key in _cache:
         return _cache[key]
     url = _origin_url(key)
@@ -180,8 +205,15 @@ def for_repo(repo: str = "") -> str:
 
 
 def reset_cache() -> None:
-    """Forget every derived scope. For tests, which build repos mid-process."""
+    """Forget every derived scope and toplevel. For tests, which build repos
+    mid-process.
+
+    Clears both caches, because a test that rebuilds a repository under one
+    directory invalidates the origin and the toplevel together — leaving
+    either behind would make this function's name a half-truth.
+    """
     _cache.clear()
+    _toplevel_cache.clear()
 
 
 def local_root(scope: str) -> str | None:
@@ -211,7 +243,35 @@ def local_root(scope: str) -> str | None:
         except OSError:
             return None
     if scope.startswith(GIT) and derive() == scope:
-        out = run_git(["rev-parse", "--show-toplevel"], cwd=os.getcwd(), timeout=TIMEOUT)
-        if out is not None and out.returncode == 0:
-            return out.stdout.strip() or None
+        return _toplevel(os.getcwd())
     return None
+
+
+def _toplevel(cwd: str) -> str | None:
+    """`git rev-parse --show-toplevel` for a directory, memoised per process.
+
+    Split out of `local_root` so the memoisation has the same shape, the same
+    key, and the same lifetime as `derive`'s — one subprocess per directory,
+    for an answer that cannot change while the process runs. `local_root` used
+    to fork this on every call, which put ~20 ms on every full
+    `tasks__context` bundle, the sole pull path an agent has (task:de2b48b1).
+
+    Deliberately reached only from inside `local_root`'s `derive() == scope`
+    guard, which stays outside the cache: a foreign `git:` scope must never
+    consult this at all, or a cached root would be exactly the borrowed
+    answer the guard exists to prevent.
+
+    Fails open like everything else here — any git failure is None, and the
+    None is cached too, since a directory that has no toplevel now will not
+    grow one mid-process either.
+    """
+    key = _resolve_key(cwd)
+    if key in _toplevel_cache:
+        return _toplevel_cache[key]
+    out = run_git(["rev-parse", "--show-toplevel"], cwd=key, timeout=TIMEOUT)
+    root = None
+    if out is not None and out.returncode == 0:
+        root = out.stdout.strip() or None
+    _toplevel_cache[key] = root
+    log.debug("scope: toplevel %s -> %s", key, root)
+    return root

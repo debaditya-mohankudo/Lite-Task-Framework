@@ -22,7 +22,7 @@ import subprocess
 import pytest
 
 from taskfw import scope as scope_mod
-from taskfw.accuracy import loop_debt
+from taskfw.accuracy import grooming_accuracy, loop_debt
 from taskfw.context import _lessons_for, _related_candidates, _same_project
 from taskfw.memory import MemoryStore
 from taskfw.store import TaskStore
@@ -256,3 +256,127 @@ class TestLoopDebtIsHonestAboutWhatItCounted:
     def test_nothing_is_claimed_when_there_is_no_remainder(self, store):
         self._done_with_ungraded_risk(store, "mine", "git:a/b")
         assert "unscoped_not_counted" not in loop_debt(store, scope="git:a/b")
+
+
+class TestGroomingAccuracyIsHonestAboutWhatItCounted:
+    """The sibling of TestLoopDebtIsHonestAboutWhatItCounted, and it exists
+    because that class had no sibling (task:de2b48b1).
+
+    Both tools narrow through the same `store.list(scope=...)` exact match, so
+    both exclude every task written before Task.scope existed. loop_debt said
+    so; grooming_accuracy said so only in a docstring, where no caller reads.
+    models/task_framework_system.sysml already asserted that BOTH reported the
+    remainder — these tests are what make that sentence true rather than
+    aspirational.
+    """
+
+    def _done_with_ungraded_risk(self, store, title, scope):
+        task = store.save(Task(title=title, scope=scope,
+                               grooming={"risks": [{"id": "r1", "text": "x"}]}))
+        task.status = "done"
+        return store.save(task)
+
+    def test_an_unscoped_call_says_it_was_global(self, store):
+        self._done_with_ungraded_risk(store, "a", "git:a/b")
+        assert grooming_accuracy(store)["scope"] == "global"
+
+    def test_a_global_call_claims_no_remainder(self, store):
+        """It excluded nothing, so it has nothing to account for."""
+        self._done_with_ungraded_risk(store, "mine", "git:a/b")
+        self._done_with_ungraded_risk(store, "legacy", "")
+        assert "unscoped_not_counted" not in grooming_accuracy(store)
+
+    def test_a_scoped_call_counts_only_that_project(self, store):
+        self._done_with_ungraded_risk(store, "mine", "git:a/b")
+        self._done_with_ungraded_risk(store, "theirs", "git:c/d")
+        result = grooming_accuracy(store, scope="git:a/b")
+        assert result["scope"] == "git:a/b"
+        assert result["tasks_examined"] == 1
+        assert result["risks"]["ungraded"] == 1
+
+    def test_narrowing_reports_what_it_left_out(self, store):
+        """An omission must never be indistinguishable from an absence."""
+        self._done_with_ungraded_risk(store, "mine", "git:a/b")
+        self._done_with_ungraded_risk(store, "legacy", "")
+        result = grooming_accuracy(store, scope="git:a/b")
+        assert result["risks"]["ungraded"] == 1
+        assert result["unscoped_not_counted"] == {
+            "skipped_introspection": 1, "ungraded_risks": 1,
+        }
+
+    def test_nothing_is_claimed_when_there_is_no_remainder(self, store):
+        self._done_with_ungraded_risk(store, "mine", "git:a/b")
+        assert "unscoped_not_counted" not in grooming_accuracy(store, scope="git:a/b")
+
+    def test_it_cannot_disagree_with_loop_debt_about_the_remainder(self, store):
+        """The point of sharing _unscoped_remainder: one rule, one answer.
+
+        Same store, same scope, same limit — the two tools report different
+        windows by design, and must report the SAME remainder. This is the
+        assertion that fails if either grows its own second copy of the rule.
+        """
+        self._done_with_ungraded_risk(store, "mine", "git:a/b")
+        self._done_with_ungraded_risk(store, "legacy-a", "")
+        self._done_with_ungraded_risk(store, "legacy-b", "")
+        assert (grooming_accuracy(store, limit=10, scope="git:a/b")["unscoped_not_counted"]
+                == loop_debt(store, limit=10, scope="git:a/b")["unscoped_not_counted"])
+
+
+class TestLocalRootMemoisation:
+    """local_root's git branch forks a subprocess for an answer that cannot
+    change within the process (task:de2b48b1). derive() was already memoised
+    for that exact stated reason; this is the same rule reaching its twin.
+
+    What must NOT change is the refusal: caching may never make local_root
+    hand back a root it would otherwise have declined to give.
+    """
+
+    def test_the_toplevel_is_forked_once_per_directory(self, tmp_path, monkeypatch):
+        repo = git_repo(tmp_path / "r", "git@github.com:Org/Repo.git")
+        monkeypatch.chdir(repo)
+        scope_mod.reset_cache()
+        here = scope_mod.derive()
+
+        calls = []
+        real = scope_mod.run_git
+
+        def counting(args, **kwargs):
+            calls.append(args)
+            return real(args, **kwargs)
+
+        monkeypatch.setattr(scope_mod, "run_git", counting)
+        first = scope_mod.local_root(here)
+        for _ in range(5):
+            assert scope_mod.local_root(here) == first
+        assert first == str(repo.resolve())
+        assert [a for a in calls if "rev-parse" in a] == [["rev-parse", "--show-toplevel"]]
+
+    def test_reset_cache_forgets_the_toplevel_too(self, tmp_path, monkeypatch):
+        """Otherwise the function's name is a half-truth and a test that
+        rebuilds a repo mid-process inherits the stale root."""
+        repo = git_repo(tmp_path / "r", "git@github.com:Org/Repo.git")
+        monkeypatch.chdir(repo)
+        scope_mod.reset_cache()
+        assert scope_mod.local_root(scope_mod.derive()) == str(repo.resolve())
+        assert scope_mod._toplevel_cache
+        scope_mod.reset_cache()
+        assert not scope_mod._toplevel_cache
+
+    def test_a_foreign_git_scope_still_never_borrows_a_cached_root(self, tmp_path, monkeypatch):
+        """The guard runs before the cache, so warming it on this workspace
+        cannot leak the root to a scope that names another repository."""
+        repo = git_repo(tmp_path / "r", "git@github.com:Org/Repo.git")
+        monkeypatch.chdir(repo)
+        scope_mod.reset_cache()
+        assert scope_mod.local_root(scope_mod.derive()) == str(repo.resolve())
+        assert scope_mod.local_root("git:github.com/someone/else") is None
+
+    def test_a_directory_with_no_toplevel_is_remembered_as_none(self, tmp_path, monkeypatch):
+        """A failure is cached too — a directory that is not a repo now will
+        not become one mid-process, and re-forking to rediscover that is the
+        cost this change exists to remove."""
+        monkeypatch.chdir(tmp_path)
+        scope_mod.reset_cache()
+        assert scope_mod._toplevel(str(tmp_path)) is None
+        assert str(tmp_path.resolve()) in scope_mod._toplevel_cache
+        assert scope_mod._toplevel(str(tmp_path)) is None
