@@ -16,8 +16,8 @@ package DerivedValues {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "c020ed2b659210017f26209756422e5d62f56141";
-        derivedAt = "2026-08-30";
+        derivedFromCommit = "edebfbb0a5fe021106a033495d561dec3cc1845e";
+        derivedAt = "2026-09-07";
         modelledPaths = (
             "taskfw/task.py",
             "taskfw/memory.py",
@@ -71,9 +71,20 @@ package DerivedValues {
              * WHICH finished tasks is now a parameter (task:a5bb2f45): the
              * aggregate is global by default but can be narrowed to one
              * project by Scope. The derivation below is unchanged either
-             * way — only the population it ranges over differs — and the
-             * result always names the scope it counted, so a narrowed tally
-             * can never be mistaken for a complete one. */
+             * way — only the population it ranges over differs.
+             *
+             * Naming the scope is NOT on its own what stops a narrowed tally
+             * being mistaken for a complete one, and this doc claimed it was
+             * until task:de2b48b1. A reader who does not already know that
+             * unscoped rows exist learns nothing from a scope label; the
+             * filter is an exact match, so it silently drops every task
+             * written before Task.scope existed — most of the corpus. A
+             * scoped call therefore also reports the remainder it left out
+             * (`unscoped_not_counted`), through the same
+             * taskfw/accuracy.py:_unscoped_remainder loop_debt uses, so the
+             * two readings of the loop's debt can differ on which tasks they
+             * counted but never on what neither of them saw. That is what
+             * makes the narrowing honest — the label alone did not. */
         in materialized : Integer;
         in avoided : Integer;
         in wrong : Integer;
