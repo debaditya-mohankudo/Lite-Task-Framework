@@ -203,6 +203,30 @@
       "definition": "Which project a record belongs to: a scheme-prefixed string derived from the working directory, never typed by hand. `git:<host>/<path>` when a git origin was readable, `path:<abs>` when there was none, `hint:<raw>` when a caller supplied a repo string that could not be resolved to a directory. An attribute, not an entity -- it has no identity of its own, only equality, which is the single operation every consumer needs. The prefix is part of the value because it records HOW the project was known: a fallback must never compare equal to a derived answer, or an omission becomes indistinguishable from an absence. The empty string is a fourth, distinct case meaning 'project unknown', and it is treated as compatible with every scope rather than as a project of its own. No code path backfills it: nothing derives a scope for a record that was written without one, because deriving it later would answer from wherever the reader happens to be standing rather than from where the work happened. It is NOT, however, true that the unscoped set and the written-before-the-field set are the same -- task:e62cefe8 hand-stamped 105 of this repository's own pre-scope rows from their commit trailers, and those rows carry no marker distinguishing a hand-stamped scope from a derived one, so that task's record is their only provenance. See models/requirements.sysml:PullContextRequirement and concept:scope-derivation, which both record the same thing.",
       "evidence": "taskfw/scope.py:derive, taskfw/scope.py:normalise_remote, taskfw/scope.py:local_root, taskfw/task.py:Task",
       "lifecycle": "Derived once, at record creation, from the workspace in hand, and never recomputed on read -- a record does not change project because someone later read it from somewhere else."
+    },
+    "ClaimConfidence": {
+      "bounded_context": "The Loop",
+      "form": "attribute",
+      "definition": "How well-supported a claim in a Grooming pass is, said plainly with one of four words: `fact` (read and confirmed), `inference` (implied but not stated), `assumption` (believed, unverified), or `unknown` (flagged, not yet checked). Unlike TaskStatus or MemoryKind this is not a stored field or a machine-enforced vocabulary -- it is a labelling discipline the grooming skill asks a groomer to apply inline to contested prose, in `clarifications`, `hidden_assumptions`, `risks`, and `open_questions` alike, only where the distinction changes what a reader does next. Most claims don't need the label spelled out; it exists for the minority contested enough that a future reader would otherwise have to re-verify them from scratch. The word `assumption` here names the confidence level, not the `hidden_assumptions` field -- an entry in that field is usually, but not definitionally, at `assumption` or `unknown` confidence.",
+      "evidence": ".claude/skills/task-grooming/skill.md:fact, inference, assumption, unknown, docs/methodology/03-grooming.md:fact, inference, assumption, unknown"
+    },
+    "HiddenAssumption": {
+      "bounded_context": "The Loop",
+      "form": "part",
+      "definition": "Something a Grooming pass believes and leaves unverified, recorded in the Task's `grooming.hidden_assumptions` list. It is deliberately never graded -- there is no HiddenAssumption counterpart to GroomingGrade -- which is exactly why the skill insists a *should-this-hold* claim about what the change could break must be written as a Risk instead: a regression parked in `hidden_assumptions` is invisible to Introspection and never reaches GroomingAccuracy, while the identical claim written as a Risk is graded `materialized`, `avoided`, or `wrong` and feeds the loop's one feedback edge. The two fields look similar -- both are unverified prose -- and are kept apart by exactly one property: gradeability, not falsifiability of the sentence itself. `GROOMING_TRIM_ORDER` (taskfw/context.py) ranks `hidden_assumptions` above `risks` and `open_questions` in shed-first order, matching its lower stakes: losing an unverified belief under a size budget costs less than losing a graded prediction or a blocking question.",
+      "evidence": "taskfw/context.py:GROOMING_TRIM_ORDER, .claude/skills/task-grooming/skill.md:hidden_assumptions, docs/methodology/03-grooming.md:hidden_assumptions"
+    },
+    "BlastRadius": {
+      "bounded_context": "The Loop",
+      "form": "process",
+      "definition": "The Grooming step of asking, for every symbol or file a plan changes, what already depends on it -- callers, subclasses, serialised formats, tests asserting current behaviour -- and whether the change could alter what a dependent observes. It has no store of its own and produces no new field; its entire footprint is downstream, in whether a candidate claim it surfaces gets written as a Risk (the answer was 'possibly') or left unwritten (the answer was 'no dependents, or none that could observe a difference'). Named as its own term, the way Implementation was, so the investigation technique has an identity separate from the Grooming pass it happens inside -- sizing the analysis to the change (a one-line config edit has almost no radius; a shared type or public tool signature has a lot) is itself part of what the term names.",
+      "evidence": ".claude/skills/task-grooming/skill.md:blast radius"
+    },
+    "OpenQuestion": {
+      "bounded_context": "The Loop",
+      "form": "part",
+      "definition": "Something known to be unknown, recorded in the Task's `grooming.open_questions` list as `{question, blocking}`. `blocking: true` marks a question work cannot start without answering; `blocking: false` marks one that can wait. Distinct from a HiddenAssumption (a belief, held without knowing it needs checking) and from a Risk (a falsifiable prediction about the work ahead): an OpenQuestion is a gap the groomer already knows is there. `GROOMING_TRIM_ORDER` (taskfw/context.py) keeps `open_questions` second-to-last in its shed-first order, ahead of everything but `clarifications` -- an unresolved blocking question is exactly what a caller starting work needs to see, so it survives a size-budget trim almost as long as grooming's highest-value content.",
+      "evidence": "taskfw/context.py:GROOMING_TRIM_ORDER, .claude/skills/task-grooming/skill.md:open_questions, blocking, docs/methodology/03-grooming.md:open_questions, blocking"
     }
   },
   "relations": [
@@ -325,6 +349,36 @@
       "predicate": "part-of",
       "object": "Grooming",
       "note": "The one exception to Grooming's wholesale-replace rule: risks merge by id across re-groom passes so a graded verdict is never silently lost, while every other Grooming field still replaces in place."
+    },
+    {
+      "subject": "HiddenAssumption",
+      "predicate": "part-of",
+      "object": "Grooming",
+      "note": "Recorded in `grooming.hidden_assumptions`, replaced wholesale on every re-groom like every Grooming field except Risk -- there is no per-item id to merge by, because nothing ever grades a HiddenAssumption, so there is no verdict a re-groom could otherwise lose."
+    },
+    {
+      "subject": "OpenQuestion",
+      "predicate": "part-of",
+      "object": "Grooming",
+      "note": "Recorded in `grooming.open_questions` as `{question, blocking}`, replaced wholesale on every re-groom like HiddenAssumption -- an OpenQuestion carries no id and is never graded, so nothing needs to survive being merged forward the way a Risk's verdict does."
+    },
+    {
+      "subject": "HiddenAssumption",
+      "predicate": "relates",
+      "object": "Risk",
+      "note": "The deliberate contrast the grooming skill enforces: a claim about what the change could break belongs in `risks`, never `hidden_assumptions`, because a HiddenAssumption is never graded and a regression parked there is invisible to Introspection -- while the same claim as a Risk is graded `materialized`, `avoided`, or `wrong` and reaches GroomingAccuracy. Same shape as `Surprise relates GroomingGrade`: two terms that look alike on the page, kept apart by exactly one property (gradeability), made an explicit edge rather than left only as prose inside either term's definition."
+    },
+    {
+      "subject": "BlastRadius",
+      "predicate": "relates",
+      "object": "Risk",
+      "note": "BlastRadius is the investigation technique; a Risk is what it produces when the answer to 'could a dependent observe a difference' is 'possibly'. Where the answer is 'no dependents, or none that could observe one', BlastRadius produces nothing written down at all -- it is not a term that always yields a Risk, only the one that yields a Risk when it must."
+    },
+    {
+      "subject": "ClaimConfidence",
+      "predicate": "relates",
+      "object": "Grooming",
+      "note": "Not a field on Grooming's stored shape -- no `confidence` key exists on any grooming list -- but a labelling discipline applied inline within `clarifications`, `hidden_assumptions`, `risks`, and `open_questions` prose, only where the distinction changes what a reader does next. Related to Grooming as a whole rather than is-a/part-of any one of its four fields, because it cuts across all of them rather than belonging to one."
     },
     {
       "subject": "Introspection",
