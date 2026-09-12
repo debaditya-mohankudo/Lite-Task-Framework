@@ -563,6 +563,13 @@
     {
       "subject": "GroomingAccuracy",
       "predicate": "references",
+      "object": "Introspection",
+      "note": "GroomingAccuracy's `self_report_disagreements` field (taskfw/accuracy.py:self_report_disagreements) cross-checks a report's own hand-written `grooming_accuracy` tallies (task-introspection skill.md Step 6) against the per-risk grades derived fresh from the same Task's Risks -- the same derive-don't-store discipline as GroomingAccuracy's other counts, applied to catch a summary that drifted from the record it claims to summarise (skill.md Step 6: 'the grades are the record'). Not its own term: it is one field of the GroomingAccuracy result, not a domain noun with independent identity, so it is named here as a relation rather than added as a term -- the same call already made for GroomingGradePredictiveValue, which is a term because callers read it back as a headline figure, unlike this cross-check.",
+      "evidence": "taskfw/accuracy.py:self_report_disagreements, _reported_totals"
+    },
+    {
+      "subject": "GroomingAccuracy",
+      "predicate": "references",
       "object": "Scope",
       "note": "GroomingAccuracy is read either globally or narrowed to one Scope, and the narrowing is lossy in a way only Scope explains: the filter is an exact match, so it excludes every record whose Scope is the empty 'project unknown' value -- most of the corpus. The result therefore carries both the Scope it counted and, when narrowed, the remainder it did not, which is Scope's own 'a fallback must never compare equal to a derived answer' rule applied to a count rather than to a value. This relation was missing while every neighbouring term had one (Scope part-of Task, Scope describes Commit, TaskContext references Scope, and LoopDebtNudge naming the project in its own definition), and the code matched the gap: the aggregate stated its exclusion only in a docstring until task:de2b48b1."
     }
