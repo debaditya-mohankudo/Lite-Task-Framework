@@ -43,8 +43,8 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "edebfbb0a5fe021106a033495d561dec3cc1845e";
-        derivedAt = "2026-09-07";
+        derivedFromCommit = "f0eb9b880c7d726df47b1365def8830b7cd86873";
+        derivedAt = "2026-09-14";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/db/schema.py",
@@ -283,7 +283,9 @@ package Requirements {
              * First, a risk carries a stable, framework-assigned `id`; a
              * re-groom (tasks__update) merges grooming.risks by id instead of
              * replacing the list wholesale, so a grade can no longer be
-             * dropped by omitting the risk from a later pass — every other
+             * dropped by omitting the risk from a later pass, nor by
+             * restating a risk without its grade (task:2a7eacc8 closed that
+             * for legacy id-less risks matched by text) — every other
              * grooming field is unaffected. Recurrence groups by id when
              * present, falling back to normalised text only for risks written
              * before this change. Second, the debt this requirement exists to

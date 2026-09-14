@@ -41,8 +41,8 @@ package McpInterface {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "bf9812ff19041b5edb0ea86894eeef933186ba3d";
-        derivedAt = "2026-09-01";
+        derivedFromCommit = "f0eb9b880c7d726df47b1365def8830b7cd86873";
+        derivedAt = "2026-09-14";
         modelledPaths = (
             "taskfw/mcp_server.py"
         );
