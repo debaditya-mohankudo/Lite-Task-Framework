@@ -12,6 +12,7 @@ import logging
 import pytest
 
 from taskfw.dispatcher import (
+    apply_nudge,
     combine,
     finish_nudge,
     finish_reminder_nudge,
@@ -358,6 +359,25 @@ class TestToolCalled:
         with tool_called("tasks__probe", post=calls.append) as call:
             call.result = [{"id": "a"}, {"id": "b"}]
         assert calls == []
+
+
+class TestApplyNudge:
+    """The response key is the nudge function's own name (review 2026-09-14 A2)."""
+
+    def test_keys_the_result_by_the_nudge_functions_name(self):
+        result = {}
+        apply_nudge(result, stale_memory_nudge, {"slug": "x", "standing": "disputed"})
+        assert list(result) == ["stale_memory_nudge"]
+
+    def test_passes_every_argument_through(self):
+        result = {}
+        apply_nudge(result, task_debt_nudge, "abc12345", 2)
+        assert result.get("task_debt_nudge") == task_debt_nudge("abc12345", 2)
+
+    def test_leaves_the_result_untouched_when_the_nudge_is_silent(self):
+        result = {"ok": True}
+        apply_nudge(result, stale_memory_nudge, {"slug": "x", "standing": "confirmed"})
+        assert result == {"ok": True}
 
 
 class TestCombine:

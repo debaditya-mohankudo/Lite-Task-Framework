@@ -11,24 +11,23 @@ import pytest
 from taskfw.lifecycle import (
     TERMINAL,
     TRANSITIONS,
-    Decision,
-    check_event_kind,
+    Ruling,
     check_link_rel,
     check_parent,
     check_save,
     check_status,
     check_transition,
 )
-from taskfw.task import TASK_EDGE_RELATIONS, TASK_EVENT_KINDS, TASK_STATUSES, Task
+from taskfw.task import TASK_EDGE_RELATIONS, TASK_STATUSES, Task
 
 
-class TestDecision:
+class TestRuling:
     def test_is_truthy_when_allowed(self):
-        assert Decision.ok()
-        assert not Decision.deny("r", "why")
+        assert Ruling.ok()
+        assert not Ruling.deny("r", "why")
 
     def test_deny_carries_rule_and_reason(self):
-        d = Decision.deny("transition", "nope")
+        d = Ruling.deny("transition", "nope")
         assert d.rule == "transition" and d.reason == "nope"
 
 
@@ -108,16 +107,6 @@ class TestCheckLinkRel:
     def test_rejects_the_excluded_parent_of(self):
         """parent_of is deliberately not in the closed set — redundant with Task.parent."""
         assert not check_link_rel("parent_of")
-
-
-class TestCheckEventKind:
-    def test_accepts_every_kind_in_the_closed_set(self):
-        for kind in TASK_EVENT_KINDS:
-            assert check_event_kind(kind)
-
-    def test_rejects_an_unrecognised_kind(self):
-        d = check_event_kind("freeform_label")
-        assert not d and d.rule == "event_kind" and "freeform_label" in d.reason
 
 
 class TestCheckSave:

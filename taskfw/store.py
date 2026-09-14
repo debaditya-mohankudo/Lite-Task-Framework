@@ -17,7 +17,7 @@ from pathlib import Path
 from taskfw.db.connect import connect, transaction
 from taskfw.log import get_logger
 from taskfw.scope import for_repo as _scope_for_repo
-from taskfw.task import Task, utcnow
+from taskfw.task import EventKind, Task, utcnow
 
 log = get_logger(__name__)
 
@@ -187,7 +187,7 @@ class TaskStore:
 
     # -- events -------------------------------------------------------------
 
-    def add_event(self, task_id: str, text: str, kind: str = "note") -> None:
+    def add_event(self, task_id: str, text: str, kind: EventKind = "note") -> None:
         with transaction(self.conn):
             self.conn.execute(
                 "INSERT INTO task_events (task_id, kind, text) VALUES (?,?,?)", (task_id, kind, text)

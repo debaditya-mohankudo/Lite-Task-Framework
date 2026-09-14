@@ -36,7 +36,7 @@ def _deactivate():
     tasks__clear_active tool anymore (task:2d24165a) — tasks__add_introspection
     is the sole production deactivation path — so a test that isn't about
     introspection clears through the store primitive directly."""
-    m.store().clear_active(m._scope())
+    m.store().clear_active(m._workspace())
 
 
 class TestCreate:
@@ -382,18 +382,18 @@ class TestFinish:
     def test_nudges_toward_introspection_when_none_was_recorded(self):
         t = create()
         r = m.tasks__finish(t["id"])
-        assert "introspection_nudge" in r
+        assert "finish_nudge" in r
 
     def test_no_nudge_once_a_report_exists(self):
         t = create()
         m.tasks__add_introspection(t["id"], {"new_knowledge": ["a lesson"]})
         r = m.tasks__finish(t["id"])
-        assert "introspection_nudge" not in r
+        assert "finish_nudge" not in r
 
     def test_no_nudge_on_a_refused_finish(self):
         t = create()
         m.tasks__update(t["id"], status="abandoned")
-        assert "introspection_nudge" not in m.tasks__finish(t["id"])
+        assert "finish_nudge" not in m.tasks__finish(t["id"])
 
 
 class TestListAndSearch:
@@ -742,20 +742,20 @@ class TestSkillInvocationLogging:
 
 
 class TestIntrospection:
-    """memory_nudge — see taskfw.dispatcher.introspection_nudge for the logic itself."""
+    """introspection_nudge — see taskfw.dispatcher.introspection_nudge for the logic itself."""
 
     def test_nudges_on_the_canonical_new_knowledge_shape(self):
         tid = create(title="Had a surprise")["id"]
         r = m.tasks__add_introspection(
             tid, {"new_knowledge": ["verify the coupling before designing around it"]})
-        assert "memory_nudge" in r
+        assert "introspection_nudge" in r
 
     def test_nudges_on_the_legacy_surprises_lesson_shape(self):
         tid = create(title="Had a surprise")["id"]
         r = m.tasks__add_introspection(tid, {"surprises": [
             {"surprise": "x", "lesson": "verify the coupling before designing around it"}
         ]})
-        assert "memory_nudge" in r
+        assert "introspection_nudge" in r
 
     def test_no_nudge_once_the_lesson_is_recorded(self):
         tid = create(title="Had a surprise")["id"]
@@ -763,13 +763,13 @@ class TestIntrospection:
         m.task_memory__record(slug="verify-coupling-first", task_id=tid,
                                text="Verify an assumed coupling is real before designing a fix for it.")
         r = m.tasks__add_introspection(tid, report)
-        assert "memory_nudge" not in r
+        assert "introspection_nudge" not in r
 
     def test_no_nudge_when_there_is_nothing_to_promote(self):
         tid = create(title="Uneventful")["id"]
         r = m.tasks__add_introspection(tid, {"surprises": [{"surprise": "x"}],
                                               "missed_surprises": ["nothing generalized"]})
-        assert "memory_nudge" not in r
+        assert "introspection_nudge" not in r
 
 
 class TestFullLifecycle:

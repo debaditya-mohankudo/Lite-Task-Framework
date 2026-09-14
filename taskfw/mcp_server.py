@@ -93,8 +93,8 @@ def log_conn():
     return _log_conn
 
 
-def _scope() -> str:
-    """Active-task scope. Per-workspace when there is one, else global.
+def _workspace() -> str:
+    """Active-task workspace. Per-workspace when there is one, else global.
 
     NOT the same thing as `Task.scope`, and deliberately still a raw path.
     This keys an in-memory pointer at "which task am I working on right now",
@@ -102,12 +102,15 @@ def _scope() -> str:
     places someone can be working, and each deserves its own active task.
     `derive_scope()` would collapse them onto one, which is the right answer
     for "which project owns this task" and the wrong one for "which task is
-    open in this window". Two different questions, so two different functions.
+    open in this window". Two different questions, so two different functions,
+    and two different names: this was `_scope()` and its responses said
+    `scope`, the same key tasks__grooming_accuracy uses for a Scope value
+    (review 2026-09-14 A4, task:a8394f74).
     """
     return os.environ.get("TASKFW_SCOPE") or os.getcwd()
 
 
-def _denied(d: lifecycle.Decision) -> dict:
+def _denied(d: lifecycle.Ruling) -> dict:
     return {"error": d.reason, "rule": d.rule}
 
 
@@ -169,14 +172,14 @@ def _finish_reminder_hook(result: dict[str, Any]) -> None:
     """finish_reminder_nudge, for tasks__update/tasks__check_item."""
     task = _refetch(result)
     if task:
-        dispatcher.apply_nudge(result, "finish_reminder_nudge", dispatcher.finish_reminder_nudge(task))
+        dispatcher.apply_nudge(result, dispatcher.finish_reminder_nudge, task)
 
 
 def _ungroomed_progress_hook(result: dict[str, Any]) -> None:
     """ungroomed_progress_nudge, for tasks__update/tasks__check_item."""
     task = _refetch(result)
     if task:
-        dispatcher.apply_nudge(result, "ungroomed_progress_nudge", dispatcher.ungroomed_progress_nudge(task))
+        dispatcher.apply_nudge(result, dispatcher.ungroomed_progress_nudge, task)
 
 
 def _finish_hook(result: dict[str, Any]) -> None:
@@ -185,7 +188,7 @@ def _finish_hook(result: dict[str, Any]) -> None:
     task is identical to the one the tool itself had in hand."""
     task = _refetch(result)
     if task:
-        dispatcher.apply_nudge(result, "introspection_nudge", dispatcher.finish_nudge(task))
+        dispatcher.apply_nudge(result, dispatcher.finish_nudge, task)
 
 
 def _stale_memory_hook(result: dict[str, Any]) -> None:
@@ -197,7 +200,7 @@ def _stale_memory_hook(result: dict[str, Any]) -> None:
     """
     memory = result.get("memory")
     if memory:
-        dispatcher.apply_nudge(result, "stale_memory_nudge", dispatcher.stale_memory_nudge(memory))
+        dispatcher.apply_nudge(result, dispatcher.stale_memory_nudge, memory)
 
 
 #: Recent-finished-tasks window loop_debt walks on activation — smaller than
@@ -234,11 +237,11 @@ def _loop_debt_hook(result: dict[str, Any]) -> None:
     # the accepted risk recorded on concept:grooming-accuracy-aggregate.
     debt = loop_debt(store(), limit=_LOOP_DEBT_LIMIT, scope=derive_scope())
     dispatcher.apply_nudge(
-        result, "loop_debt_nudge",
-        dispatcher.loop_debt_nudge(debt["skipped_introspection"], debt["tasks_examined"]),
+        result, dispatcher.loop_debt_nudge,
+        debt["skipped_introspection"], debt["tasks_examined"],
     )
     _, task_ungraded, _ = _task_grading(task)
-    dispatcher.apply_nudge(result, "task_debt_nudge", dispatcher.task_debt_nudge(task.id, task_ungraded))
+    dispatcher.apply_nudge(result, dispatcher.task_debt_nudge, task.id, task_ungraded)
 
 
 def _introspection_hook(result: dict[str, Any]) -> None:
@@ -252,8 +255,8 @@ def _introspection_hook(result: dict[str, Any]) -> None:
     task = _refetch(result)
     if task and dispatcher.is_introspected(task):
         dispatcher.apply_nudge(
-            result, "memory_nudge",
-            dispatcher.introspection_nudge(task.introspection[-1], result["id"], store().conn),
+            result, dispatcher.introspection_nudge,
+            task.introspection[-1], result["id"], store().conn,
         )
 
 
@@ -274,7 +277,7 @@ def tasks__context(task_id: str = "", verbosity: str = "full") -> dict[str, Any]
     matching this task, each carrying its derived standing — treat one marked
     `disputed` or `contradicted` as a claim to check, not as settled fact.
     """
-    task_id = task_id or store().get_active(_scope()) or ""
+    task_id = task_id or store().get_active(_workspace()) or ""
     if not task_id:
         return {"error": "No task_id given and no active task set."}
     # Pass the shared memory store rather than letting TaskContext open its
@@ -454,12 +457,12 @@ def tasks__create(
     parent_task = store().get(task.parent) if task.parent else None
     if task.parent and parent_task is None:
         return {"error": f"Parent {task.parent!r} does not exist."}
-    decision = lifecycle.check_save(task, parent=parent_task)
-    if not decision:
-        return _denied(decision)
+    ruling = lifecycle.check_save(task, parent=parent_task)
+    if not ruling:
+        return _denied(ruling)
     store().save(task)
-    scope = _scope()
-    store().set_active(task.id, scope)
+    workspace = _workspace()
+    store().set_active(task.id, workspace)
     result: dict[str, Any] = {"ok": True, "id": task.id, "epic": task.epic, "status": task.status}
     candidates = TaskContext(store()).related(task)
     if candidates:
@@ -609,9 +612,9 @@ def tasks__update(
         updated.grooming = merged_grooming
 
     parent_task = store().get(updated.parent) if updated.parent else None
-    decision = lifecycle.check_save(updated, previous=current, parent=parent_task)
-    if not decision:
-        return _denied(decision)
+    ruling = lifecycle.check_save(updated, previous=current, parent=parent_task)
+    if not ruling:
+        return _denied(ruling)
     store().save(updated)
     return {"ok": True, "id": updated.id, "status": updated.status}
 
@@ -635,13 +638,9 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
     task = store().get(task_id)
     if task is None:
         return {"error": f"No task {task_id!r}"}
-    decision = lifecycle.check_transition(task.status, "done")
-    if not decision:
-        return _denied(decision)
-    if reason:
-        kind_check = lifecycle.check_event_kind("status")
-        if not kind_check:
-            return _denied(kind_check)
+    ruling = lifecycle.check_transition(task.status, "done")
+    if not ruling:
+        return _denied(ruling)
     task.status = "done"
     store().save(task)
     if reason:
@@ -762,7 +761,7 @@ def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
     """Mark a task done.
 
     See taskfw.dispatcher: when the task closes with no introspection report
-    yet, the response carries a non-blocking `introspection_nudge` — the
+    yet, the response carries a non-blocking `finish_nudge` — the
     host-agnostic equivalent of a hook reminding you to run
     /task-introspection while the context is fresh.
     """
@@ -780,7 +779,7 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
     A report with lessons and a report with none otherwise leave the same
     trace in loop memory — nothing. See taskfw.dispatcher: when this report
     carries a lesson and the task has never cited a memory, the response
-    carries a non-blocking `memory_nudge` so the omission is visible instead
+    carries a non-blocking `introspection_nudge` so the omission is visible instead
     of silent.
 
     Recording a report also CLEARS the active pointer when the reported task
@@ -798,10 +797,10 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
         return {"error": f"No task {task_id!r}"}
     task.introspection.append(report)
     store().save(task)
-    scope = _scope()
-    active_cleared = store().get_active(scope) == task_id
+    workspace = _workspace()
+    active_cleared = store().get_active(workspace) == task_id
     if active_cleared:
-        store().clear_active(scope)
+        store().clear_active(workspace)
     return {
         "ok": True,
         "id": task_id,
@@ -825,8 +824,8 @@ def _resolved_item_hook(result: dict[str, Any]) -> None:
     task = _refetch(result)
     if task is None:
         return
-    dispatcher.apply_nudge(result, "finish_reminder_nudge", dispatcher.finish_reminder_nudge(task))
-    dispatcher.apply_nudge(result, "ungroomed_progress_nudge", dispatcher.ungroomed_progress_nudge(task))
+    dispatcher.apply_nudge(result, dispatcher.finish_reminder_nudge, task)
+    dispatcher.apply_nudge(result, dispatcher.ungroomed_progress_nudge, task)
 
 
 @_tool(hook=_resolved_item_hook)
@@ -859,9 +858,6 @@ def tasks__add_decision(task_id: str, decision: str, resolves: int | None = None
         index_error = _resolution_index_error(task, resolves)
         if index_error:
             return {"error": index_error}
-    kind_check = lifecycle.check_event_kind("decision")
-    if not kind_check:
-        return _denied(kind_check)
     store().add_event(task_id, decision, kind="decision")
     if resolves is None:
         return {"ok": True, "id": task_id}
@@ -883,9 +879,9 @@ def tasks__link(from_id: str, to_id: str, rel: str = "relates_to") -> dict[str, 
     for tid in (from_id, to_id):
         if store().get(tid) is None:
             return {"error": f"No task {tid!r}"}
-    decision = lifecycle.check_link_rel(rel)
-    if not decision:
-        return _denied(decision)
+    ruling = lifecycle.check_link_rel(rel)
+    if not ruling:
+        return _denied(ruling)
     return {"ok": True, "created": store().link(from_id, to_id, rel)}
 
 
@@ -954,16 +950,16 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
     task = store().get(task_id)
     if task is None:
         return {"error": f"No task {task_id!r}"}
-    scope = _scope()
-    store().set_active(task_id, scope)
-    return {"ok": True, "active": task_id, "scope": scope}
+    workspace = _workspace()
+    store().set_active(task_id, workspace)
+    return {"ok": True, "active": task_id, "workspace": workspace}
 
 
 @_tool()
 def tasks__active() -> dict[str, Any]:
     """The active task for this workspace, if any. In-memory only (task:f5ace343)."""
-    scope = _scope()
-    return {"active": store().get_active(scope), "scope": scope}
+    workspace = _workspace()
+    return {"active": store().get_active(workspace), "workspace": workspace}
 
 
 # ---------------------------------------------------------------------------
@@ -1131,7 +1127,7 @@ def task_memory__forget(slug: str) -> dict[str, Any]:
 
 
 def main() -> None:
-    log.info("taskfw MCP server starting scope=%s", _scope())
+    log.info("taskfw MCP server starting workspace=%s", _workspace())
     mcp.run()
 
 

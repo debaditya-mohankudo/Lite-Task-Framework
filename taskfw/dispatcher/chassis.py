@@ -25,22 +25,31 @@ from taskfw.log import get_logger
 log = get_logger(__name__)
 
 
-def apply_nudge(result: dict[str, Any], key: str, nudge: str | None) -> None:
-    """Set `result[key] = nudge`, or leave `result` untouched when there's nothing to say.
+def apply_nudge(result: dict[str, Any], nudge: Callable[..., str | None], *args: Any) -> None:
+    """Call `nudge(*args)` and set `result[nudge.__name__]` to its text, or
+    leave `result` untouched when it has nothing to say.
 
-    One shared wrapper for every nudge function's result — call the nudge
-    function yourself first (its own signature is the real variation between
-    introspection_nudge/finish_nudge/finish_reminder_nudge; there is nothing
-    left to template once the "if truthy, set the key" step is factored out).
+    One shared wrapper for every nudge function — each nudge keeps its own
+    signature (the real variation between introspection_nudge/finish_nudge/
+    finish_reminder_nudge), and `args` pass straight through to it; there is
+    nothing left to template once the "if truthy, set the key" step is
+    factored out.
+
+    The response key IS the nudge function's name. It used to be a separate
+    string passed beside the text, and two of them drifted: finish_nudge
+    reached callers as `introspection_nudge` and introspection_nudge as
+    `memory_nudge` (review 2026-09-14 A2, task:a8394f74). With no key string
+    to pass, a key cannot name a different nudge than the one that fired.
 
     Logs the firing here, not in each nudge function, so every nudge is
     observable in the `logs` table by construction — a nudge type added
     later gets logged for free just by going through this function, instead
     of remembering to add a log line at each call site.
     """
-    if nudge:
-        result[key] = nudge
-        log.info("nudge=%s fired: %s", key, nudge)
+    text = nudge(*args)
+    if text:
+        result[nudge.__name__] = text
+        log.info("nudge=%s fired: %s", nudge.__name__, text)
 
 
 class tool_called:
@@ -77,8 +86,8 @@ class tool_called:
 
     Call sites build `post` with a lambda, not `functools.partial`: `apply_nudge`
     takes `result` first, but `partial` appends new positional args after the
-    ones it pre-binds, so `partial(apply_nudge, key, nudge)` called as
-    `p(result)` would call `apply_nudge(key, nudge, result)` — the wrong
+    ones it pre-binds, so `partial(apply_nudge, nudge, arg)` called as
+    `p(result)` would call `apply_nudge(nudge, arg, result)` — the wrong
     order. A lambda reads left-to-right in the same order as the function
     signature it calls; `partial` would need every pre-bound argument passed
     by keyword to avoid that, for no benefit at a single call site.

@@ -1,7 +1,7 @@
 """Scope — which project a task belongs to, derived once and spelled one way.
 
 WHY THIS IS NOT A PATH. The obvious scope is the working directory, and the
-store already computes one (`mcp_server._scope()`) and throws it away. It was
+store already computes one (`mcp_server._workspace()`) and throws it away. It was
 thrown away for a good reason that nobody wrote down: an absolute path is an
 absolute path *on one machine*. It does not survive a move, a second checkout,
 or a worktree, and it leaks a home directory into every row.

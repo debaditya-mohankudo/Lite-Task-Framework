@@ -15,6 +15,7 @@ import json
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from typing import Literal
 
 TASK_STATUSES = ("open", "blocked", "done", "abandoned")
 
@@ -29,14 +30,18 @@ TASK_EDGE_RELATIONS = (
     "removes", "implements", "supersedes", "reverts", "writes_to", "extends",
 )
 
-#: Closed vocabulary for task_events.kind, enforced by lifecycle.check_event_kind.
-#: note/decision/status are the labels store.add_event's callers pass. hooks_event
-#: is a legacy value: the one-time claude-hooks importer wrote it by raw INSERT
+#: Closed vocabulary for task_events.kind. A type, not a checked value: no tool
+#: accepts a kind from its caller (tasks__add_decision writes "decision",
+#: _finish_task writes "status"), so an off-vocabulary kind has no way in, and
+#: the lifecycle.check_event_kind that used to guard it could never fail. It
+#: was deleted rather than kept as policing (review 2026-09-14 A5,
+#: task:a8394f74). note/decision/status are what store.add_event's callers
+#: pass; hooks_event is a legacy value: the one-time claude-hooks importer wrote it by raw INSERT
 #: during the 2026-08-01 migration and was removed afterwards, so no current code
 #: writes it — but the migrated rows remain and nothing reads the column except
 #: context.py's `kind == "decision"` filter, so the value stays valid rather than
 #: rejecting a re-derivation. The set is closed against what has been written.
-TASK_EVENT_KINDS = ("note", "decision", "status", "hooks_event")
+EventKind = Literal["note", "decision", "status", "hooks_event"]
 
 
 def new_id() -> str:

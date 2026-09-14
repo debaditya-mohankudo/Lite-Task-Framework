@@ -30,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from taskfw.log import get_logger
-from taskfw.task import TASK_EDGE_RELATIONS, TASK_EVENT_KINDS, TASK_STATUSES, Task
+from taskfw.task import TASK_EDGE_RELATIONS, TASK_STATUSES, Task
 
 log = get_logger(__name__)
 
@@ -48,8 +48,12 @@ TERMINAL = {"done", "abandoned"}
 
 
 @dataclass(frozen=True)
-class Decision:
+class Ruling:
     """The result of a rule check.
+
+    Named Ruling, not Decision: in this domain a Decision is an Event of kind
+    'decision', and _finish_task used both a few lines apart (review
+    2026-09-14 A3, task:a8394f74).
 
     Structured rather than a (bool, str) tuple because the callers differ —
     MCP tools, hooks, and scripts each render a refusal differently, and `rule`
@@ -63,21 +67,21 @@ class Decision:
         return self.allowed
 
     @classmethod
-    def ok(cls) -> "Decision":
+    def ok(cls) -> "Ruling":
         return cls(True)
 
     @classmethod
-    def deny(cls, rule: str, reason: str) -> "Decision":
+    def deny(cls, rule: str, reason: str) -> "Ruling":
         return cls(False, rule, reason)
 
 
-def _allow(rule: str, **ctx) -> Decision:
+def _allow(rule: str, **ctx) -> Ruling:
     """Allowed — logged at DEBUG so a full trace is available on request only."""
     log.debug("ALLOW %s %s", rule, _fmt(ctx))
-    return Decision.ok()
+    return Ruling.ok()
 
 
-def _deny(rule: str, reason: str, **ctx) -> Decision:
+def _deny(rule: str, reason: str, **ctx) -> Ruling:
     """Denied — logged at INFO because refusals are what people debug.
 
     Every denial is explicable from this one line: which rule fired, why, and
@@ -85,7 +89,7 @@ def _deny(rule: str, reason: str, **ctx) -> Decision:
     the situation where that is most awkward.
     """
     log.info("DENY %s %s — %s", rule, _fmt(ctx), reason)
-    return Decision.deny(rule, reason)
+    return Ruling.deny(rule, reason)
 
 
 def _fmt(ctx: dict) -> str:
@@ -96,14 +100,14 @@ def _fmt(ctx: dict) -> str:
 # Rules
 # ---------------------------------------------------------------------------
 
-def check_status(status: str) -> Decision:
+def check_status(status: str) -> Ruling:
     if status not in TASK_STATUSES:
         return _deny("status", f"Unknown status {status!r}. Valid: {', '.join(TASK_STATUSES)}.",
                      status=status)
     return _allow("status", status=status)
 
 
-def check_link_rel(rel: str) -> Decision:
+def check_link_rel(rel: str) -> Ruling:
     """Closed vocabulary for task_edges.rel — see TASK_EDGE_RELATIONS.
 
     Only gates creation (tasks__link). Removal (tasks__unlink) must stay
@@ -116,22 +120,7 @@ def check_link_rel(rel: str) -> Decision:
     return _allow("rel", rel=rel)
 
 
-def check_event_kind(kind: str) -> Decision:
-    """Closed vocabulary for task_events.kind — see TASK_EVENT_KINDS.
-
-    The same shape as check_link_rel: the vocabulary is enforced here, in the
-    one rule layer, and invoked from the write path (tasks__add_decision and
-    the finish-task status event). Reads are never gated — a historical row
-    with an off-vocabulary kind still has to come back through store.events().
-    """
-    if kind not in TASK_EVENT_KINDS:
-        return _deny("event_kind",
-                     f"Unknown event kind {kind!r}. Valid: {', '.join(TASK_EVENT_KINDS)}.",
-                     kind=kind)
-    return _allow("event_kind", kind=kind)
-
-
-def check_transition(current: str, target: str) -> Decision:
+def check_transition(current: str, target: str) -> Ruling:
     """Enforce the state machine.
 
     Same-status is always allowed so that saving a task without changing its
@@ -162,7 +151,7 @@ def check_transition(current: str, target: str) -> Decision:
     return _allow("transition", current=current, target=target)
 
 
-def check_parent(epic: bool, parent: Task | None) -> Decision:
+def check_parent(epic: bool, parent: Task | None) -> Ruling:
     """The whole hierarchy rule: an epic has no parent.
 
     With a single `epic` flag there is nothing else to say. A task may have an
@@ -176,7 +165,7 @@ def check_parent(epic: bool, parent: Task | None) -> Decision:
 
 
 
-def check_save(task: Task, *, previous: Task | None = None, parent: Task | None = None) -> Decision:
+def check_save(task: Task, *, previous: Task | None = None, parent: Task | None = None) -> Ruling:
     """Every rule that applies to writing a task, in one call.
 
     The single place a mutation is validated. Callers should not compose the
