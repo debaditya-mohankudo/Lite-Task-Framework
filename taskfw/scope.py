@@ -179,11 +179,19 @@ def for_repo(repo: str = "") -> str:
     column, which is precisely how that column came to hold five spellings of
     two projects. Routing both through here gives them one vocabulary.
 
-    Three outcomes, and the prefix always says which happened:
+    Four outcomes, and the prefix always says which happened:
 
       empty               -> derive() on the working directory
+      already a scope     -> returned unchanged (`git:`, `path:`, `hint:`)
       a real directory    -> derive() on that directory (`git:` or `path:`)
       anything else       -> `hint:<what the caller said>`, verbatim
+
+    The pass-through makes this idempotent, so a caller can hand back the
+    Scope a record already carries (the value tasks__context shows). Without
+    it that value is not a directory, so it came back as `hint:git:...`, and
+    `derive()` on it produced `path:<cwd>/git:...`: a confident scope for a
+    project that does not exist (task:2a7eacc8). Nothing is invented. The
+    caller's prefix already says how the scope was known.
 
     The third case is the interesting one. An unresolvable string — a bare
     repo name, a `~`-path from another machine — cannot be turned into a real
@@ -195,6 +203,8 @@ def for_repo(repo: str = "") -> str:
     repo = (repo or "").strip()
     if not repo:
         return derive()
+    if repo.startswith((GIT, PATH, HINT)):
+        return repo
     try:
         expanded = Path(repo).expanduser()
         if expanded.is_dir():

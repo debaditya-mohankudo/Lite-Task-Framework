@@ -109,6 +109,13 @@ class TestForRepo:
         repo = git_repo(tmp_path / "r", "git@github.com:Org/Repo.git")
         assert scope_mod.for_repo("github.com/org/repo") != scope_mod.for_repo(str(repo))
 
+    def test_an_already_derived_scope_passes_through_unchanged(self):
+        """task:2a7eacc8 — a caller holding a Scope value (the one tasks__context
+        shows) gets that same scope back: not re-read as a directory under the
+        server's cwd, and not wrapped as `hint:git:...`."""
+        for value in ("git:github.com/org/repo", "path:/no/such/dir", "hint:task-framework"):
+            assert scope_mod.for_repo(value) == value
+
 
 class TestLocalRoot:
     """Turning a stored scope back into a directory `files` can be joined to,

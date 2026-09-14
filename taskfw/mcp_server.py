@@ -26,7 +26,7 @@ from taskfw.db.connect import connect
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
 from taskfw.risk import coerce, normalise_text
-from taskfw.scope import derive as derive_scope
+from taskfw.scope import derive as derive_scope, for_repo as scope_for_repo
 from taskfw.task import ResolutionItem, Task, new_id
 from taskfw.store import TaskStore
 
@@ -294,13 +294,16 @@ def tasks__grooming_accuracy(limit: int = 25, scope: str = "") -> dict[str, Any]
 
     Tallies are recomputed from the per-risk grades, never read from an
     introspection report's self-reported count.
+
+    `scope` is empty for global, a repository path ("." included), or a
+    Scope value a task already carries (`git:...`, as tasks__context shows).
     """
     # Global by default: the aggregate is a deliberate, occasional read, and
-    # a cross-project pattern in it is a real finding rather than noise. Pass
-    # scope="." (or any path) to narrow to one project. Either way the result
-    # names the scope it counted, so the answer is never ambiguous.
+    # a cross-project pattern in it is a real finding rather than noise.
+    # for_repo, not derive, so a Scope value is never re-read as a directory
+    # (task:2a7eacc8). Either way the result names the scope it counted.
     return grooming_accuracy(store(), limit=limit,
-                             scope=derive_scope(scope) if scope else None)
+                             scope=scope_for_repo(scope) if scope else None)
 
 
 @_tool()

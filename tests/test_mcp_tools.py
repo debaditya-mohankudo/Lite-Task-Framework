@@ -255,6 +255,22 @@ class TestGroomingRiskMerge:
         assert m.tasks__get(t["id"])["grooming"]["clarifications"] == ["new"]
 
 
+class TestGroomingAccuracyScope:
+    """task:2a7eacc8 — the tool's `scope` accepts the Scope value a task carries."""
+
+    def test_a_scope_value_narrows_to_that_scope(self):
+        t = create()
+        store_obj = m.store()
+        task = store_obj.get(t["id"])
+        task.scope = "git:example.com/org/repo"
+        task.status = "done"
+        task.grooming = {"risks": [{"id": "r1", "text": "a risk", "graded": "avoided"}]}
+        store_obj.save(task)
+        r = m.tasks__grooming_accuracy(scope="git:example.com/org/repo")
+        assert r["scope"] == "git:example.com/org/repo"
+        assert r["tasks_examined"] == 1
+
+
 class TestChecklist:
     def test_ticking_updates_progress(self):
         t = create(resolution=["a", "b"])
