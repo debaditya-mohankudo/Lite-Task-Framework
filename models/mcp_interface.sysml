@@ -22,7 +22,7 @@ package McpInterface {
          * NOT MODELLED, deliberately:
          *   - Lifecycle validation. Which tools are read vs write, and that
          *     every write goes through taskfw.lifecycle.check_save/
-         *     check_transition/check_link_rel/check_event_kind before
+         *     check_transition/check_link_rel before
          *     taskfw.store, is a behavioural contract documented in the
          *     mcp-portable-interface concept, not a structural fact about
          *     the RPC surface itself.
@@ -41,7 +41,7 @@ package McpInterface {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "37b2b37fc071accecc2658f7f670a73b7b270e03";
+        derivedFromCommit = "ae4dfe876ac809e874e1bbd7e24e92d7e9478b0d";
         derivedAt = "2026-09-14";
         modelledPaths = (
             "taskfw/mcp_server.py"

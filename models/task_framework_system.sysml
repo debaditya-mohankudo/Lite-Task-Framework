@@ -45,7 +45,7 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "37b2b37fc071accecc2658f7f670a73b7b270e03";
+        derivedFromCommit = "ae4dfe876ac809e874e1bbd7e24e92d7e9478b0d";
         derivedAt = "2026-09-14";
         modelledPaths = (
             "taskfw/scope.py",
@@ -183,7 +183,8 @@ package TaskFrameworkSystem {
              * there rather than as a separate tasks__set_active every caller
              * must remember. epic tasks activate the same way — there is no
              * epic branch. The active-task pointer is a single in-memory
-             * dict entry per scope (task:f5ace343) — not persisted, not a
+             * dict entry per workspace (mcp_server._workspace, a working
+             * directory, not a Scope; task:f5ace343) — not persisted, not a
              * stack — so setting a different task simply overwrites whatever
              * was active; there is nothing to protect against losing, and
              * nothing survives a server restart. Once set, NOTHING
