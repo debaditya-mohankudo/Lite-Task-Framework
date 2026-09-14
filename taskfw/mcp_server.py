@@ -471,6 +471,19 @@ def tasks__create(
     return result
 
 
+def _keep_grade(current: dict | None, incoming: dict) -> dict:
+    """`incoming`, carrying `current`'s grade when incoming omits one.
+
+    A non-empty incoming grade always wins — that is a deliberate re-grade.
+    Only an absent or empty one is filled in, because a caller restating a
+    risk's text did not mean to erase introspection's verdict on it.
+    """
+    if current and current.get("graded") and not incoming.get("graded"):
+        incoming = dict(incoming)
+        incoming["graded"] = current["graded"]
+    return incoming
+
+
 def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -> list[dict]:
     """Union current and incoming grooming risks by id — task:f24be6e4.
 
@@ -497,8 +510,13 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
     - A current risk written before this change has no id at all. It is
       matched to an incoming id-less risk by normalised text first, so its
       first post-migration re-groom picks up an id instead of duplicating —
-      falling back to the same carry-forward-if-graded rule when nothing
-      matches. Stored grooming from before this change is never rewritten.
+      and, exactly as with an id match, keeps its grade when the incoming
+      entry omits one (task:2a7eacc8: this path used to drop it). When
+      nothing matches it falls back to the same carry-forward-if-graded
+      rule. Stored grooming from before this change is never rewritten.
+
+    Both match paths keep a grade through `_keep_grade`, the one home for
+    that rule.
     """
     current = [coerce(r) for r in (current_raw or [])]
     incoming = [coerce(r) for r in (incoming_raw or [])]
@@ -512,11 +530,7 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
     for risk in incoming:
         rid = risk.get("id")
         if rid:
-            current_entry = current_by_id.get(rid)
-            if current_entry and current_entry.get("graded") and not risk.get("graded"):
-                risk = dict(risk)
-                risk["graded"] = current_entry["graded"]
-            merged.append(risk)
+            merged.append(_keep_grade(current_by_id.get(rid), risk))
             consumed_ids.add(rid)
             continue
         key = normalise_text(risk.get("text", ""))
@@ -529,6 +543,7 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
         new_entry["id"] = new_id()
         if match_i is not None:
             consumed_idless.add(match_i)
+            new_entry = _keep_grade(current_idless[match_i], new_entry)
         merged.append(new_entry)
 
     # Carry forward graded risks the incoming payload dropped by omission.

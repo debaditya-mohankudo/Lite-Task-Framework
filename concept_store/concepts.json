@@ -1424,7 +1424,9 @@
         "taskfw/task.py:TASK_EDGE_RELATIONS",
         "tests/test_store.py:TestRoundTrip",
         "tests/test_lifecycle.py:TestCheckLinkRel",
-        "taskfw/task.py:TASK_EVENT_KINDS"
+        "taskfw/task.py:TASK_EVENT_KINDS",
+        "taskfw/mcp_server.py:_keep_grade",
+        "tests/test_mcp_tools.py:test_legacy_id_less_graded_risk_restated_without_its_grade_keeps_it"
       ],
       "invariants": [
         "A grooming risk carries a stable, framework-assigned `id` (task:f24be6e4) — assigned by tasks__update whenever an incoming risk lacks one, never accepted from the caller, so no caller can collide with an existing id.",
@@ -1434,9 +1436,10 @@
         "progress is never stored — it cannot drift from the list it counts",
         "notes exists deliberately as the escape hatch for anything the schema did not anticipate, and must survive later tidying",
         "Links are never stored in the task blob; they live in task_edges where the primary key makes them idempotent",
-        "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck"
+        "TASK_EDGE_RELATIONS is enforced only on creation (tasks__link) — removal (tasks__unlink) is deliberately ungated so a legacy or invalid rel value never becomes permanently stuck",
+        "A legacy id-less risk matched by normalised text keeps its grade when the incoming re-groom entry omits one, exactly as an id-matched risk does. Both paths go through mcp_server._keep_grade, the one home for that rule. A non-empty incoming grade still wins, so legacy risks stay re-gradable (task:2a7eacc8: the text-match path used to drop the grade)."
       ],
-      "last_validated": "2026-08-29T12:14:30.071245+00:00",
+      "last_validated": "2026-09-14T09:00:16.004248+00:00",
       "module": "taskfw/task.py",
       "name": "typed-task-object",
       "related": [
@@ -1450,6 +1453,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-09-07T16:15:18.846517+00:00"
+    "updated_at": "2026-09-14T09:00:16.004312+00:00"
   }
 }

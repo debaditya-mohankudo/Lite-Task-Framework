@@ -213,16 +213,40 @@ class TestGroomingRiskMerge:
         assert risks[0]["graded"] == "avoided"
 
     def test_legacy_id_less_risk_matched_by_text_gains_an_id_without_duplicating(self):
+        tid = self._legacy_graded_risk("legacy risk", "wrong")
+        # Re-groom re-pastes the same text with no id, as the old workflow did.
+        m.tasks__update(tid, grooming={"risks": [{"text": "legacy risk", "graded": "wrong"}]})
+        risks = m.tasks__get(tid)["grooming"]["risks"]
+        assert len(risks) == 1
+        assert risks[0]["id"]
+
+    def _legacy_graded_risk(self, text: str, grade: str) -> str:
         t = create()
         store_obj = m.store()
         task = store_obj.get(t["id"])
-        task.grooming = {"risks": [{"text": "legacy risk", "graded": "wrong"}]}
+        task.grooming = {"risks": [{"text": text, "graded": grade}]}
         store_obj.save(task)
-        # Re-groom re-pastes the same text with no id, as the old workflow did.
-        m.tasks__update(t["id"], grooming={"risks": [{"text": "legacy risk", "graded": "wrong"}]})
-        risks = m.tasks__get(t["id"])["grooming"]["risks"]
+        return t["id"]
+
+    def test_legacy_id_less_graded_risk_restated_without_its_grade_keeps_it(self):
+        """task:2a7eacc8 — the text-match path gets the same protection the id
+        path already had: restating a legacy risk without re-sending `graded`
+        must not erase the verdict introspection already recorded."""
+        tid = self._legacy_graded_risk("Legacy risk X", "materialized")
+        m.tasks__update(tid, grooming={"risks": [{"text": "legacy risk x."}]})
+        risks = m.tasks__get(tid)["grooming"]["risks"]
         assert len(risks) == 1
         assert risks[0]["id"]
+        assert risks[0]["graded"] == "materialized"
+
+    def test_legacy_id_less_risk_restated_with_a_new_grade_takes_the_new_grade(self):
+        """Keeping the old grade applies only when the incoming risk omits one —
+        a legacy risk can still be deliberately re-graded, as an id-matched one can."""
+        tid = self._legacy_graded_risk("Legacy risk X", "materialized")
+        m.tasks__update(tid, grooming={"risks": [{"text": "Legacy risk X", "graded": "wrong"}]})
+        risks = m.tasks__get(tid)["grooming"]["risks"]
+        assert len(risks) == 1
+        assert risks[0]["graded"] == "wrong"
 
     def test_other_grooming_fields_stay_wholesale_replace(self):
         t = create()
