@@ -84,6 +84,15 @@ the work is done. Size this to the task, the same way premise-checking is
 sized: a config tweak has almost no radius; a shared type or a tool signature
 has a lot.
 
+A deletion has a second radius, and it points the other way. Removing a
+symbol can orphan what it read — a constant it compared against, a helper
+only it called — and asking what depends on the deleted symbol never finds
+that, because the question looks at its callers, not its inputs. So for each
+symbol the plan deletes, check whether what it reads still has a reader once
+it is gone. A mention in the ontology, concept store, or models describes code
+rather than using it, and does not keep it alive. A framework that deletes
+checks rather than keeping them should expect this leftover more than most.
+
 When a claim is contested enough that a future reader would trust it without
 re-checking, say plainly how well-supported it is: `fact`, `inference`,
 `assumption`, or `unknown`. Most claims don't need the label — only the ones
