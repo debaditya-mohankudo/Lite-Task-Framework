@@ -238,6 +238,19 @@ in concept_store, and a module's concept should be traceable up to the term
 it exists to serve — the chain is only worth keeping if both directions
 still resolve.
 
+`mcp_tools/tool-graph.json` is a fourth map, deliberately outside that chain
+rather than a fourth link in it: which of the ~35 `tasks__*` / `concept__*` /
+`task_memory__*` tools each skill calls. It does not belong in
+`ontology/task-domain.json` — a tool is the interface, not a domain noun, and
+that layer is already summarised as one module's promise in
+`concept_store/concepts.json` (`mcp-portable-interface` and its siblings).
+Unlike the three above, nothing checks it against the code — no test plays
+the role `tests/test_ontology.py` or `tests/test_concepts.py` play for their
+files — so it is a map that can drift silently, not a claim that's verified.
+Read it as a snapshot, and re-derive it from the tool docstrings and skill
+files rather than trust it once a tool is renamed or a skill's call sites
+change.
+
 ## Memory
 
 Cross-session memory lives in `~/.claude/MEMORY.sqlite`, shared across projects. Use the `mcp__claude-hooks__memory__*` tools to read/write it — `memory__add` / `memory__add_batch` to save, `memory__search` to recall. Tag entries with domain `task-framework` for this project.
