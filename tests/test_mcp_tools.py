@@ -10,6 +10,8 @@ different set than a hook does.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from taskfw import mcp_server as m
@@ -729,6 +731,54 @@ class TestActiveTask:
 
     def test_context_without_task_or_active_explains_itself(self):
         assert "error" in m.tasks__context()
+
+
+class TestServerSha:
+    """task:0bcc56f1: tasks__active reports which code the running server
+    loaded, so "the nudge did not fire" can be told apart from "the server
+    predates the nudge" without inferring it."""
+
+    def test_matching_shas_report_not_stale(self, monkeypatch):
+        monkeypatch.setattr(m, "_LOADED_SHA", "a" * 40)
+        monkeypatch.setattr(m, "head_sha", lambda cwd: "a" * 40)
+        server = m.tasks__active()["server"]
+        assert server["loaded_sha"] == server["head_sha"] == "a" * 40
+        assert server["stale"] is False
+        assert server["started_at"] == m._STARTED_AT
+
+    def test_head_moved_since_start_reports_stale(self, monkeypatch):
+        monkeypatch.setattr(m, "_LOADED_SHA", "a" * 40)
+        monkeypatch.setattr(m, "head_sha", lambda cwd: "b" * 40)
+        server = m.tasks__active()["server"]
+        assert (server["loaded_sha"], server["head_sha"]) == ("a" * 40, "b" * 40)
+        assert server["stale"] is True
+
+    @pytest.mark.parametrize("loaded, head", [(None, "b" * 40), ("a" * 40, None), (None, None)])
+    def test_an_unknown_sha_makes_stale_unknown_not_false(self, monkeypatch, loaded, head):
+        monkeypatch.setattr(m, "_LOADED_SHA", loaded)
+        monkeypatch.setattr(m, "head_sha", lambda cwd: head)
+        server = m.tasks__active()["server"]
+        assert server["stale"] is None
+        assert server["loaded_sha"] == loaded and server["head_sha"] == head
+
+    def test_git_failing_outright_still_answers(self, monkeypatch):
+        """No .git / git not on PATH: run_git returns None, the call succeeds."""
+        from taskfw import gitutil
+        monkeypatch.setattr(gitutil, "run_git", lambda *a, **k: None)
+        monkeypatch.setattr(m, "_LOADED_SHA", None)
+        r = m.tasks__active()
+        assert "error" not in r
+        assert r["server"]["head_sha"] is None and r["server"]["stale"] is None
+
+    def test_head_is_read_from_the_package_checkout_not_the_workspace(self, monkeypatch):
+        """The workspace is whatever project the agent is in (TASKFW_SCOPE is a
+        foreign path here); comparing against its HEAD would be meaningless."""
+        seen = []
+        monkeypatch.setattr(m, "head_sha", lambda cwd: seen.append(cwd) or None)
+        m.tasks__active()
+        assert seen == [m._PACKAGE_REPO]
+        assert m._PACKAGE_REPO != m._workspace()
+        assert (Path(m._PACKAGE_REPO) / "taskfw" / "mcp_server.py").is_file()
 
 
 class TestLoopDebtNudge:

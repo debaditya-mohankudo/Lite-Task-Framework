@@ -13,6 +13,7 @@ from __future__ import annotations
 import functools
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable
 
 from mcp.server import MCPServer
@@ -24,6 +25,7 @@ from taskfw.concepts import ConceptStore
 from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.context import TaskContext
 from taskfw.db.connect import connect
+from taskfw.gitutil import head_sha
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
 from taskfw.risk import coerce, normalise_text
@@ -39,6 +41,19 @@ log = get_logger(__name__)
 mcp = MCPServer("taskfw")
 
 _store: TaskStore | None = None
+
+#: The checkout this server's code was imported from, not the agent's
+#: workspace (_workspace() is whatever project the agent is in, often another
+#: repo). Under the editable install taskfw-mcp runs from, this is the repo.
+_PACKAGE_REPO = str(Path(__file__).resolve().parents[1])
+
+#: Captured once, at import, because that is when the code was loaded: the
+#: sha a running server is executing cannot change afterwards, so reading it
+#: lazily on the first call would report whatever HEAD had moved to by then
+#: (task:0bcc56f1). This forks git at import, a deliberate exception to
+#: "importing never touches disk" — the store is still not opened.
+_LOADED_SHA: str | None = head_sha(_PACKAGE_REPO)
+_STARTED_AT = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def store() -> TaskStore:
@@ -1048,9 +1063,35 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
 
 @_tool()
 def tasks__active() -> dict[str, Any]:
-    """The active task for this workspace, if any. In-memory only (task:f5ace343)."""
+    """The active task for this workspace, if any. In-memory only (task:f5ace343).
+
+    Also reports which code this server process is running, under `server`
+    (task:0bcc56f1): nudges fire only from the code loaded at startup, so a
+    missing nudge is otherwise indistinguishable from a server that predates it.
+
+    - `loaded_sha`: the commit the server's checkout was at when it started.
+    - `head_sha`: that same checkout's HEAD now, read on this call.
+    - `stale`: True when they differ (restart to pick up the new code), False
+      when they match, None when either is unknown (no .git, git missing,
+      installed package) — "could not compare" never reads as "not stale".
+    - `started_at`: UTC ISO timestamp of process start.
+
+    A sha comparison cannot see uncommitted edits: code changed on disk but
+    not committed leaves `stale` False while the server runs the old version.
+    """
     workspace = _workspace()
-    return {"active": store().get_active(workspace), "workspace": workspace}
+    head = head_sha(_PACKAGE_REPO)
+    stale = None if _LOADED_SHA is None or head is None else _LOADED_SHA != head
+    return {
+        "active": store().get_active(workspace),
+        "workspace": workspace,
+        "server": {
+            "loaded_sha": _LOADED_SHA,
+            "head_sha": head,
+            "stale": stale,
+            "started_at": _STARTED_AT,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------

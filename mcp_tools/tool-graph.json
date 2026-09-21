@@ -40,7 +40,7 @@
     "tasks__format_commit_message": { "namespace": "tasks", "use": "Format a commit message in the canonical shape: subject, blank, task:<id>, blank, body." },
     "tasks__add_commit": { "namespace": "tasks", "use": "Record that a commit implemented a task. Idempotent." },
     "tasks__set_active": { "namespace": "tasks", "use": "Set task_id as the active task for this workspace. In-memory only." },
-    "tasks__active": { "namespace": "tasks", "use": "The active task for this workspace, if any. In-memory only." },
+    "tasks__active": { "namespace": "tasks", "use": "The active task for this workspace, if any. In-memory only. Also reports the server's loaded vs current git sha (server.stale)." },
     "concept__list": { "namespace": "concept", "use": "Architectural concepts for a repo, optionally filtered to one module." },
     "concept__get": { "namespace": "concept", "use": "One concept by slug." },
     "concept__modules": { "namespace": "concept", "use": "Every module that has at least one concept." },

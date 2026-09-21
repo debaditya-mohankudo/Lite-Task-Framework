@@ -8,7 +8,7 @@ the caller decide what a non-zero exit means for its own case (backfill logs
 since no-origin is the common case for a scope derivation, not a failure).
 That process-level try/except was written out twice before this existed —
 factored out here so a change to timeout handling or exception types happens
-once.
+once. taskfw.mcp_server reads its loaded commit through head_sha here too.
 """
 from __future__ import annotations
 
@@ -38,3 +38,15 @@ def run_git(argv: list[str], cwd: str, timeout: int = DEFAULT_TIMEOUT) -> subpro
     except (OSError, subprocess.SubprocessError) as exc:
         log.warning("git %s failed in %s (%s)", " ".join(argv), cwd, exc)
         return None
+
+
+def head_sha(cwd: str) -> str | None:
+    """The commit HEAD names in `cwd`, or None when it cannot be read.
+
+    None covers every way of not knowing — git missing, not a checkout, an
+    unborn branch — so a caller can never mistake an empty string for a sha.
+    """
+    out = run_git(["rev-parse", "HEAD"], cwd=cwd)
+    if out is None or out.returncode != 0:
+        return None
+    return out.stdout.strip() or None

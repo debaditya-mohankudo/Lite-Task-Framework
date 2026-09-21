@@ -4,10 +4,11 @@
       "confidence": 0.9,
       "contracts": [
         "tasks__check_item (and tasks__add_decision's resolve path, sharing _apply_check_item) does NOT touch the active pointer -- task:c88b8730 removed _auto_activate_on_checklist_progress. It existed to close the 'groomed, implemented, finished without set_active ever called' failure mode (task:718204e5), made redundant once tasks__create activates the new task (task:1105f979) and the task-implementation skill calls tasks__set_active when work begins. Removing it also means checking an item on a NON-active task no longer steals the pointer -- it is left where it was. History: task:f5ace343 had earlier made the auto-activation unconditional (dropping the lifecycle.check_active_switch confirm gate and the 'active_task_notice' along with the stack).",
-        "tasks__set_active/tasks__active response shapes carry no stack_depth or stack list (task:f5ace343) -- {'ok', 'active', 'workspace'} / {'active', 'workspace'} respectively (the key was 'scope' until task:a8394f74, which renamed it so it no longer shares a name with the Scope value tasks__grooming_accuracy returns), mirroring the single in-memory pointer store.set_active/get_active hold. There is no tasks__clear_active tool (task:2d24165a removed it); deactivation is a side effect of tasks__add_introspection, whose result carries 'active_cleared': bool.",
+        "tasks__set_active/tasks__active response shapes carry no stack_depth or stack list (task:f5ace343) -- {'ok', 'active', 'workspace'} / {'active', 'workspace', 'server'} respectively (the key was 'scope' until task:a8394f74, which renamed it so it no longer shares a name with the Scope value tasks__grooming_accuracy returns), mirroring the single in-memory pointer store.set_active/get_active hold. There is no tasks__clear_active tool (task:2d24165a removed it); deactivation is a side effect of tasks__add_introspection, whose result carries 'active_cleared': bool.",
         "tasks__create sets the newly created task active for its scope (task:1105f979), replacing whatever was active before it -- creation is the start of a pass through the loop, so activation happens here rather than as a separate tasks__set_active every caller has to remember. There is no epic branch: epic=True tasks activate the same way. Reverses task:74bf3542, which had create clear the pointer.",
         "Nothing auto-clears the active pointer once set (task:1105f979): _finish_task (tasks__finish + checklist auto-finish) and tasks__update reaching a TERMINAL status both leave it untouched, so a finished task stays active through introspection. tasks__add_introspection is the SOLE deactivation path (task:2d24165a): recording a report clears the pointer when store().get_active(scope) == task_id, and reports 'active_cleared': bool. A report against a non-active task leaves the pointer alone (active_cleared False, not an error). There is no standalone tasks__clear_active tool.",
-        "_loop_debt_hook (loop_debt_nudge + task_debt_nudge) is wired onto BOTH activation paths -- tasks__set_active (task:07f9270c) and tasks__create (task:356b3ada). It resolves the just-activated task from result['active'] or result['id'], since the id lives under a different key per tool. This keeps the loop-debt reminder alive across the finish-A -> create-B flow that task:1105f979 made the default (create activates, trailing set_active discouraged). On a fresh create task_debt_nudge is always silent -- no risks yet -- so only loop_debt_nudge fires there. Refused creates return an {'error': ...} dict, which tool_called treats as a refusal and never runs the hook for."
+        "_loop_debt_hook (loop_debt_nudge + task_debt_nudge) is wired onto BOTH activation paths -- tasks__set_active (task:07f9270c) and tasks__create (task:356b3ada). It resolves the just-activated task from result['active'] or result['id'], since the id lives under a different key per tool. This keeps the loop-debt reminder alive across the finish-A -> create-B flow that task:1105f979 made the default (create activates, trailing set_active discouraged). On a fresh create task_debt_nudge is always silent -- no risks yet -- so only loop_debt_nudge fires there. Refused creates return an {'error': ...} dict, which tool_called treats as a refusal and never runs the hook for.",
+        "tasks__active's `server` key (task:0bcc56f1) reports which code the running process loaded: {'loaded_sha', 'head_sha', 'stale', 'started_at'}. loaded_sha is captured ONCE at module import from _PACKAGE_REPO (the checkout taskfw/__file__ lives in, NOT _workspace(), which is the agent's project); head_sha is re-read on every call, unmemoised, because HEAD moving mid-process is what the field detects. stale is None, not False, whenever either sha is unknown (installed package, no .git, git missing). It is a pull-only fact on a response the agent asked for, not a nudge, so it has no hook. Blind spot: uncommitted edits leave stale False while the server runs old code."
       ],
       "created_at": "2026-08-24T12:03:06.202765+00:00",
       "description": "Pulled out of [[mcp-portable-interface]]. The active-task pointer is a single in-memory value per scope (task:f5ace343) -- not a stack, not persisted, gone on server restart. tasks__create activates the newly created task (task:1105f979) and tasks__set_active is the explicit path (the task-implementation skill calls it); ticking a checklist item is NOT an activation path (task:c88b8730). Nothing auto-clears the pointer once set -- tasks__add_introspection is the sole deactivation path (task:2d24165a), there is no standalone clear tool.",
@@ -21,7 +22,9 @@
         "tests/test_mcp_tools.py::TestActiveTask::test_add_introspection_clears_the_active_task",
         "tests/test_mcp_tools.py::TestActiveTask::test_finish_leaves_the_task_it_finished_active",
         "taskfw/mcp_server.py:_loop_debt_hook",
-        "tests/test_mcp_tools.py::TestLoopDebtNudge::test_creating_the_next_task_surfaces_loop_debt"
+        "tests/test_mcp_tools.py::TestLoopDebtNudge::test_creating_the_next_task_surfaces_loop_debt",
+        "taskfw/mcp_server.py:_PACKAGE_REPO, _LOADED_SHA, _STARTED_AT",
+        "tests/test_mcp_tools.py::TestServerSha"
       ],
       "invariants": [
         "Active status is now exactly as long-lived as the pass that sets it (task:f5ace343) -- task-grooming and task-introspection skills activate/deactivate at their own pass boundaries rather than relying on any persistence layer.",
@@ -354,19 +357,43 @@
         "nudge-dispatch-chassis"
       ]
     },
+    "gitutil-head-sha-tested": {
+      "confidence": 0.85,
+      "contracts": [
+        "TestHeadSha: a committed repo returns its full 40-char sha, equal to git's own rev-parse; an unborn branch (git init, no commit) returns None; a directory outside any checkout returns None; run_git returning None (git missing) returns None without raising. Skipped when git is not on PATH."
+      ],
+      "created_at": "2026-09-21T17:50:01.295286+00:00",
+      "description": "Pins gitutil.head_sha against a REAL temporary git repository rather than a stubbed subprocess (task:0bcc56f1), because the property that matters is how `git rev-parse HEAD` actually behaves in the edge states: an unborn branch, a non-checkout, and a missing binary. Each of those must come back as None, never an empty string that could be read as a sha.",
+      "evidence": [
+        "tests/test_gitutil.py:TestHeadSha",
+        "taskfw/gitutil.py:head_sha"
+      ],
+      "invariants": [
+        "head_sha never returns '' — every way of not knowing collapses to None."
+      ],
+      "last_validated": "2026-09-21T17:50:01.295331+00:00",
+      "module": "tests/test_gitutil.py",
+      "name": "gitutil-head-sha-tested",
+      "related": [
+        "gitutil-subprocess-shape"
+      ]
+    },
     "gitutil-subprocess-shape": {
       "confidence": 0.9,
       "contracts": [
         "run_git(argv, cwd, timeout=30) -> CompletedProcess | None — None only for a process-level failure (OSError/SubprocessError), never for a non-zero exit. Logs the failure itself; callers add nothing for that case.",
         "Callers own returncode handling and its logging, since the same non-zero exit means different things to each: backfill.git_log logs it as 'not a git repo or bad rev' (closer to an error), scope._origin_url logs it quieter at debug ('no origin') since most directories legitimately have none.",
-        "Consumed by taskfw/backfill.py:git_log and taskfw/scope.py:_origin_url."
+        "head_sha(cwd) -> str | None — `git rev-parse HEAD`; None for every way of not knowing (run_git None, non-zero exit such as not-a-checkout or an unborn branch, empty stdout), never ''. Added for task:0bcc56f1 so mcp_server reads its loaded commit here rather than growing a private git helper.",
+        "Consumed by taskfw/backfill.py:git_log, taskfw/scope.py:_origin_url and _toplevel (run_git), and taskfw/mcp_server.py:_LOADED_SHA, tasks__active (head_sha)."
       ],
       "created_at": "2026-08-29T10:00:31.678276+00:00",
       "description": "The one place a module shells out to git. Factored out of taskfw.backfill and taskfw.scope after a reuse review found the two independently re-typing the same try/except/timeout shape around subprocess.run(['git', ...]) (task:a7a4742e). Both need the same process-level failure handling (missing binary, timeout, permissions) but disagree on what a non-zero exit means for their own purpose, so run_git only normalises the former and leaves returncode inspection to the caller.",
       "evidence": [
         "taskfw/gitutil.py:run_git",
         "taskfw/backfill.py:git_log",
-        "taskfw/scope.py:_origin_url"
+        "taskfw/scope.py:_origin_url",
+        "taskfw/gitutil.py:head_sha",
+        "taskfw/mcp_server.py:_LOADED_SHA, tasks__active"
       ],
       "invariants": [
         "Never raises. A caller that wants to shell out to git and treat every failure mode as 'could not ask' gets that for free; a caller that needs to distinguish failure modes still can, via the returncode on what run_git returns."
@@ -1462,6 +1489,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-09-21T17:30:38.389122+00:00"
+    "updated_at": "2026-09-21T17:50:01.295426+00:00"
   }
 }
