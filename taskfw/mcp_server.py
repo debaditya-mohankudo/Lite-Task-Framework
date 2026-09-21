@@ -184,9 +184,18 @@ def _ungroomed_progress_hook(result: dict[str, Any]) -> None:
 
 
 def _finish_hook(result: dict[str, Any]) -> None:
-    """finish_nudge, for tasks__finish. task.introspection is untouched by
-    tasks__finish's own mutation (only status changes), so the re-fetched
-    task is identical to the one the tool itself had in hand."""
+    """finish_nudge, on any call whose result says it moved a task to done.
+
+    Keyed off `finished` in the result rather than a tool name, because four
+    tools can close a task — tasks__finish, check_item's and add_decision's
+    auto-finish on the last item, and tasks__update(status="done") — and a
+    hook pinned to one of them left the other three closing silently
+    (task:c0c5ff5f; the same failure class as task:1105f979's activation
+    hook). `finished` is set only on the transition itself (see _finished),
+    so editing an already-done task never re-fires it.
+    """
+    if not result.get("finished"):
+        return
     task = _refetch(result)
     if task:
         dispatcher.apply_nudge(result, dispatcher.finish_nudge, task)
@@ -491,6 +500,23 @@ def _keep_grade(current: dict | None, incoming: dict) -> dict:
     return incoming
 
 
+def _pop_text_match(pool: list, text: str, text_of: Callable[[Any], str]) -> Any | None:
+    """Remove and return the first entry of `pool` whose text matches `text`, or None.
+
+    Matching is by normalise_text, and an empty key matches nothing. Removing
+    the match is what makes it consume-once: two identical incoming texts pair
+    with two pool entries rather than both claiming one. The one home for
+    this rule, shared by legacy-risk matching and checklist tick keeping.
+    """
+    key = normalise_text(text)
+    if not key:
+        return None
+    for i, cand in enumerate(pool):
+        if normalise_text(text_of(cand)) == key:
+            return pool.pop(i)
+    return None
+
+
 def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -> list[dict]:
     """Union current and incoming grooming risks by id — task:f24be6e4.
 
@@ -529,9 +555,8 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
     incoming = [coerce(r) for r in (incoming_raw or [])]
 
     current_by_id = {r["id"]: r for r in current if r.get("id")}
-    current_idless = [r for r in current if not r.get("id")]
+    unmatched_idless = [r for r in current if not r.get("id")]
     consumed_ids: set[str] = set()
-    consumed_idless: set[int] = set()
 
     merged: list[dict] = []
     for risk in incoming:
@@ -540,25 +565,17 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
             merged.append(_keep_grade(current_by_id.get(rid), risk))
             consumed_ids.add(rid)
             continue
-        key = normalise_text(risk.get("text", ""))
-        match_i = next(
-            (i for i, cand in enumerate(current_idless)
-             if i not in consumed_idless and key and normalise_text(cand.get("text", "")) == key),
-            None,
-        )
+        match = _pop_text_match(unmatched_idless, risk.get("text", ""), lambda r: r.get("text", ""))
         new_entry = dict(risk)
         new_entry["id"] = new_id()
-        if match_i is not None:
-            consumed_idless.add(match_i)
-            new_entry = _keep_grade(current_idless[match_i], new_entry)
-        merged.append(new_entry)
+        merged.append(_keep_grade(match, new_entry))
 
     # Carry forward graded risks the incoming payload dropped by omission.
     for rid, risk in current_by_id.items():
         if rid not in consumed_ids and risk.get("graded"):
             merged.append(risk)
-    for i, risk in enumerate(current_idless):
-        if i not in consumed_idless and risk.get("graded"):
+    for risk in unmatched_idless:
+        if risk.get("graded"):
             new_entry = dict(risk)
             new_entry["id"] = new_id()
             merged.append(new_entry)
@@ -566,7 +583,25 @@ def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -
     return merged
 
 
-@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
+def _keep_ticks(current: list[ResolutionItem], texts: list[str]) -> list[ResolutionItem]:
+    """A replacement checklist from `texts`, keeping `done` on items restated unchanged.
+
+    Rewording or appending to a checklist is not a statement that finished
+    work became unfinished, so an item whose normalised text matches a
+    current one keeps that item's tick (task:c0c5ff5f). Each current item is
+    consumed once, so two identical texts pair with two current items rather
+    than both inheriting one tick. Anything unmatched starts not-done — a
+    new item has no evidence of being finished.
+    """
+    remaining = list(current)
+    out: list[ResolutionItem] = []
+    for text in texts:
+        match = _pop_text_match(remaining, text, lambda c: c.text)
+        out.append(ResolutionItem(text, done=bool(match and match.done)))
+    return out
+
+
+@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook))
 def tasks__update(
     task_id: str,
     title: str = "",
@@ -613,16 +648,22 @@ def tasks__update(
     if notes:
         updated.notes = notes
     if resolution is not None:
-        updated.resolution = [ResolutionItem(t) for t in resolution]
+        updated.resolution = _keep_ticks(current.resolution, resolution)
     if files is not None:
         updated.files = files
     if tags is not None:
         updated.tags = tags
     if grooming is not None:
         merged_grooming = dict(grooming)
-        merged_grooming["risks"] = _merge_grooming_risks(
-            (current.grooming or {}).get("risks"), grooming.get("risks")
-        )
+        current_risks = (current.grooming or {}).get("risks")
+        # An absent `risks` key says nothing about risks, so they stay as
+        # they are; only an explicit list (including []) is a re-groom of
+        # them. Treating absence as [] retracted every ungraded risk on a
+        # payload that never mentioned risks at all (task:c0c5ff5f).
+        if "risks" in grooming:
+            merged_grooming["risks"] = _merge_grooming_risks(current_risks, grooming["risks"])
+        elif current_risks:
+            merged_grooming["risks"] = current_risks
         updated.grooming = merged_grooming
 
     parent_task = store().get(updated.parent) if updated.parent else None
@@ -634,6 +675,11 @@ def tasks__update(
         store().add_event(
             task_id, f"scope corrected: {current.scope or '(unscoped)'} -> {updated.scope}"
         )
+    if updated.status == "done" and current.status != "done":
+        # Same record _finish_task leaves: a status event and the `finished`
+        # marker _finish_hook keys off. Without them this path closed a task
+        # with neither a trace in the event log nor an introspection reminder.
+        return _finished(task_id, "status set to done via tasks__update", transitioned=True)
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 
@@ -659,11 +705,27 @@ def _finish_task(task_id: str, reason: str = "") -> dict[str, Any]:
     ruling = lifecycle.check_transition(task.status, "done")
     if not ruling:
         return _denied(ruling)
+    was_done = task.status == "done"
     task.status = "done"
     store().save(task)
+    return _finished(task_id, reason, transitioned=not was_done)
+
+
+def _finished(task_id: str, reason: str, *, transitioned: bool) -> dict[str, Any]:
+    """What a call that left a task done records and returns — the one home
+    for both, shared by _finish_task and tasks__update's status->done branch.
+
+    Writes `reason` as a status event when given. `finished: True` is present
+    only when THIS call moved the task to done, which is what _finish_hook
+    keys off. A repeat finish, or any later edit of a done task, carries no
+    marker and so no finish_nudge.
+    """
     if reason:
         store().add_event(task_id, reason, kind="status")
-    return {"ok": True, "id": task_id, "status": "done"}
+    result: dict[str, Any] = {"ok": True, "id": task_id, "status": "done"}
+    if transitioned:
+        result["finished"] = True
+    return result
 
 
 def _resolution_index_error(task: Task, index: int) -> str | None:
@@ -748,10 +810,12 @@ def _apply_check_item(task_id: str, index: int, done: bool) -> dict[str, Any]:
             result["finish_notice"] = finish_result["error"]
         else:
             result["status"] = finish_result["status"]
+            if finish_result.get("finished"):
+                result["finished"] = True
     return result
 
 
-@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
+@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook))
 def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
     """Tick or untick one resolution checklist item by its zero-based index.
 
@@ -844,6 +908,7 @@ def _resolved_item_hook(result: dict[str, Any]) -> None:
         return
     dispatcher.apply_nudge(result, dispatcher.finish_reminder_nudge, task)
     dispatcher.apply_nudge(result, dispatcher.ungroomed_progress_nudge, task)
+    _finish_hook(result)
 
 
 @_tool(hook=_resolved_item_hook)

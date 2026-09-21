@@ -285,8 +285,9 @@ package Requirements {
              * replacing the list wholesale, so a grade can no longer be
              * dropped by omitting the risk from a later pass, nor by
              * restating a risk without its grade (task:2a7eacc8 closed that
-             * for legacy id-less risks matched by text) — every other
-             * grooming field is unaffected. Recurrence groups by id when
+             * for legacy id-less risks matched by text), nor by a payload
+             * that omits the `risks` key altogether (task:c0c5ff5f) — every
+             * other grooming field is unaffected. Recurrence groups by id when
              * present, falling back to normalised text only for risks written
              * before this change. Second, the debt this requirement exists to
              * make readable is now also surfaced proactively: every activation

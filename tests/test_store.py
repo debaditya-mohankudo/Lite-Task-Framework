@@ -141,6 +141,24 @@ class TestSearch:
         results = store.search("alpha widget gadget")
         assert results[0].title == "alpha widget gadget"
 
+    def test_strong_newer_match_beats_older_filler_rows(self, store):
+        """task:c0c5ff5f: the candidate window used to be the first limit*4
+        matches in insertion order, so a newer task matching every term was
+        never even scored once enough older partial matches existed."""
+        for i in range(20):
+            store.save(make(title=f"old search task {i}"))
+        store.save(make(title="search window fix"))
+        assert store.search("search window", limit=2)[0].title == "search window fix"
+
+    def test_equal_scores_are_broken_by_relevance_not_age(self, store):
+        """Combination scores are small integers, so ties are common; within a
+        tie the tighter bm25 match must win over the older row."""
+        for i in range(20):
+            store.save(make(title=f"filler {i}",
+                            motivation="a long body that mentions widget once among many other words"))
+        store.save(make(title="widget"))
+        assert store.search("widget", limit=2)[0].title == "widget"
+
 
 class TestEvents:
     def test_events_are_appended_newest_first(self, store):

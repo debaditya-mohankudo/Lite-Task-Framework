@@ -129,6 +129,8 @@ storage, not authorship — the object you pass should be an edited revision of
 what was there. The one exception is `risks`, which merges by `id` rather than
 replacing (task:f24be6e4): reword a risk by keeping its `id` and its grade
 history follows; a new risk needs no `id` at all, one is assigned for you.
+Leaving the `risks` key out entirely leaves the current risks untouched; pass
+`"risks": []` to retract the ungraded ones (task:c0c5ff5f).
 
 ## Risks must be falsifiable
 

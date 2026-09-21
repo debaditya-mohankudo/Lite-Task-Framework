@@ -105,8 +105,11 @@ package TaskFrameworkSystem {
              *   - introspection_nudge (tasks__add_introspection): an
              *     introspection report cites a lesson but the task has never
              *     promoted one to loop memory.
-             *   - finish_nudge (tasks__finish): a task closed with no
-             *     introspection report yet.
+             *   - finish_nudge (any call that moved a task to done:
+             *     tasks__finish, tasks__check_item / tasks__add_decision
+             *     auto-finish, tasks__update(status="done") — keyed off
+             *     `finished` in the result, task:c0c5ff5f): a task closed
+             *     with no introspection report yet.
              *   - finish_reminder_nudge (tasks__check_item / tasks__update,
              *     and tasks__add_decision on a call that resolved an item):
              *     the resolution checklist is 100% done but the task is still

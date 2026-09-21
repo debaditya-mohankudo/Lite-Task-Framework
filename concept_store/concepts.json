@@ -41,7 +41,7 @@
       "confidence": 0.8,
       "contracts": [
         "introspection_nudge(report, task_id, conn) -> str | None; fires only when the report has an unpromoted lesson (via _lesson_texts, covering both new_knowledge and legacy surprises[].lesson shapes) AND the task has never cited any memory (via _cited_in_memory).",
-        "finish_nudge(task) -> str | None; fires only when task.introspection is empty, at tasks__finish.",
+        "finish_nudge(task) -> str | None; fires only when task.introspection is empty, on any call whose result carries `finished: True` — tasks__finish, check_item/add_decision auto-finish, and tasks__update(status=\"done\") — i.e. only on the transition to done, never on a later edit of a done task (task:c0c5ff5f).",
         "finish_reminder_nudge(task) -> str | None; fires when is_implemented(task) is True AND task.status == 'open', at tasks__check_item/tasks__update, before finish is called.",
         "stale_memory_nudge(memory: dict) -> str | None; fires when memory['standing'] is 'disputed' or 'contradicted' (never 'superseded', already flagged by definition), wired onto task_memory__link.",
         "ungroomed_progress_nudge(task) -> str | None; fires when task.progress has at least one checked item AND task.grooming is empty, at tasks__check_item/tasks__update.",
@@ -76,7 +76,7 @@
         "Both loop_debt_nudge and task_debt_nudge derive their counts from taskfw.accuracy._task_grading/loop_debt — the same classification tasks__grooming_accuracy itself uses — so none of the three can disagree about what counts as ungraded or skipped.",
         "loop_debt_nudge/task_debt_nudge are stateless and unthrottled — tasks__set_active is called far less often per session than every MCP tool call, so recomputing the debt on each call costs little.",
         "loop_debt is scoped to the calling project (task:a5bb2f45): _loop_debt_hook passes scope.derive(), so the debt behind this nudge is this repo's, and the result names the scope it counted. A scoped count excludes tasks written before Task.scope existed, which carry no scope to match, so it also reports unscoped_not_counted rather than letting that narrowing pass as a complete answer. Supersedes the earlier accepted risk that the count was global and said nothing about it.",
-        "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires AFTER tasks__finish when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called (task:a6fb9f45 sat open at 4/4 until an unrelated review pass caught it).",
+        "finish_reminder_nudge closes a distinct gap from finish_nudge: finish_nudge fires on the transition to done (by any of the four paths) when introspection is missing; finish_reminder_nudge fires on tasks__check_item/tasks__update BEFORE finish, when the checklist is complete but finish was never called (task:a6fb9f45 sat open at 4/4 until an unrelated review pass caught it).",
         "stale_memory_nudge never calls supersede()/forget() itself — advisory only, consistent with task-introspection's 'never unilaterally delete stale memories' rule.",
         "finish_reminder_nudge, stale_memory_nudge, and ungroomed_progress_nudge are all stateless by design: each checks current state on every qualifying call rather than firing once and remembering it fired, because check_item/update/link are infrequent enough that re-firing costs little.",
         "ungroomed_progress_nudge and finish_nudge call task-phase-derivation's is_groomed/is_introspected (task:5a5fde0d) rather than testing task.grooming/task.introspection directly, so they and task_phase() (see [[task-phase-derivation]]) can never disagree about what those words mean.",
@@ -504,7 +504,7 @@
         "The entire hierarchy rule is: an epic has no parent, and a task cannot be its own parent",
         "Denials log at INFO with rule, reason, and ids; allows log at DEBUG",
         "check_link_rel is the FIRST policy check ever added to tasks__link — before task:1c9d37d7 it had zero lifecycle validation, calling store().link() directly after only confirming both task ids exist",
-        "tasks__finish/tasks__check_item's auto-finish share one _finish_task() helper (mcp_server.py) that pops the active-task stack only when the finished task_id is on top — a buried finish still marks the task done, it just skips the pop (task:f302eb2b)"
+        "tasks__finish/tasks__check_item's auto-finish share one _finish_task() helper (mcp_server.py) (task:f302eb2b); it does not touch the active pointer (task:1105f979). _finish_task and tasks__update's status->done branch both build their result through _finished(), which adds `finished: True` only when that call made the transition — the marker _finish_hook keys off (task:c0c5ff5f)."
       ],
       "last_validated": "2026-08-29T10:52:23.787688+00:00",
       "module": "taskfw/lifecycle.py",
@@ -1312,7 +1312,7 @@
         "unlink(from_id, to_id, rel=None) -> rows removed; omitting rel removes every edge between the pair",
         "search(query, limit) falls back to LIKE when FTS5 is unavailable or the query is malformed",
         "search(query)'s `query` is a PLAIN string, not pre-formatted FTS5 syntax -- search() builds its own OR-of-terms MATCH expression internally (each term quoted, so punctuation is read as literal text). Callers (tasks__search, context._related_candidates()) never construct FTS syntax themselves.",
-        "search() ranks results by _combination_score(task, terms), NOT FTS5's own bm25 `rank` -- tag-word overlap is weighted 3x over body-word overlap (_TAG_WEIGHT/_BODY_WEIGHT), mirroring claude-hooks' LoadMemoriesNode combination scorer (task:c3b53021). FTS5 MATCH still does candidate recall (over-fetched at limit*4); only the final ordering is Python-side (task:f24a88e3).",
+        "search() ranks results by _combination_score(task, terms), NOT FTS5's own bm25 `rank` -- tag-word overlap is weighted 3x over body-word overlap (_TAG_WEIGHT/_BODY_WEIGHT), mirroring claude-hooks' LoadMemoriesNode combination scorer (task:c3b53021). FTS5 MATCH still does candidate recall (over-fetched at limit*4, taken in bm25 `rank` order — an unordered LIMIT returned the oldest matches, task:c0c5ff5f); only the final ordering is Python-side (task:f24a88e3), and its stable sort leaves bm25 as the tie-break between equal combination scores.",
         "set_active(task_id, scope)/get_active(scope)/clear_active(scope) replaced push_active/pop_active/active_stack (task:f5ace343) -- a plain in-memory dict (scope -> task_id) on TaskStore, gone the moment the process ends. set_active just overwrites scope's entry; no push/no-op-on-already-top special case. clear_active pops the scope key and logs only if something was actually cleared.",
         "last_event_ts(task_id, kind) -> str | None (task:1f400ecf) is the `ts` of the most recent event of that kind, or None when there is none. Deliberately not a filter over events(): events() takes a limit and returns the most recent rows of EVERY kind, so a decision older than that many notes would be missing from its result and read as absent. Asking the question directly makes 'no such event' the only reason None can come back -- the same omission-versus-absence rule the rest of the framework holds to."
       ],
@@ -1437,7 +1437,7 @@
       ],
       "invariants": [
         "A grooming risk carries a stable, framework-assigned `id` (task:f24be6e4) — assigned by tasks__update whenever an incoming risk lacks one, never accepted from the caller, so no caller can collide with an existing id.",
-        "grooming.risks is the one field on Task.grooming that does not replace wholesale: tasks__update._merge_grooming_risks unions current and incoming risks by id, so a re-groom that omits a graded risk carries it forward automatically instead of destroying its grade by omission. Every other grooming field stays wholesale-replace.",
+        "grooming.risks is the one field on Task.grooming that does not replace wholesale: tasks__update._merge_grooming_risks unions current and incoming risks by id, so a re-groom that omits a graded risk carries it forward automatically instead of destroying its grade by omission. Every other grooming field stays wholesale-replace. A payload with no `risks` key leaves current risks untouched; an explicit [] retracts the ungraded ones (task:c0c5ff5f).",
         "A risk written before task:f24be6e4 has no id and is never rewritten to gain one — it is matched to an incoming risk by normalised text on its first post-migration merge, and stays id-less in storage otherwise.",
         "from_dict drops unknown keys rather than raising, so a store written by a newer version stays readable by an older one",
         "progress is never stored — it cannot drift from the list it counts",

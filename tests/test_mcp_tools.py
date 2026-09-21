@@ -179,6 +179,24 @@ class TestUpdate:
         r = m.tasks__update(t["id"], title="still working on it")
         assert "finish_reminder_nudge" in r
 
+    def test_replacing_resolution_keeps_ticks_on_restated_items(self):
+        """task:c0c5ff5f: rewriting the checklist used to reset every item to
+        not-done. An item restated (up to normalised text) keeps its tick;
+        a new or reworded item starts unticked."""
+        t = create(resolution=["one", "two", "three"])
+        m.tasks__check_item(t["id"], 0)
+        m.tasks__check_item(t["id"], 1)
+        m.tasks__update(t["id"], resolution=["One.", "two, reworded", "three", "four"])
+        items = [(i["text"], i["done"]) for i in m.tasks__get(t["id"])["resolution"]]
+        assert items == [("One.", True), ("two, reworded", False),
+                         ("three", False), ("four", False)]
+
+    def test_duplicate_texts_each_consume_one_tick(self):
+        t = create(resolution=["same", "same"])
+        m.tasks__check_item(t["id"], 0)
+        m.tasks__update(t["id"], resolution=["same", "same"])
+        assert [i["done"] for i in m.tasks__get(t["id"])["resolution"]] == [True, False]
+
     def test_ungroomed_progress_fires_once_a_checked_item_exists(self):
         t = create(resolution=["a"])
         m.tasks__check_item(t["id"], 0)
@@ -220,6 +238,18 @@ class TestGroomingRiskMerge:
         m.tasks__update(t["id"], grooming={"risks": [{"text": "a", "graded": None}]})
         m.tasks__update(t["id"], grooming={"risks": []})
         assert m.tasks__get(t["id"])["grooming"]["risks"] == []
+
+    def test_grooming_without_a_risks_key_leaves_risks_unchanged(self):
+        """task:c0c5ff5f: an absent key used to be read as [] and retract every
+        ungraded risk. Other grooming fields still replace wholesale."""
+        t = create()
+        m.tasks__update(t["id"], grooming={"risks": [{"text": "a", "graded": None}],
+                                           "clarifications": ["old"]})
+        before = m.tasks__get(t["id"])["grooming"]["risks"]
+        m.tasks__update(t["id"], grooming={"clarifications": ["new"]})
+        after = m.tasks__get(t["id"])["grooming"]
+        assert after["risks"] == before
+        assert after["clarifications"] == ["new"]
 
     def test_rewording_a_risk_by_id_preserves_its_grade(self):
         t = create()
@@ -432,6 +462,42 @@ class TestFinish:
         t = create()
         m.tasks__update(t["id"], status="abandoned")
         assert "finish_nudge" not in m.tasks__finish(t["id"])
+
+
+class TestEveryPathToDoneNudges:
+    """task:c0c5ff5f: finish_nudge used to be wired to tasks__finish alone, so
+    the three other ways a task reaches done closed it with no introspection
+    reminder. The nudge follows the transition, not the tool name."""
+
+    def test_check_item_auto_finish_nudges(self):
+        t = create(resolution=["a"])
+        assert "finish_nudge" in m.tasks__check_item(t["id"], 0)
+
+    def test_add_decision_resolving_the_last_item_nudges(self):
+        t = create(resolution=["a"])
+        assert "finish_nudge" in m.tasks__add_decision(t["id"], "chose x", resolves=0)
+
+    def test_update_status_done_nudges_and_writes_a_status_event(self, store):
+        t = create()
+        r = m.tasks__update(t["id"], status="done")
+        assert "finish_nudge" in r
+        assert any(e["kind"] == "status" for e in store.events(t["id"]))
+
+    def test_editing_an_already_done_task_does_not_renudge(self):
+        t = create()
+        m.tasks__update(t["id"], status="done")
+        assert "finish_nudge" not in m.tasks__update(t["id"], notes="later edit")
+        assert "finish_nudge" not in m.tasks__update(t["id"], status="done")
+        assert "finish_nudge" not in m.tasks__finish(t["id"])
+
+    def test_partial_check_item_does_not_nudge(self):
+        t = create(resolution=["a", "b"])
+        assert "finish_nudge" not in m.tasks__check_item(t["id"], 0)
+
+    def test_no_nudge_when_already_introspected(self):
+        t = create(resolution=["a"])
+        m.tasks__add_introspection(t["id"], {"new_knowledge": ["a lesson"]})
+        assert "finish_nudge" not in m.tasks__check_item(t["id"], 0)
 
 
 class TestListAndSearch:

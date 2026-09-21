@@ -139,6 +139,13 @@ class TaskStore:
         punctuation is read as literal text, never an FTS5 operator), then
         re-ranks the matched candidates by _combination_score instead of
         FTS5's own bm25 `rank`, so a shared tag outweighs a shared body word.
+
+        The candidate window is taken in bm25 order, never insertion order
+        (task:c0c5ff5f): an unordered `LIMIT` returns the oldest matching rows,
+        and on a store where most tasks share a common word that window held
+        no task created in the last seven weeks. The re-rank sort is stable,
+        so bm25 also decides between tasks with equal combination scores —
+        which the small integer scores make the usual case, not an edge.
         """
         terms = query.split()
         if not terms:
@@ -148,7 +155,7 @@ class TaskStore:
                 quoted = ['"{}"'.format(t.replace('"', '""')) for t in terms]
                 rows = self.conn.execute(
                     """SELECT t.data FROM tasks_fts f JOIN tasks t ON t.id = f.id
-                       WHERE tasks_fts MATCH ? LIMIT ?""",
+                       WHERE tasks_fts MATCH ? ORDER BY f.rank LIMIT ?""",
                     (" OR ".join(quoted), limit * 4),
                 ).fetchall()
                 tasks = [Task.from_json(r["data"]) for r in rows]
