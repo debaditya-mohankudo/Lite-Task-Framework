@@ -1327,7 +1327,8 @@
         "taskfw/store.py:TaskStore.get_active",
         "taskfw/store.py:TaskStore.clear_active",
         "tests/test_store.py",
-        "taskfw/store.py:last_event_ts"
+        "taskfw/store.py:last_event_ts",
+        "taskfw/store.py:TaskStore._backfill_fts"
       ],
       "invariants": [
         "No store method ever rejects a write for a policy reason -- that is LifecycleRules' job",
@@ -1335,9 +1336,10 @@
         "Edge and commit inserts are idempotent via table constraints, not application checks",
         "The active-task state is a single in-memory pointer per scope, NOT persisted and does NOT survive a restart (task:f5ace343) -- replaced the durable per-scope LIFO stack (ACTIVE_TASK_STACK, itself a replacement for the older single-row ACTIVE_TASK table, task:f302eb2b). ACTIVE_TASK_STACK is dropped from schema.TABLES but its Table()/index constant stays defined per the additive-only migration rule, so pre-existing rows are left in place, orphaned.",
         "FTS5 absence degrades search rather than failing at import",
-        "_combination_score scores tags and body against DISJOINT word sets -- a word counted as a tag match is excluded from the body-overlap count, so it can never score twice"
+        "_combination_score scores tags and body against DISJOINT word sets -- a word counted as a tag match is excluded from the body-overlap count, so it can never score twice",
+        "tasks_fts_tagged's `id` is UNINDEXED, so `DELETE ... WHERE id=?` scans the whole FTS table. _index (the per-save path) pays that O(n) per save. The one-time backfill must NOT go through _index: per-row it is O(n^2) (1.7s on 1,861 tasks, versus 0.25s with a plain executemany into the empty table, task:7097f9d4)."
       ],
-      "last_validated": "2026-09-21T16:40:14.961506+00:00",
+      "last_validated": "2026-09-21T17:30:38.389051+00:00",
       "module": "taskfw/store.py",
       "name": "taskstore-data-access-only",
       "related": [
@@ -1460,6 +1462,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-09-21T16:40:14.961617+00:00"
+    "updated_at": "2026-09-21T17:30:38.389122+00:00"
   }
 }
