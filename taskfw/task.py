@@ -80,9 +80,14 @@ class Task:
     #: Which project this task belongs to — see taskfw.scope for the one
     #: derivation and why it is a git origin rather than a path. Empty means
     #: unscoped, which is what every task written before this field existed
-    #: reads as. No code path fills it retroactively: a scope inferred later
+    #: reads as. No code path INFERS it retroactively: a scope inferred later
     #: from prose is reconstructed, not recorded, and the framework treats
-    #: those as different kinds of fact.
+    #: those as different kinds of fact. The one path that sets it after
+    #: creation is a caller stating it outright, tasks__update(scope=...)
+    #: (task:2110cf4c) — a correction, not an inference, and it records a note
+    #: event "scope corrected: old -> new" so it is distinguishable from a
+    #: derived scope. Before that path existed, 059fd2f6 and 750242a5 were
+    #: corrected by raw SQL with no such trace.
     #:
     #: One exception exists in the DATA, not in the code. task:e62cefe8
     #: hydrated 105 pre-scope rows by hand from this repo's own commit

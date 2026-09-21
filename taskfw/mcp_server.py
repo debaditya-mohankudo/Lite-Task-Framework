@@ -18,6 +18,7 @@ from typing import Any, Callable
 from mcp.server import MCPServer
 
 from taskfw import dispatcher, lifecycle
+from taskfw import scope as scope_mod
 from taskfw.accuracy import _task_grading, grooming_accuracy, loop_debt
 from taskfw.concepts import ConceptStore
 from taskfw.config import DEFAULT_RECALL_LIMIT
@@ -576,6 +577,7 @@ def tasks__update(
     files: list[str] | None = None,
     tags: list[str] | None = None,
     grooming: dict | None = None,
+    scope: str = "",
 ) -> dict[str, Any]:
     """Update a task. Only the fields you pass are changed.
 
@@ -584,12 +586,24 @@ def tasks__update(
     replace-versus-append something the caller has to infer from prose, and
     inferring it wrong destroys content silently; naming each field makes the
     semantics visible at the call site instead.
+
+    `scope` corrects which project a task belongs to, in the form
+    taskfw.scope produces (`git:<host>/<path>`, `path:<abs>` or `hint:<text>`).
+    Empty leaves it unchanged, so it cannot be cleared here. This is the one
+    retroactive path to a scope (task:2110cf4c), and Task.scope's comment says
+    why that is a different kind of fact from a derived one — so a change
+    leaves a note event naming old and new, the only provenance it will have.
     """
     current = store().get(task_id)
     if current is None:
         return {"error": f"No task {task_id!r}"}
+    if scope and not scope.startswith((scope_mod.GIT, scope_mod.PATH, scope_mod.HINT)):
+        return {"error": f"scope {scope!r} must start with git:, path: or hint: — "
+                         "see taskfw.scope; a bare string is indistinguishable from a fallback"}
 
     updated = Task.from_dict(current.to_dict())
+    if scope:
+        updated.scope = scope
     if title:
         updated.title = title
     if status:
@@ -616,6 +630,10 @@ def tasks__update(
     if not ruling:
         return _denied(ruling)
     store().save(updated)
+    if updated.scope != current.scope:
+        store().add_event(
+            task_id, f"scope corrected: {current.scope or '(unscoped)'} -> {updated.scope}"
+        )
     return {"ok": True, "id": updated.id, "status": updated.status}
 
 

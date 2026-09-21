@@ -123,6 +123,44 @@ class TestUpdate:
         t = create()
         assert m.tasks__update(t["id"], status="blocked")["status"] == "blocked"
 
+    NEW = "git:github.com/org/right-repo"
+
+    def test_scope_is_set_in_column_and_blob_together(self, store):
+        """The projection contract: save() is the sole writer of both, so a
+        scope correction must not leave the scalar and the JSON disagreeing."""
+        t = create()
+        assert m.tasks__update(t["id"], scope=self.NEW)["ok"]
+        row = store.conn.execute(
+            "SELECT scope, json_extract(data, '$.scope') AS blob FROM tasks WHERE id=?", (t["id"],)
+        ).fetchone()
+        assert (row["scope"], row["blob"]) == (self.NEW, self.NEW)
+
+    def test_empty_scope_leaves_it_unchanged(self, store):
+        t = create()
+        m.tasks__update(t["id"], scope=self.NEW)
+        m.tasks__update(t["id"], title="renamed")
+        assert store.get(t["id"]).scope == self.NEW
+
+    @pytest.mark.parametrize("bad", ["claude-hooks", "github.com/org/repo", "GIT:x", "/abs/path"])
+    def test_scope_without_a_known_prefix_is_refused_not_stored(self, store, bad):
+        t = create()
+        before = store.get(t["id"]).scope
+        assert "error" in m.tasks__update(t["id"], scope=bad)
+        assert store.get(t["id"]).scope == before
+
+    def test_scope_change_leaves_a_provenance_event(self, store):
+        t = create()
+        old = store.get(t["id"]).scope
+        m.tasks__update(t["id"], scope=self.NEW)
+        texts = [e["text"] for e in store.events(t["id"])]
+        assert f"scope corrected: {old or '(unscoped)'} -> {self.NEW}" in texts
+
+    def test_restating_the_same_scope_writes_no_event(self, store):
+        t = create()
+        m.tasks__update(t["id"], scope=self.NEW)
+        m.tasks__update(t["id"], scope=self.NEW)
+        assert sum("scope corrected" in e["text"] for e in store.events(t["id"])) == 1
+
     def test_unknown_task(self):
         assert "error" in m.tasks__update("nope", title="x")
 
