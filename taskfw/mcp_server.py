@@ -133,11 +133,19 @@ def _tool(hook: Callable[[dict[str, Any]], None] | None = None):
     `post` always took — see dispatcher.combine for composing more than one
     onto a single tool without `_tool` or tool_called needing to know the
     difference between one hook and several.
+
+    `_finish_hook` is not one of the hooks a tool opts into: every tool gets
+    it, after its own hook (task:7097f9d4). It keys off a `finished` marker in
+    the result, not a tool name, so wiring it per tool only added a way for a
+    new tool that closes a task to forget it and skip the introspection
+    reminder. On any other result it is one dict lookup.
     """
+    post = dispatcher.combine(hook, _finish_hook) if hook else _finish_hook
+
     def decorator(fn: Callable) -> Callable:
         @functools.wraps(fn)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
-            with dispatcher.tool_called(fn.__name__, post=hook) as call:
+            with dispatcher.tool_called(fn.__name__, post=post) as call:
                 call.result = fn(*args, **kwargs)
                 return call.result
         mcp.tool()(wrapper)
@@ -186,8 +194,9 @@ def _ungroomed_progress_hook(result: dict[str, Any]) -> None:
 def _finish_hook(result: dict[str, Any]) -> None:
     """finish_nudge, on any call whose result says it moved a task to done.
 
-    Keyed off `finished` in the result rather than a tool name, because four
-    tools can close a task — tasks__finish, check_item's and add_decision's
+    Attached to every tool by _tool itself, not opted into per tool
+    (task:7097f9d4). Keyed off `finished` in the result rather than a tool
+    name, because four tools can close a task — tasks__finish, check_item's and add_decision's
     auto-finish on the last item, and tasks__update(status="done") — and a
     hook pinned to one of them left the other three closing silently
     (task:c0c5ff5f; the same failure class as task:1105f979's activation
@@ -601,7 +610,7 @@ def _keep_ticks(current: list[ResolutionItem], texts: list[str]) -> list[Resolut
     return out
 
 
-@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook))
+@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__update(
     task_id: str,
     title: str = "",
@@ -815,7 +824,7 @@ def _apply_check_item(task_id: str, index: int, done: bool) -> dict[str, Any]:
     return result
 
 
-@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook))
+@_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, Any]:
     """Tick or untick one resolution checklist item by its zero-based index.
 
@@ -838,7 +847,7 @@ def tasks__check_item(task_id: str, index: int, done: bool = True) -> dict[str, 
     return _apply_check_item(task_id, index, done)
 
 
-@_tool(hook=_finish_hook)
+@_tool()
 def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
     """Mark a task done.
 
@@ -908,7 +917,6 @@ def _resolved_item_hook(result: dict[str, Any]) -> None:
         return
     dispatcher.apply_nudge(result, dispatcher.finish_reminder_nudge, task)
     dispatcher.apply_nudge(result, dispatcher.ungroomed_progress_nudge, task)
-    _finish_hook(result)
 
 
 @_tool(hook=_resolved_item_hook)

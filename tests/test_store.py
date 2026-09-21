@@ -150,6 +150,31 @@ class TestSearch:
         store.save(make(title="search window fix"))
         assert store.search("search window", limit=2)[0].title == "search window fix"
 
+    def test_tag_only_match_survives_a_window_full_of_body_matches(self, store):
+        """task:7097f9d4: with one FTS column, a task whose only overlap is a
+        common tag word ranked below every body match in bm25, so the limit*4
+        candidate window filled with body-only rows before _combination_score's
+        tag weight ever saw it."""
+        store.save(make(title="older", tags=["widget"]))
+        for i in range(20):
+            store.save(make(title=f"widget widget body {i}",
+                            motivation="widget widget widget widget"))
+        assert "older" in [t.title for t in store.search("widget", limit=2)]
+
+    def test_an_existing_store_is_indexed_on_first_open(self, tmp_path):
+        """A database from before the tags column has tasks but no rows in the
+        new FTS table. Opening it must index them, or search would silently
+        return nothing for every pre-upgrade task."""
+        path = tmp_path / "old.db"
+        s = TaskStore(path)
+        s.save(make(title="before upgrade", tags=["widget"]))
+        s.conn.execute("DROP TABLE tasks_fts_tagged")  # simulate the pre-upgrade state
+        s.conn.commit()
+        s.close()
+        reopened = TaskStore(path)
+        assert [t.title for t in reopened.search("widget")] == ["before upgrade"]
+        reopened.close()
+
     def test_equal_scores_are_broken_by_relevance_not_age(self, store):
         """Combination scores are small integers, so ties are common; within a
         tie the tighter bm25 match must win over the older row."""

@@ -499,6 +499,24 @@ class TestEveryPathToDoneNudges:
         m.tasks__add_introspection(t["id"], {"new_knowledge": ["a lesson"]})
         assert "finish_nudge" not in m.tasks__check_item(t["id"], 0)
 
+    def test_a_tool_with_no_hook_still_nudges_on_finished(self, monkeypatch):
+        """task:7097f9d4: the hook is structural in _tool, so a future tool that
+        closes a task cannot forget it. Registration is stubbed so the throwaway
+        tool doesn't join the server's real tool list."""
+        monkeypatch.setattr(m.mcp, "tool", lambda *a, **k: (lambda fn: fn))
+        t = create()
+
+        @m._tool()
+        def reports_finished() -> dict:
+            return {"ok": True, "id": t["id"], "finished": True}
+
+        @m._tool()
+        def reports_nothing() -> dict:
+            return {"ok": True, "id": t["id"]}
+
+        assert "finish_nudge" in reports_finished()
+        assert "finish_nudge" not in reports_nothing()
+
 
 class TestListAndSearch:
     def test_list_defaults_to_open_and_blocked(self):

@@ -154,6 +154,15 @@ class Task:
         they were correctly identified as different. Scope narrows results in
         the WHERE clause; it must never widen them in the MATCH.
         """
-        parts = [self.title, self.motivation, self.notes, " ".join(self.tags), " ".join(self.files)]
+        return "\n".join(p for p in (self.search_body(), " ".join(self.tags)) if p)
+
+    def search_body(self) -> str:
+        """search_text() minus the tags — the full-text index's `text` column.
+
+        Tags get their own, higher-weighted column (task:7097f9d4), so they are
+        kept out of this one rather than indexed twice. search_text() is built
+        from this, so the list of indexed fields lives here only.
+        """
+        parts = [self.title, self.motivation, self.notes, " ".join(self.files)]
         parts += [r.text for r in self.resolution]
         return "\n".join(p for p in parts if p)

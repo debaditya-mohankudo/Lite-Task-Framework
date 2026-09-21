@@ -84,6 +84,15 @@ the work is done. Size this to the task, the same way premise-checking is
 sized: a config tweak has almost no radius; a shared type or a tool signature
 has a lot.
 
+One kind of dependent is not a prediction at all: a test. Whether an existing
+test asserts the behaviour being changed can be read, so read it during
+grooming and write the answer down as a clarification, naming the tests. A
+risk that says "this will break test X" is a question someone skipped
+asking, and introspection will mostly grade it `wrong` — four of the five
+wrong risks in one real pass were exactly that. Keep risks for what a grep
+cannot settle: what a caller will observe at runtime, performance, how
+existing data migrates.
+
 A deletion has a second radius, and it points the other way. Removing a
 symbol can orphan what it read — a constant it compared against, a helper
 only it called — and asking what depends on the deleted symbol never finds

@@ -24,7 +24,16 @@ log = get_logger(__name__)
 #: Full-text search is a nice-to-have, not a dependency. FTS5 is a compile-time
 #: option in SQLite, and this framework is meant to be portable, so its absence
 #: degrades search to LIKE rather than failing at import.
-_FTS_DDL = "CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(id UNINDEXED, text)"
+#:
+#: Tags have their own column so bm25 can weight them (task:7097f9d4). That
+#: needed a new table rather than a changed one: CREATE ... IF NOT EXISTS
+#: leaves an existing table's columns alone, and rebuilding it would mean a
+#: DROP, which the additive-only migration rule (db/schema.py) forbids. The
+#: old single-column `tasks_fts` is left in place, unwritten and unread. It is
+#: a derived index, so nothing is lost by leaving it stale.
+_FTS_TABLE = "tasks_fts_tagged"
+_FTS_DDL = f"CREATE VIRTUAL TABLE IF NOT EXISTS {_FTS_TABLE} USING fts5(id UNINDEXED, tags, text)"
+_FTS_INSERT = f"INSERT INTO {_FTS_TABLE} (id, tags, text) VALUES (?,?,?)"
 
 
 class TaskStore:
@@ -35,12 +44,44 @@ class TaskStore:
 
     def _try_enable_fts(self) -> bool:
         try:
-            self.conn.execute(_FTS_DDL)
-            self.conn.commit()
+            with transaction(self.conn):
+                self.conn.execute(_FTS_DDL)
+                self._backfill_fts()
             return True
         except sqlite3.OperationalError as exc:
             log.warning("FTS5 unavailable, search falls back to LIKE (%s)", exc)
             return False
+
+    def _backfill_fts(self) -> None:
+        """Index every task once, when the FTS table is empty but tasks is not.
+
+        This happens exactly once per database: the first open after
+        _FTS_TABLE was introduced. After that, save() keeps it in step. It
+        runs in the same transaction as the CREATE, so an interrupted
+        backfill leaves no table rather than a half-filled one, which the
+        empty check would then never repair.
+        """
+        if self.conn.execute(f"SELECT 1 FROM {_FTS_TABLE} LIMIT 1").fetchone():
+            return
+        rows = self.conn.execute("SELECT data FROM tasks").fetchall()
+        # Plain inserts, not _index(): the table is empty, and _index's
+        # DELETE by an UNINDEXED id scans the whole table per row, which
+        # made this O(n^2) (1.5s on 1,861 tasks versus ~0.1s without it).
+        self.conn.executemany(
+            _FTS_INSERT,
+            [self._fts_row(Task.from_json(r["data"])) for r in rows],
+        )
+        if rows:
+            log.info("fts backfill table=%s rows=%d", _FTS_TABLE, len(rows))
+
+    @staticmethod
+    def _fts_row(task: Task) -> tuple[str, str, str]:
+        return task.id, " ".join(task.tags), task.search_body()
+
+    def _index(self, task: Task) -> None:
+        self.conn.execute(f"DELETE FROM {_FTS_TABLE} WHERE id=?", (task.id,))
+        self.conn.execute(_FTS_INSERT,
+                          self._fts_row(task))
 
     def close(self) -> None:
         self.conn.close()
@@ -77,10 +118,7 @@ class TaskStore:
                  task.to_json(), task.scope, task.created_at, task.updated_at),
             )
             if self.fts:
-                self.conn.execute("DELETE FROM tasks_fts WHERE id=?", (task.id,))
-                self.conn.execute(
-                    "INSERT INTO tasks_fts (id, text) VALUES (?,?)", (task.id, task.search_text())
-                )
+                self._index(task)
         return task
 
     def get(self, task_id: str) -> Task | None:
@@ -154,9 +192,10 @@ class TaskStore:
             try:
                 quoted = ['"{}"'.format(t.replace('"', '""')) for t in terms]
                 rows = self.conn.execute(
-                    """SELECT t.data FROM tasks_fts f JOIN tasks t ON t.id = f.id
-                       WHERE tasks_fts MATCH ? ORDER BY f.rank LIMIT ?""",
-                    (" OR ".join(quoted), limit * 4),
+                    f"""SELECT t.data FROM {_FTS_TABLE} f JOIN tasks t ON t.id = f.id
+                       WHERE {_FTS_TABLE} MATCH ?
+                       ORDER BY bm25({_FTS_TABLE}, 0.0, ?, ?) LIMIT ?""",
+                    (" OR ".join(quoted), self._TAG_WEIGHT, self._BODY_WEIGHT, limit * 4),
                 ).fetchall()
                 tasks = [Task.from_json(r["data"]) for r in rows]
                 tasks.sort(key=lambda t: self._combination_score(t, terms), reverse=True)
