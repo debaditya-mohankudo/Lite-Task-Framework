@@ -45,7 +45,7 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "714dcce8e31d052925ec723a82e16e9ca7ba1308";
+        derivedFromCommit = "a593313578873161b15dbebdede649d7b878f98f";
         derivedAt = "2026-09-21";
         modelledPaths = (
             "taskfw/scope.py",
@@ -108,8 +108,10 @@ package TaskFrameworkSystem {
              *   - finish_nudge (any call that moved a task to done:
              *     tasks__finish, tasks__check_item / tasks__add_decision
              *     auto-finish, tasks__update(status="done") — keyed off
-             *     `finished` in the result, task:c0c5ff5f): a task closed
-             *     with no introspection report yet.
+             *     `finished` in the result, task:c0c5ff5f; attached to
+             *     every tool by mcp_server._tool rather than wired per tool,
+             *     task:7097f9d4): a task closed with no introspection report
+             *     yet.
              *   - finish_reminder_nudge (tasks__check_item / tasks__update,
              *     and tasks__add_decision on a call that resolved an item):
              *     the resolution checklist is 100% done but the task is still
