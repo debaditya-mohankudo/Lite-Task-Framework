@@ -84,16 +84,23 @@ whether the original implementation sketch was followed exactly.
 
 ## Scope
 
-`scope` is derived automatically from the calling agent's current working
-directory at creation time (`git:<host>/<path>`, `path:<abs>`, or a `hint:`
-fallback) — it is **not** derived from `files`. Working cross-repo in one
-session (e.g. diagnosing a bug in another project while your cwd is still the
-one you started in) silently mis-scopes the task to the wrong repo; nothing
-errors, the task just files under the wrong project until a listing looks
-off. If `files` names a path outside the cwd's repo, check the `scope` the
-create response returns against that path's actual repo, and correct it with
-`tasks__update(task_id, scope="git:<host>/<path>")` before moving on — see
-[[taskfw-scope-defaults-to-caller-cwd-not-files-repo]] in loop memory.
+`scope` is derived from `os.getcwd()` of the **taskfw MCP server process
+itself** (`git:<host>/<path>`, `path:<abs>`, or a `hint:` fallback) — it is
+**not** derived from `files`, and it is not the directory an agent's shell
+tool currently sits in either. The server process is typically long-lived and
+launched once per session in whatever directory the session started; an
+agent `cd`-ing around in a shell tool, or the harness reporting a different
+"current working directory" later in the conversation, does not move the
+server process and does not change what it derives. So every task created in
+a session is scoped to wherever that session began, until corrected — even
+one created explicitly to fix a bug in a different repo.
+
+Cross-repo work in one session therefore always needs a manual check: compare
+the `scope` a create response returns against the actual repo of whatever
+`files` names, and correct with `tasks__update(task_id,
+scope="git:<host>/<path>")` using that repo's real git remote (not a guess)
+before moving on — see [[taskfw-scope-defaults-to-caller-cwd-not-files-repo]]
+in loop memory.
 
 ## Checklist items
 
