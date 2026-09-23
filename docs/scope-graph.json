@@ -1,0 +1,46 @@
+{
+  "meta": {
+    "title": "taskfw scope resolution — how a task's `scope` string is derived",
+    "source": "taskfw/scope.py (derive, for_repo, local_root)",
+    "frame": "Not a knowledge-domain graph like the ontology/*-domain.json files in other repos -- this is a decision-path graph: given an input, which branch fires and what string comes out. Terminal nodes are the three possible scope prefixes."
+  },
+  "relation_types": {
+    "reads": "the left node is consulted to decide the right node's branch",
+    "produces": "taking this path yields the string described at the target",
+    "overrides": "if present, this input is used instead of the default",
+    "falls_back_to": "used only when the preceding attempt fails or is absent"
+  },
+  "nodes": [
+    { "id": "caller_cwd_arg", "label": "cwd argument to derive()", "kind": "input",
+      "definition": "Optional explicit directory a caller passes to derive(cwd=...). Almost always omitted." },
+    { "id": "taskfw_scope_env", "label": "TASKFW_SCOPE env var", "kind": "input",
+      "definition": "If set, overrides which directory is asked about -- NOT the answer itself. Rarely set." },
+    { "id": "server_process_cwd", "label": "os.getcwd() of the taskfw MCP server process", "kind": "input",
+      "definition": "The real default. This is the long-lived MCP server's own OS working directory, fixed at process launch (session start) -- NOT the harness-reported 'current working directory', NOT wherever an agent's Bash tool has `cd`'d to. Nothing an agent does mid-session moves this." },
+    { "id": "resolved_cwd", "label": "resolved directory", "kind": "intermediate",
+      "definition": "caller_cwd_arg, else taskfw_scope_env, else server_process_cwd -- whichever is present, resolved to an absolute path." },
+    { "id": "git_origin_lookup", "label": "git remote get-url origin", "kind": "process",
+      "definition": "Run in resolved_cwd. Any failure (not a repo, no origin, git missing/hung) is treated identically -- no error, just 'no remote knowable here'." },
+    { "id": "git_scope", "label": "git:<host>/<path>", "kind": "outcome",
+      "definition": "Normalised, lowercased host+path from the origin URL (SSH and HTTPS spellings collapse to the same string). Coarser than a directory -- a monorepo's sub-projects all share one scope." },
+    { "id": "path_scope", "label": "path:<abs>", "kind": "outcome",
+      "definition": "Fallback when resolved_cwd has no discoverable git origin. Machine-local; does not survive a move or a second checkout." },
+    { "id": "hint_scope", "label": "hint:<raw text>", "kind": "outcome",
+      "definition": "for_repo()-only path: a caller-supplied repo string (e.g. from tasks__add_commit) that isn't a real directory and isn't already a scope. Kept verbatim, unresolved, so it can never be confused with a derived answer." },
+    { "id": "for_repo_input", "label": "repo string passed to for_repo()", "kind": "input",
+      "definition": "Used by tasks__add_commit's repo argument and backfill. Four sub-cases: empty, already-prefixed, a real directory, or free text." }
+  ],
+  "edges": [
+    { "from": "caller_cwd_arg", "to": "resolved_cwd", "relation": "overrides" },
+    { "from": "taskfw_scope_env", "to": "resolved_cwd", "relation": "falls_back_to" },
+    { "from": "server_process_cwd", "to": "resolved_cwd", "relation": "falls_back_to" },
+    { "from": "resolved_cwd", "to": "git_origin_lookup", "relation": "reads" },
+    { "from": "git_origin_lookup", "to": "git_scope", "relation": "produces" },
+    { "from": "git_origin_lookup", "to": "path_scope", "relation": "falls_back_to" },
+    { "from": "for_repo_input", "to": "resolved_cwd", "relation": "reads" },
+    { "from": "for_repo_input", "to": "hint_scope", "relation": "falls_back_to" }
+  ],
+  "watch_next": {
+    "pitfall": "Every task created in a session is scoped to server_process_cwd (wherever the session began) unless a caller explicitly passes a real, different directory to for_repo(), or tasks__update(scope=...) corrects it after the fact. See loop memory: taskfw-scope-pins-to-server-process-cwd."
+  }
+}

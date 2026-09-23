@@ -99,8 +99,9 @@ Cross-repo work in one session therefore always needs a manual check: compare
 the `scope` a create response returns against the actual repo of whatever
 `files` names, and correct with `tasks__update(task_id,
 scope="git:<host>/<path>")` using that repo's real git remote (not a guess)
-before moving on — see [[taskfw-scope-defaults-to-caller-cwd-not-files-repo]]
-in loop memory.
+before moving on — see [[taskfw-scope-pins-to-server-process-cwd]] in loop
+memory, and [docs/scope-graph.json](../../../docs/scope-graph.json) for the
+full derivation path as a nodes/edges graph.
 
 ## Checklist items
 
