@@ -82,6 +82,19 @@ whether the original implementation sketch was followed exactly.
 
 **notes** — the escape hatch, and deliberate. If a thought does not fit a field it goes here rather than being lost.
 
+## Scope
+
+`scope` is derived automatically from the calling agent's current working
+directory at creation time (`git:<host>/<path>`, `path:<abs>`, or a `hint:`
+fallback) — it is **not** derived from `files`. Working cross-repo in one
+session (e.g. diagnosing a bug in another project while your cwd is still the
+one you started in) silently mis-scopes the task to the wrong repo; nothing
+errors, the task just files under the wrong project until a listing looks
+off. If `files` names a path outside the cwd's repo, check the `scope` the
+create response returns against that path's actual repo, and correct it with
+`tasks__update(task_id, scope="git:<host>/<path>")` before moving on — see
+[[taskfw-scope-defaults-to-caller-cwd-not-files-repo]] in loop memory.
+
 ## Checklist items
 
 ```python
