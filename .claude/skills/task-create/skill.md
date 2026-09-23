@@ -84,24 +84,16 @@ whether the original implementation sketch was followed exactly.
 
 ## Scope
 
-`scope` is derived from `os.getcwd()` of the **taskfw MCP server process
-itself** (`git:<host>/<path>`, `path:<abs>`, or a `hint:` fallback) — it is
-**not** derived from `files`, and it is not the directory an agent's shell
-tool currently sits in either. The server process is typically long-lived and
-launched once per session in whatever directory the session started; an
-agent `cd`-ing around in a shell tool, or the harness reporting a different
-"current working directory" later in the conversation, does not move the
-server process and does not change what it derives. So every task created in
-a session is scoped to wherever that session began, until corrected — even
-one created explicitly to fix a bug in a different repo.
-
-Cross-repo work in one session therefore always needs a manual check: compare
-the `scope` a create response returns against the actual repo of whatever
-`files` names, and correct with `tasks__update(task_id,
-scope="git:<host>/<path>")` using that repo's real git remote (not a guess)
-before moving on — see [[taskfw-scope-pins-to-server-process-cwd]] in loop
-memory, and [docs/scope-graph.json](../../../docs/scope-graph.json) for the
-full derivation path as a nodes/edges graph.
+Where `scope` comes from, what does *not* influence it, and how to fix it
+when it's wrong — see [docs/scope-graph.json](../../../docs/scope-graph.json)
+(nodes/edges, not prose). One-line summary: it's set once at `tasks__create`
+time from the directory the taskfw MCP server was **launched** in for this
+session — not wherever an agent's shell has since `cd`'d to, and not the
+harness's currently-reported working directory. Cross-repo work in one
+session needs a manual check: compare the returned `scope` against the real
+repo of `files`, and correct with `tasks__update(task_id,
+scope="git:<host>/<path>")` using that repo's actual git remote. See
+[[taskfw-scope-pins-to-server-process-cwd]] in loop memory.
 
 ## Checklist items
 

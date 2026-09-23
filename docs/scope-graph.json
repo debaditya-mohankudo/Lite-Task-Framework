@@ -1,46 +1,36 @@
 {
   "meta": {
-    "title": "taskfw scope resolution — how a task's `scope` string is derived",
-    "source": "taskfw/scope.py (derive, for_repo, local_root)",
-    "frame": "Not a knowledge-domain graph like the ontology/*-domain.json files in other repos -- this is a decision-path graph: given an input, which branch fires and what string comes out. Terminal nodes are the three possible scope prefixes."
+    "title": "Scope — where a task's `scope` field comes from",
+    "frame": "The task-create skill's '## Scope' section, as a graph instead of prose. Answers: where does scope come from, what does NOT influence it, what goes wrong, and what to do about it. Not an implementation trace of taskfw/scope.py -- see that file's docstring for the actual code path."
   },
   "relation_types": {
-    "reads": "the left node is consulted to decide the right node's branch",
-    "produces": "taking this path yields the string described at the target",
-    "overrides": "if present, this input is used instead of the default",
-    "falls_back_to": "used only when the preceding attempt fails or is absent"
+    "determines": "the left node is what actually decides the right node's value",
+    "does_not_affect": "a plausible-looking influence that turns out to do nothing here",
+    "causes": "left node's behavior produces right node as a consequence",
+    "fixes": "left node is the corrective action for the right node's problem"
   },
   "nodes": [
-    { "id": "caller_cwd_arg", "label": "cwd argument to derive()", "kind": "input",
-      "definition": "Optional explicit directory a caller passes to derive(cwd=...). Almost always omitted." },
-    { "id": "taskfw_scope_env", "label": "TASKFW_SCOPE env var", "kind": "input",
-      "definition": "If set, overrides which directory is asked about -- NOT the answer itself. Rarely set." },
-    { "id": "server_process_cwd", "label": "os.getcwd() of the taskfw MCP server process", "kind": "input",
-      "definition": "The real default. This is the long-lived MCP server's own OS working directory, fixed at process launch (session start) -- NOT the harness-reported 'current working directory', NOT wherever an agent's Bash tool has `cd`'d to. Nothing an agent does mid-session moves this." },
-    { "id": "resolved_cwd", "label": "resolved directory", "kind": "intermediate",
-      "definition": "caller_cwd_arg, else taskfw_scope_env, else server_process_cwd -- whichever is present, resolved to an absolute path." },
-    { "id": "git_origin_lookup", "label": "git remote get-url origin", "kind": "process",
-      "definition": "Run in resolved_cwd. Any failure (not a repo, no origin, git missing/hung) is treated identically -- no error, just 'no remote knowable here'." },
-    { "id": "git_scope", "label": "git:<host>/<path>", "kind": "outcome",
-      "definition": "Normalised, lowercased host+path from the origin URL (SSH and HTTPS spellings collapse to the same string). Coarser than a directory -- a monorepo's sub-projects all share one scope." },
-    { "id": "path_scope", "label": "path:<abs>", "kind": "outcome",
-      "definition": "Fallback when resolved_cwd has no discoverable git origin. Machine-local; does not survive a move or a second checkout." },
-    { "id": "hint_scope", "label": "hint:<raw text>", "kind": "outcome",
-      "definition": "for_repo()-only path: a caller-supplied repo string (e.g. from tasks__add_commit) that isn't a real directory and isn't already a scope. Kept verbatim, unresolved, so it can never be confused with a derived answer." },
-    { "id": "for_repo_input", "label": "repo string passed to for_repo()", "kind": "input",
-      "definition": "Used by tasks__add_commit's repo argument and backfill. Four sub-cases: empty, already-prefixed, a real directory, or free text." }
+    { "id": "server_launch_dir", "label": "Directory the taskfw MCP server was launched in", "kind": "fact",
+      "definition": "Fixed once, at session start. This is the actual source of scope -- long-lived, not touched again for the rest of the session." },
+    { "id": "agent_cd", "label": "Agent running `cd` in a shell tool", "kind": "non_factor" },
+    { "id": "harness_reported_cwd", "label": "Harness's reported \"current working directory\"", "kind": "non_factor",
+      "definition": "Can change mid-conversation (e.g. after a shell cd). Looks like it should matter. Doesn't." },
+    { "id": "task_scope", "label": "task.scope (git:<host>/<path> / path:<abs> / hint:<text>)", "kind": "outcome",
+      "definition": "Set once at tasks__create time from server_launch_dir's git remote (or its path, if no remote)." },
+    { "id": "cross_repo_session", "label": "Session touches a different repo than it started in", "kind": "situation" },
+    { "id": "mis_scoped_task", "label": "Task filed under the wrong project", "kind": "problem",
+      "definition": "Nothing errors. The task just sits under a scope that doesn't match `files`, until a listing looks off." },
+    { "id": "manual_check", "label": "Compare returned `scope` against the real repo of `files`", "kind": "action" },
+    { "id": "tasks_update_scope", "label": "tasks__update(task_id, scope=\"git:<host>/<path>\")", "kind": "action",
+      "definition": "Use the target repo's actual git remote, not a guessed name." }
   ],
   "edges": [
-    { "from": "caller_cwd_arg", "to": "resolved_cwd", "relation": "overrides" },
-    { "from": "taskfw_scope_env", "to": "resolved_cwd", "relation": "falls_back_to" },
-    { "from": "server_process_cwd", "to": "resolved_cwd", "relation": "falls_back_to" },
-    { "from": "resolved_cwd", "to": "git_origin_lookup", "relation": "reads" },
-    { "from": "git_origin_lookup", "to": "git_scope", "relation": "produces" },
-    { "from": "git_origin_lookup", "to": "path_scope", "relation": "falls_back_to" },
-    { "from": "for_repo_input", "to": "resolved_cwd", "relation": "reads" },
-    { "from": "for_repo_input", "to": "hint_scope", "relation": "falls_back_to" }
-  ],
-  "watch_next": {
-    "pitfall": "Every task created in a session is scoped to server_process_cwd (wherever the session began) unless a caller explicitly passes a real, different directory to for_repo(), or tasks__update(scope=...) corrects it after the fact. See loop memory: taskfw-scope-pins-to-server-process-cwd."
-  }
+    { "from": "server_launch_dir", "to": "task_scope", "relation": "determines" },
+    { "from": "agent_cd", "to": "task_scope", "relation": "does_not_affect" },
+    { "from": "harness_reported_cwd", "to": "task_scope", "relation": "does_not_affect" },
+    { "from": "cross_repo_session", "to": "mis_scoped_task", "relation": "causes" },
+    { "from": "task_scope", "to": "mis_scoped_task", "relation": "causes" },
+    { "from": "manual_check", "to": "mis_scoped_task", "relation": "fixes" },
+    { "from": "tasks_update_scope", "to": "mis_scoped_task", "relation": "fixes" }
+  ]
 }
