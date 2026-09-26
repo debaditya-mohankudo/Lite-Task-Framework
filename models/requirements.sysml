@@ -43,8 +43,8 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "a593313578873161b15dbebdede649d7b878f98f";
-        derivedAt = "2026-09-21";
+        derivedFromCommit = "d474f321e5cdf72b18c58ea17d635bebcd2e4925";
+        derivedAt = "2026-09-26";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/db/schema.py",
@@ -117,8 +117,9 @@ package Requirements {
 
     requirement def ParentRuleRequirement {
         doc /* Source: taskfw/lifecycle.py:check_parent (an epic has no
-             * parent) and check_save (a task cannot be its own parent).
-             * That is the entire hierarchy.
+             * parent). That is the entire hierarchy -- self-parenting
+             * is unrepresentable (create mints a fresh id, update takes no
+             * parent), so it has no check.
              *
              * Recorded as a requirement because of how little it takes to
              * satisfy. A Jira-style set of five issue types needs a matrix of

@@ -45,8 +45,8 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "a593313578873161b15dbebdede649d7b878f98f";
-        derivedAt = "2026-09-21";
+        derivedFromCommit = "d474f321e5cdf72b18c58ea17d635bebcd2e4925";
+        derivedAt = "2026-09-26";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/store.py",
@@ -142,7 +142,8 @@ package TaskFrameworkSystem {
              *     nudge can disagree with that tool about what COUNTS as
              *     graded (task:07f9270c). They can now differ on WHICH TASKS
              *     were counted, and deliberately so (task:a5bb2f45):
-             *     loop_debt_nudge passes the derived Scope, because it fires
+             *     loop_debt_nudge passes the activated task's recorded Scope
+             *     (deriving one only for a task that has none), because it fires
              *     on every activation and a debt figure driven by
              *     another repository's tasks would interrupt work here with
              *     no way to tell; tasks__grooming_accuracy stays global by
