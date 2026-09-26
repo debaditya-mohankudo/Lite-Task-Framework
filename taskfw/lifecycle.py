@@ -181,8 +181,6 @@ def check_save(task: Task, *, previous: Task | None = None, parent: Task | None 
     parent_check = check_parent(task.epic, parent)
     if not parent_check:
         return parent_check
-    if task.parent == task.id:
-        return _deny("parent", "A task cannot be its own parent.", task=task.id)
     if previous is not None:
         return check_transition(previous.status, task.status)
     return _allow("save", task=task.id)

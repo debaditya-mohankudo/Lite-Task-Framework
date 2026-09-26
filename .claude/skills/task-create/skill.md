@@ -142,7 +142,7 @@ Skip silently if the repo has no store.
 
 ## Rules
 
-- **An epic cannot have a parent.** A task cannot be its own parent. Those are the only two structural rules; both return `{"error": ..., "rule": ...}`, and `rule` names which one fired so you can react without matching on message text.
+- **An epic cannot have a parent.** That is the only structural rule (self-parenting is unrepresentable — no tool can set `parent` to the task's own id); a denial returns `{"error": ..., "rule": ...}`, and `rule` names which rule fired so you can react without matching on message text.
 - **Use `tags`, not new fields**, for anything the `epic` flag does not express.
 - **Specify observable behaviour before internal design.** Write `resolution`
   as verifiable behavioural outcomes; name files or modules only when that

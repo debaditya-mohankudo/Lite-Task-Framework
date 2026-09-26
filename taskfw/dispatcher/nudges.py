@@ -66,7 +66,7 @@ def introspection_nudge(report: dict, task_id: str, conn: sqlite3.Connection) ->
 
 
 def finish_nudge(task) -> str | None:
-    """Advisory nudge for tasks__finish, or None when there's nothing to say.
+    """Advisory nudge for any call that moved a task to done, or None when there's nothing to say.
 
     Host-agnostic replacement for the reminder claude-hooks' external
     PostToolUse hook currently prints after a task closes — this fires from
@@ -148,7 +148,7 @@ def ungroomed_progress_nudge(task) -> str | None:
 
 
 def loop_debt_nudge(skipped: int, tasks_examined: int) -> str | None:
-    """Advisory nudge for tasks__set_active, or None when there's no debt — task:07f9270c.
+    """Advisory nudge for tasks__set_active and tasks__create, or None when there's no debt — task:07f9270c.
 
     Stateless and unthrottled, matching finish_reminder_nudge's precedent: the
     debt is recomputed from taskfw.accuracy.loop_debt on every call rather
@@ -166,7 +166,7 @@ def loop_debt_nudge(skipped: int, tasks_examined: int) -> str | None:
 
 
 def task_debt_nudge(task_id: str, ungraded: int) -> str | None:
-    """Advisory nudge for tasks__set_active, or None when the task has no debt of its own.
+    """Advisory nudge for tasks__set_active and tasks__create, or None when the task has no debt of its own.
 
     Companion to loop_debt_nudge: that one is about the loop across recent
     finished tasks, this one is about the specific task just made active,

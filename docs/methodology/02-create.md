@@ -83,10 +83,13 @@ is read, so it can never disagree with the checklist it counts.
 
 ## Rules that apply
 
-Only two, and both are structural rather than stylistic:
+Only one, and it is structural rather than stylistic:
 
 - An epic cannot have a parent.
-- A task cannot be its own parent.
+
+A task cannot be its own parent either, but that is not a rule: no tool can
+produce it (`tasks__create` always mints a fresh id, and `tasks__update` takes
+no `parent`), so there is nothing to check.
 
 Any other task may be a parent. Nesting a task under the one it is a breakdown
 of is expected, not merely tolerated — there is no rule about which task may

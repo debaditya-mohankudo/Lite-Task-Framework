@@ -14,7 +14,7 @@
     "Task": {
       "bounded_context": "Task Tracking",
       "form": "record",
-      "definition": "One unit of work: id, epic flag, status, resolution (checklist), tags, notes, grooming findings, introspection reports. The single typed object the whole domain is built around. 'epic' is a plain boolean on this record (default False), not a subtype and not a term of its own -- a boolean carries everything the earlier two-value 'type' enum did, with no malformable value left to validate. Its sole effect is that an epic Task takes no parent; teams set it to mark a Task that others are grouped beneath, but that grouping is a convention, not a rule -- nothing requires a child's parent to be an epic. The parent/child hierarchy is a self-referential link from a Task to at most one parent Task, and no Task may be its own parent. A Task also carries a Scope naming the project it was created under, recorded at creation and never inferred afterwards.",
+      "definition": "One unit of work: id, epic flag, status, resolution (checklist), tags, notes, grooming findings, introspection reports. The single typed object the whole domain is built around. 'epic' is a plain boolean on this record (default False), not a subtype and not a term of its own -- a boolean carries everything the earlier two-value 'type' enum did, with no malformable value left to validate. Its sole effect is that an epic Task takes no parent; teams set it to mark a Task that others are grouped beneath, but that grouping is a convention, not a rule -- nothing requires a child's parent to be an epic. The parent/child hierarchy is a self-referential link from a Task to at most one parent Task, and a Task being its own parent is unrepresentable (create mints a fresh id; update takes no parent) rather than checked. A Task also carries a Scope naming the project it was created under, recorded at creation and never inferred afterwards.",
       "evidence": "taskfw/task.py:Task, taskfw/lifecycle.py:check_parent",
       "lifecycle": "A Task is walked through four skills, each with one intention: task-create to open it, task-grooming to remove uncertainty before work starts, task-implementation to do the work, task-introspection to grade how well grooming predicted it and feed Loop Memory. None is mandatory, but skipping one leaves a Nudge behind.",
       "lifecycle_evidence": "skills: task-create, task-grooming, task-implementation, task-introspection"
@@ -31,7 +31,13 @@
       "definition": "The lifecycle state carried on a Task, drawn from a fixed, closed set of four values (open, blocked, done, abandoned); its legal values and the legal transitions between them are the one state machine the domain enforces. 'done' and 'abandoned' are terminal.",
       "evidence": "taskfw/task.py:TASK_STATUSES",
       "lifecycle": "New tasks start 'open'. Non-terminal states may move to 'abandoned' directly; other transitions are checked against a table transcribed from the state model. Enforcement lives in exactly one place -- the lifecycle layer's status check and transition table -- never in a caller.",
-      "lifecycle_evidence": "taskfw/lifecycle.py:TRANSITIONS, models/task_lifecycle.sysml"
+      "lifecycle_evidence": "taskfw/lifecycle.py:TRANSITIONS, models/task_lifecycle.sysml",
+      "values": [
+        "open",
+        "blocked",
+        "done",
+        "abandoned"
+      ]
     },
     "ResolutionItem": {
       "bounded_context": "Task Tracking",
@@ -56,7 +62,7 @@
       "form": "transient",
       "definition": "Which task_id is currently 'active' for a given workspace -- a single in-memory value, not a stack, and not a field on Task itself. Keyed by working directory, so two repositories worked on at once each keep their own active task; nothing about it is persisted or survives a restart.",
       "evidence": "taskfw/store.py:TaskStore.set_active, taskfw/mcp_server.py:_workspace",
-      "lifecycle": "A Scope names at most one Task active at a time: the Task whose pass through the Methodology is currently in hand. A Task becomes active when its pass begins -- when it is first framed, or when work is deliberately resumed on it later -- and stays active across the whole arc, through Grooming and Implementation. It is released when its Introspection is recorded: capturing the retrospective is itself what ends the Task's turn as active. Nothing else releases it -- reaching a terminal TaskStatus does not, because a finished-but-not-yet-introspected Task is exactly the one Introspection still needs named. Making a different Task active simply replaces the one that was; the active Task is surfaced once, when it becomes active, and not repeated. It is transient by form: it lives only in the moment, is no part of the Task's own record, and does not outlast the working session.",
+      "lifecycle": "A workspace names at most one Task active at a time: the Task whose pass through the Methodology is currently in hand. A Task becomes active when its pass begins -- when it is first framed, or when work is deliberately resumed on it later -- and stays active across the whole arc, through Grooming and Implementation. It is released when its Introspection is recorded: capturing the retrospective is itself what ends the Task's turn as active. Nothing else releases it -- reaching a terminal TaskStatus does not, because a finished-but-not-yet-introspected Task is exactly the one Introspection still needs named. Making a different Task active simply replaces the one that was; the active Task is surfaced once, when it becomes active, and not repeated. It is transient by form: it lives only in the moment, is no part of the Task's own record, and does not outlast the working session.",
       "lifecycle_evidence": "docs/methodology/01-framework.md, taskfw/mcp_server.py:tasks__create, tasks__set_active, tasks__add_introspection, models/task_framework_system.sysml"
     },
     "MemoryRecord": {
@@ -71,7 +77,12 @@
       "definition": "The kind of a MemoryRecord, drawn from a fixed, closed set of exactly three values (constraint, technique, pitfall). Doc 05 names 'constraint' and 'technique' outright; 'pitfall' earns its place from the accuracy signals, where a recurring 'wrong' or 'missed' grade is a lesson about the loop itself. The set is kept at three deliberately: a longer taxonomy is a decision to make on every capture.",
       "evidence": "taskfw/memory.py:MEMORY_KINDS",
       "lifecycle": "Set when the MemoryRecord is recorded (defaults to 'constraint') and validated in exactly one place -- the memory record path raises Rejected for any value outside the set. There is no transition machine; re-recording a slug may change its kind.",
-      "lifecycle_evidence": "taskfw/memory.py:MemoryStore.record"
+      "lifecycle_evidence": "taskfw/memory.py:MemoryStore.record",
+      "values": [
+        "constraint",
+        "technique",
+        "pitfall"
+      ]
     },
     "MemoryRelationship": {
       "bounded_context": "Loop Memory",
@@ -79,7 +90,12 @@
       "definition": "The label on one link joining a MemoryRecord to a Task, drawn from a fixed, closed set of exactly three values (learned_from, confirmed_by, contradicted_by). 'learned_from' is the mandatory citation every MemoryRecord carries; 'confirmed_by' and 'contradicted_by' are grades a later Task adds. A MemoryRecord's 'standing' is derived from how many confirming and contradicting links it has, never stored.",
       "evidence": "taskfw/memory.py:MEMORY_RELATIONSHIPS",
       "lifecycle": "Written when a MemoryRecord is recorded ('learned_from', implicitly) and when it is linked to a Task (any of the three, idempotently); validated in exactly one place -- the link path raises Rejected for a value outside the set. Links are never updated or deleted except by a forget, which cascades. Standing is recomputed from the surviving links on every read.",
-      "lifecycle_evidence": "taskfw/memory.py:MemoryStore.link, taskfw/memory.py:MemoryStore.recall"
+      "lifecycle_evidence": "taskfw/memory.py:MemoryStore.link, taskfw/memory.py:MemoryStore.recall",
+      "values": [
+        "learned_from",
+        "confirmed_by",
+        "contradicted_by"
+      ]
     },
     "MemoryStanding": {
       "bounded_context": "Loop Memory",
@@ -114,7 +130,7 @@
     "Risk": {
       "bounded_context": "The Loop",
       "form": "part",
-      "definition": "One falsifiable prediction a Grooming pass makes about the work ahead -- a thing that might go wrong, or a claim that might not hold -- written so that Introspection can later say plainly whether it did. It is the one part of Grooming that is not thrown away and rewritten each pass: a Risk keeps its own identity, so a prediction Introspection has already graded is carried forward when the plan is re-groomed rather than lost because a later pass did not restate it. That surviving, graded Risk is the loop's primary evidence -- the falsifiable half of 'Grooming makes falsifiable claims, Introspection grades them'. Whether the machinery that carries a grade forward belongs behind a shared write path is an open question tracked as its own task, not a claim this ontology makes.",
+      "definition": "One falsifiable prediction a Grooming pass makes about the work ahead -- a thing that might go wrong, or a claim that might not hold -- written so that Introspection can later say plainly whether it did. It is the one part of Grooming that is not thrown away and rewritten each pass: a Risk keeps its own identity, so a prediction Introspection has already graded is carried forward when the plan is re-groomed rather than lost because a later pass did not restate it. That surviving, graded Risk is the loop's primary evidence -- the falsifiable half of 'Grooming makes falsifiable claims, Introspection grades them'.",
       "evidence": "taskfw/risk.py:coerce, normalise_text, taskfw/mcp_server.py:_merge_grooming_risks"
     },
     "Introspection": {
@@ -132,7 +148,7 @@
     "Nudge": {
       "bounded_context": "The Loop",
       "form": "transient",
-      "definition": "A transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time. It never blocks the action or changes what gets stored, and it never hands back the content of a record the caller did not touch. What it points at is either context the caller already has (this task, this memory, this report), or a bare COUNT over records it names none of -- `loop_debt_nudge` tallies ungraded risks across the last finished tasks in the project on `tasks__set_active`. The aggregate is admissible because a tally is not a fact about any one of the records it counts; returning those records' text would be a push. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
+      "definition": "A transient, advisory piece of text attached to the response of an action the caller already took, computed fresh each time. It never blocks the action or changes what gets stored, and it never hands back the content of a record the caller did not touch. What it points at is either context the caller already has (this task, this memory, this report), or a bare COUNT over records it names none of -- `loop_debt_nudge` tallies ungraded risks across the last finished tasks in the project on `tasks__set_active` and `tasks__create`. The aggregate is admissible because a tally is not a fact about any one of the records it counts; returning those records' text would be a push. It exists to keep an omission (nothing worth recording) from ever looking identical to an absence (nothing to record) -- collapsing that distinction into silence is the failure mode a nudge prevents.",
       "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge, loop_debt_nudge"
     },
     "IntrospectionNudge": {
@@ -144,7 +160,7 @@
     "LoopDebtNudge": {
       "bounded_context": "The Loop",
       "form": "transient",
-      "definition": "The Nudge that rides on the response to `tasks__set_active`. Reports a bare COUNT -- how many of the last N finished Tasks in the project carried predicted Risks that were never graded -- over records it names none of, recomputed from `taskfw/accuracy.py:loop_debt` on every call so it can never disagree with what `tasks__grooming_accuracy` reports about the same Tasks. The aggregate is admissible for exactly the reason the `Nudge` term gives: a tally is not a fact about any one of the records it counts, so returning it is not a push. Fires only when the count is non-zero; a clean loop is silent, not a zero report. Companion to `task_debt_nudge`, which rides on the same call but speaks about the one Task just made active rather than the loop across recent ones.",
+      "definition": "The Nudge that rides on the response to `tasks__set_active` and `tasks__create` -- create activates the new Task, so the reminder survives the finish-then-create flow. Reports a bare COUNT -- how many of the last N finished Tasks in the project carried predicted Risks that were never graded -- over records it names none of, recomputed from `taskfw/accuracy.py:loop_debt` on every call so it can never disagree with what `tasks__grooming_accuracy` reports about the same Tasks. The aggregate is admissible for exactly the reason the `Nudge` term gives: a tally is not a fact about any one of the records it counts, so returning it is not a push. Fires only when the count is non-zero; a clean loop is silent, not a zero report. Companion to TaskDebtNudge, which rides on the same call but speaks about the one Task just made active rather than the loop across recent ones.",
       "evidence": "taskfw/dispatcher/nudges.py:loop_debt_nudge, taskfw/accuracy.py:loop_debt"
     },
     "TaskContext": {
@@ -162,12 +178,18 @@
     "Event": {
       "bounded_context": "Task Tracking",
       "form": "record",
-      "definition": "One entry on a Task's append-only activity log: a timestamped piece of text carrying a kind label from a fixed, closed vocabulary (EventKind: note, decision, status, hooks_event). Unlike the domain's other closed vocabularies it needs no rule check: no caller chooses a kind -- each write path fixes its own -- so an off-vocabulary kind has no way in. A Decision is one kind of Event; a status change is another. Not a distinct class per kind -- the kind label is the only thing that tells two Events apart -- and the log is never addressed by an id of its own, only read back through the Task it belongs to.",
-      "evidence": "taskfw/store.py:TaskStore.add_event, taskfw/task.py:EventKind, taskfw/mcp_server.py:tasks__add_decision, _finish_task"
+      "definition": "One entry on a Task's append-only activity log: a timestamped piece of text carrying a kind label from a fixed, closed vocabulary (EventKind: note, decision, status -- plus hooks_event, a legacy value only the one-time 2026-08-01 claude-hooks import wrote; no current path writes it, and it stays in the set only so the migrated rows remain valid). Unlike the domain's other closed vocabularies it needs no rule check: no caller chooses a kind -- each write path fixes its own -- so an off-vocabulary kind has no way in. A Decision is one kind of Event; a status change is another. Not a distinct class per kind -- the kind label is the only thing that tells two Events apart -- and the log is never addressed by an id of its own, only read back through the Task it belongs to.",
+      "evidence": "taskfw/store.py:TaskStore.add_event, taskfw/task.py:EventKind, taskfw/mcp_server.py:tasks__add_decision, _finish_task",
+      "values": [
+        "note",
+        "decision",
+        "status",
+        "hooks_event"
+      ]
     },
     "Decision": {
       "bounded_context": "Task Tracking",
-      "form": "attribute",
+      "form": "record",
       "definition": "One kind of Event recorded against a Task: the design-reasoning entry, set down at the moment a real choice was made. What makes an Event a Decision is only its kind label -- the value 'decision' from the closed EventKind set -- on an otherwise uniform log entry; there is no separate decisions store to hold it.",
       "evidence": "taskfw/store.py:TaskStore.add_event"
     },
@@ -183,7 +205,12 @@
       "definition": "The verdict Introspection passes on a single predicted Risk, graded against what the Implementation pass actually did: did predicting this help -- did it come true with its mitigation ready, or force the change that avoided it -- or was the pass spent on noise. A label carried on the Risk, the way MemoryKind is a label on a MemoryRecord, absent until Introspection assigns it. Its vocabulary (GROOMING_GRADES: materialized, avoided, wrong) is closed for COUNTING but not enforced on write -- Introspection may record a grade outside the set, and GroomingAccuracy buckets that as `unrecognised` and still reports it rather than dropping it. This is a deliberate difference from TaskStatus or MemoryKind, where an off-vocabulary value is refused: a grade is an observation worth keeping, not a state that corrupts a machine. A Surprise that no Risk predicted is deliberately not a GroomingGrade (see the `Surprise` term): with no prediction beneath it there is nothing for a verdict to be about. One GroomingGrade is Introspection closing the Methodology's feedback edge for a single prediction; GroomingAccuracy is what those verdicts amount to across many finished Tasks.",
       "evidence": "taskfw/risk.py:GROOMING_GRADES, taskfw/accuracy.py:grooming_accuracy",
       "lifecycle": "Assigned by a single Introspection pass, after Implementation, and carried by its Risk from then on. Re-grooming the same Task keeps the verdict rather than discarding it, so a judgement Introspection has already made is never lost.",
-      "lifecycle_evidence": "docs/methodology/05-introspection.md, docs/methodology/04-implementation.md"
+      "lifecycle_evidence": "docs/methodology/05-introspection.md, docs/methodology/04-implementation.md",
+      "values": [
+        "materialized",
+        "avoided",
+        "wrong"
+      ]
     },
     "GroomingGradePredictiveValue": {
       "bounded_context": "The Loop",
@@ -227,6 +254,42 @@
       "form": "part",
       "definition": "Something known to be unknown, recorded in the Task's `grooming.open_questions` list as `{question, blocking}`. `blocking: true` marks a question work cannot start without answering; `blocking: false` marks one that can wait. Distinct from a HiddenAssumption (a belief, held without knowing it needs checking) and from a Risk (a falsifiable prediction about the work ahead): an OpenQuestion is a gap the groomer already knows is there. `GROOMING_TRIM_ORDER` (taskfw/context.py) keeps `open_questions` second-to-last in its shed-first order, ahead of everything but `clarifications` -- an unresolved blocking question is exactly what a caller starting work needs to see, so it survives a size-budget trim almost as long as grooming's highest-value content.",
       "evidence": "taskfw/context.py:GROOMING_TRIM_ORDER, .claude/skills/task-grooming/skill.md:open_questions, blocking, docs/methodology/03-grooming.md:open_questions, blocking"
+    },
+    "FinishNudge": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "The Nudge that rides on any response that moved a Task to done -- tasks__finish, the last tasks__check_item tick, or tasks__update(status='done') -- when the Task has no Introspection report yet. It is the structural guard against the drift CLAUDE.md names last: introspection skipped because the work went well. Silent once any Introspection exists.",
+      "evidence": "taskfw/dispatcher/nudges.py:finish_nudge, taskfw/mcp_server.py:_finish_hook"
+    },
+    "FinishReminderNudge": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "The Nudge that rides on tasks__update, tasks__check_item and tasks__add_decision when every ResolutionItem is ticked but the TaskStatus is still open -- a complete checklist is not a finished Task, and nothing else would surface the gap. Silent once the Task leaves open.",
+      "evidence": "taskfw/dispatcher/nudges.py:finish_reminder_nudge, taskfw/dispatcher/phase.py:is_implemented"
+    },
+    "UngroomedProgressNudge": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "The Nudge that rides on tasks__update, tasks__check_item and tasks__add_decision when ResolutionItems are being ticked on a Task whose Grooming is still empty -- implementation underway on a Task that never had its uncertainty removed. Uses the same is_groomed predicate as Phase, so the two cannot disagree about what counts as groomed.",
+      "evidence": "taskfw/dispatcher/nudges.py:ungroomed_progress_nudge, taskfw/dispatcher/phase.py:is_groomed"
+    },
+    "StaleMemoryNudge": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "The Nudge that rides on task_memory__link when the linked MemoryRecord's MemoryStanding is disputed or contradicted -- pointing back at the record the caller just touched, suggesting supersede or review. Never fires for superseded: that decision is already made.",
+      "evidence": "taskfw/dispatcher/nudges.py:stale_memory_nudge"
+    },
+    "TaskDebtNudge": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "The Nudge that rides beside LoopDebtNudge on tasks__set_active and tasks__create, but speaks about the one Task just made active: how many of its own Risks from a prior Grooming pass were never graded. Uses the same _task_grading classification as GroomingAccuracy. Always silent for a freshly created Task, which has no Risks yet.",
+      "evidence": "taskfw/dispatcher/nudges.py:task_debt_nudge, taskfw/mcp_server.py:_task_grading"
+    },
+    "Phase": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "Where a Task stands in the loop: three booleans -- groomed (Grooming non-empty), implemented (every ResolutionItem ticked, independent of TaskStatus), introspected (at least one Introspection report). Computed on read from the Task's own fields and never stored, so it cannot disagree with the checklist or the reports it reads; the same three predicates back the Nudges that speak about those states. Exposed by tasks__phase.",
+      "evidence": "taskfw/dispatcher/phase.py:task_phase, is_groomed, is_implemented, is_introspected, taskfw/mcp_server.py:tasks__phase"
     }
   },
   "relations": [
@@ -572,6 +635,84 @@
       "predicate": "references",
       "object": "Scope",
       "note": "GroomingAccuracy is read either globally or narrowed to one Scope, and the narrowing is lossy in a way only Scope explains: the filter is an exact match, so it excludes every record whose Scope is the empty 'project unknown' value -- most of the corpus. The result therefore carries both the Scope it counted and, when narrowed, the remainder it did not, which is Scope's own 'a fallback must never compare equal to a derived answer' rule applied to a count rather than to a value. This relation was missing while every neighbouring term had one (Scope part-of Task, Scope describes Commit, TaskContext references Scope, and LoopDebtNudge naming the project in its own definition), and the code matched the gap: the aggregate stated its exclusion only in a docstring until task:de2b48b1."
+    },
+    {
+      "subject": "FinishNudge",
+      "predicate": "is-a",
+      "object": "Nudge",
+      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+    },
+    {
+      "subject": "FinishReminderNudge",
+      "predicate": "is-a",
+      "object": "Nudge",
+      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+    },
+    {
+      "subject": "UngroomedProgressNudge",
+      "predicate": "is-a",
+      "object": "Nudge",
+      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+    },
+    {
+      "subject": "StaleMemoryNudge",
+      "predicate": "is-a",
+      "object": "Nudge",
+      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+    },
+    {
+      "subject": "TaskDebtNudge",
+      "predicate": "is-a",
+      "object": "Nudge",
+      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+    },
+    {
+      "subject": "FinishNudge",
+      "predicate": "references",
+      "object": "Introspection",
+      "note": "Fires exactly when a Task reaches done with no Introspection report."
+    },
+    {
+      "subject": "StaleMemoryNudge",
+      "predicate": "references",
+      "object": "MemoryStanding",
+      "note": "Fires on the disputed and contradicted standings only."
+    },
+    {
+      "subject": "TaskDebtNudge",
+      "predicate": "references",
+      "object": "GroomingGrade",
+      "note": "Counts the active Task's own ungraded Risks."
+    },
+    {
+      "subject": "Phase",
+      "predicate": "describes",
+      "object": "Task",
+      "note": "Derived on read from the Task's Grooming, ResolutionItems and Introspection; never stored."
+    },
+    {
+      "subject": "Phase",
+      "predicate": "references",
+      "object": "ResolutionItem",
+      "note": "implemented = every item ticked (and at least one exists)."
+    },
+    {
+      "subject": "FinishReminderNudge",
+      "predicate": "references",
+      "object": "Phase",
+      "note": "Fires when Phase says implemented but TaskStatus is still open."
+    },
+    {
+      "subject": "UngroomedProgressNudge",
+      "predicate": "references",
+      "object": "Phase",
+      "note": "Fires when items are ticked but Phase says not groomed."
+    },
+    {
+      "subject": "ResolutionItem",
+      "predicate": "relates",
+      "object": "TaskStatus",
+      "note": "One-way: ticking the last item moves an open Task to done (the check_item auto-finish); unticking an item never reopens it. Progress and status are otherwise independent."
     }
   ]
 }

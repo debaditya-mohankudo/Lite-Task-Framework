@@ -17,8 +17,11 @@ prose file.
 """
 from __future__ import annotations
 
+import importlib
+import inspect
 import json
 from pathlib import Path
+from typing import get_args
 
 import pytest
 
@@ -119,3 +122,43 @@ class TestRelations:
         """A relation with no note is a type triple, not domain knowledge."""
         for rel in ontology["relations"]:
             assert rel.get("note"), f"{rel['subject']} {rel['predicate']} {rel['object']} has no note"
+
+
+class TestClosedVocabularies:
+    """A term that names a closed vocabulary lists its values, checked against the code.
+
+    Prose like "four statuses: open, blocked, ..." is exactly what drifts
+    when a value is added or retired (review 2026-09-26 N7) -- so the values
+    live in a `values` field and are compared with the constant itself.
+    """
+
+    SOURCES = {
+        "TaskStatus": ("taskfw.task", "TASK_STATUSES"),
+        "Event": ("taskfw.task", "EventKind"),
+        "MemoryKind": ("taskfw.memory", "MEMORY_KINDS"),
+        "MemoryRelationship": ("taskfw.memory", "MEMORY_RELATIONSHIPS"),
+        "GroomingGrade": ("taskfw.risk", "GROOMING_GRADES"),
+    }
+
+    @pytest.mark.parametrize("term", sorted(SOURCES))
+    def test_values_match_the_code(self, ontology, term):
+        module, name = self.SOURCES[term]
+        const = getattr(importlib.import_module(module), name)
+        actual = get_args(const) or tuple(const)
+        assert tuple(ontology["terms"][term].get("values", ())) == actual, (
+            f"{term}.values disagrees with {module}.{name} = {actual}"
+        )
+
+
+class TestCoverage:
+    """What the ontology leaves out, not just what it cites (review 2026-09-26 T2)."""
+
+    def test_every_nudge_is_cited_by_a_term(self, ontology):
+        from taskfw.dispatcher import nudges
+
+        defined = {n for n, f in inspect.getmembers(nudges, inspect.isfunction)
+                   if n.endswith("_nudge") and f.__module__ == nudges.__name__}
+        cited = {symbol for term in ontology["terms"].values()
+                 for _path, symbol in parse_evidence(term["evidence"])}
+        missing = defined - cited
+        assert not missing, f"nudges with no ontology term citing them: {sorted(missing)}"

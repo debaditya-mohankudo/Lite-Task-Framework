@@ -113,12 +113,6 @@ class TestCheckSave:
     def test_accepts_a_plain_new_task(self):
         assert check_save(Task(title="t"))
 
-    def test_rejects_self_parenting(self):
-        t = Task(title="t")
-        t.parent = t.id
-        d = check_save(t)
-        assert not d and d.rule == "parent"
-
     def test_enforces_the_transition_when_previous_is_given(self):
         prev = Task(title="t")
         prev.status = "done"

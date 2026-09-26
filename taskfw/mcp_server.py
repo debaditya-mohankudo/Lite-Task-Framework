@@ -269,7 +269,9 @@ def _loop_debt_hook(result: dict[str, Any]) -> None:
     # activation, so an unscoped count meant a debt figure driven by
     # another repo's tasks could interrupt work here with no way to tell —
     # the accepted risk recorded on concept:grooming-accuracy-aggregate.
-    debt = loop_debt(store(), limit=_LOOP_DEBT_LIMIT, scope=derive_scope())
+    # The task's recorded scope, not a re-derivation from the server's cwd;
+    # derive_scope() only for a task created before scope was recorded.
+    debt = loop_debt(store(), limit=_LOOP_DEBT_LIMIT, scope=task.scope or derive_scope())
     dispatcher.apply_nudge(
         result, dispatcher.loop_debt_nudge,
         debt["skipped_introspection"], debt["tasks_examined"],

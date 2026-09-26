@@ -87,9 +87,9 @@ memory is stale," "this task has no linked lessons"). Every nudge fires
 solely inside the response to a call the agent already made, and carries no
 content beyond the record that call just touched; the one thing it may add
 is a bare count over records it names none of (loop_debt_nudge tallies
-ungraded risks across recent finished tasks on tasks__set_active). The
-timing is the caller's choice in every case. The active task is announced
-once at `tasks__set_active` and not re-surfaced.
+ungraded risks across recent finished tasks on tasks__set_active and
+tasks__create). The timing is the caller's choice in every case. The
+active task is announced once at `tasks__set_active` and not re-surfaced.
 
 ## Structure only where it earns its keep
 

@@ -49,12 +49,11 @@ class TestRuleLogging:
             check_transition("open", "done")
         assert "ALLOW" in caplog.text
 
-    def test_self_parent_denial_names_the_task(self, caplog):
-        t = Task(title="t")
-        t.parent = t.id
+    def test_parent_denial_names_the_parent(self, caplog):
+        parent = Task(title="p")
         with caplog.at_level(logging.INFO, logger="taskfw"):
-            check_save(t)
-        assert t.id in caplog.text
+            check_save(Task(title="t", epic=True), parent=parent)
+        assert parent.id in caplog.text
 
 
 class TestStoreLogging:
