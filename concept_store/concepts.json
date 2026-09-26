@@ -528,12 +528,12 @@
         "Rules are pure — the tests need no fixtures at all, which is the observable signal that portability holds",
         "Same-status is checked BEFORE the terminal rule, so re-saving a done or abandoned task is never an error; this is what makes tasks__finish idempotent",
         "done and abandoned are terminal; any non-terminal state may be abandoned",
-        "The entire hierarchy rule is: an epic has no parent, and a task cannot be its own parent",
+        "The entire hierarchy rule is: an epic has no parent. A task being its own parent is unrepresentable, not checked — tasks__create mints a fresh id and tasks__update takes no parent; the never-failing check_save guard was deleted (task:fe687f17). If tasks__update ever gains a parent argument, add a cycle check there, not just a self check",
         "Denials log at INFO with rule, reason, and ids; allows log at DEBUG",
         "check_link_rel is the FIRST policy check ever added to tasks__link — before task:1c9d37d7 it had zero lifecycle validation, calling store().link() directly after only confirming both task ids exist",
         "tasks__finish/tasks__check_item's auto-finish share one _finish_task() helper (mcp_server.py) (task:f302eb2b); it does not touch the active pointer (task:1105f979). _finish_task and tasks__update's status->done branch both build their result through _finished(), which adds `finished: True` only when that call made the transition — the marker _finish_hook keys off (task:c0c5ff5f)."
       ],
-      "last_validated": "2026-08-29T10:52:23.787688+00:00",
+      "last_validated": "2026-09-26T12:00:49.520784+00:00",
       "module": "taskfw/lifecycle.py",
       "name": "lifecycle-single-rule-implementation",
       "related": [
@@ -1489,6 +1489,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-09-21T17:50:01.295426+00:00"
+    "updated_at": "2026-09-26T12:00:49.520841+00:00"
   }
 }
