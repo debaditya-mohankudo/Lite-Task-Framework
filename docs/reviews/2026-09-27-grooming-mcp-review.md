@@ -66,3 +66,28 @@ as groomed with no findings.
    ontology/concept entries (every nudge is a term since the 2026-09-26 review).
 3. G2: needs a decision on legacy keys first (see task:0b9de163 open questions).
 4. G5, then decide on G6 using the data.
+
+## 5. Outcome (same day)
+
+- **G1 fixed (f32fc4e).** A new nudge fires on `tasks__set_active` when the task is ungroomed.
+  A test checks that `tasks__create` stays silent. The nudge has an ontology term and a
+  concept_store entry.
+- **G2 fixed (a4de189).** Grooming is a typed shape in `taskfw/grooming.py`, with `other` as the
+  escape hatch. An off-schema key is refused on write. On read, legacy keys (`last_run_at`,
+  `summary`, `prior_art_note`) are folded into `other`, not dropped. A blob with no findings no
+  longer flips `is_groomed`.
+- **G3 and G4 fixed (91a4c56).** Skill text only. The grooming skill now calls
+  `tasks__grooming_accuracy` before it predicts. It uses `task_memory__recall` as the fallback when
+  lessons are trimmed from `tasks__context`, and records a confirmed or disproved lesson with
+  `task_memory__link`.
+- **G5 fixed (91a4c56).** `wrong` grades take an optional `wrong_because`, and
+  `tasks__grooming_accuracy` groups by it. The introspection skill and `05-introspection.md` ask
+  for it.
+- **G6 not done, on purpose.** §4 says to measure after G3–G5 land. They landed today, so there is
+  nothing to measure yet. Revisit it once several groomed tasks have been introspected. Check
+  whether open questions that one grep could settle still show up in `open_questions` rather than
+  `clarifications`.
+- **Found while fixing, not in this review (64a6433, task:adc1353b).** A grooming write replaced
+  the whole payload, so grading `risks` alone erased every other finding. Writes now merge per key.
+  An absent key keeps its value, and `[]` clears it.
+- **Tests:** 690 passed, run after 71a16a2 re-stamped the models.
