@@ -291,20 +291,18 @@ class TestGroomingTrim:
         # closer to the ceiling instead of far under it.
         assert _size(c) > CHAR_BUDGET * 0.7, "budget still going largely unspent"
 
-    def test_an_unlisted_grooming_field_falls_back_to_whole_drop(self, store):
-        """A grooming key outside GROOMING_TRIM_ORDER (future schema, direct API
-        write, older data) is never touched by _trim_grooming's field-by-field
-        loop, so it alone can keep bundle["grooming"] non-empty even after every
-        known field has been shrunk. _enforce_budget must still fall back to
-        dropping the section whole rather than returning an over-budget bundle."""
+    def test_an_off_schema_grooming_key_is_folded_into_other_and_trimmed_first(self, store):
+        """A key outside the schema (a pre-type row) is folded into `other` by
+        taskfw.grooming.normalise, and `other` sheds first — task:0b9de163."""
         epic = store.save(Task(title="epic", epic=True))
         t = store.save(Task(
             title="unlisted field", parent=epic.id,
-            grooming={"an_unrecognised_field": "x" * (CHAR_BUDGET * 3)},
+            grooming={"an_unrecognised_field": "x" * (CHAR_BUDGET * 3),
+                      "clarifications": ["kept"]},
         ))
         c = _build_context(store, t.id)
-        assert c["grooming"] == {}
-        assert "grooming" in c["truncated"]
+        assert c["grooming"] == {"clarifications": ["kept"]}
+        assert c["grooming_truncated"] == ["other"]
         assert _size(c) <= CHAR_BUDGET
 
     def test_grooming_that_cannot_shrink_enough_falls_back_to_whole_drop(self, store):

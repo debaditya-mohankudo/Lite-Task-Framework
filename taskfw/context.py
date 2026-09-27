@@ -102,9 +102,11 @@ TRIM_ORDER = ("related", "lessons", "commits", "graph", "grooming", "decisions")
 #: ONE EXCEPTION" above. clarifications last: they are verified facts, the
 #: highest-value content grooming produces. open_questions next-to-last: an
 #: unresolved blocking question is exactly what a caller starting work needs
-#: to see. The rest are supplementary context, safe to shed first.
+#: to see. The rest are supplementary context, safe to shed first; `other`
+#: first of all, as the free-text escape hatch with no recorded priority.
+#: Covers exactly taskfw.grooming.GROOMING_FIELDS (tests/test_context.py).
 GROOMING_TRIM_ORDER = (
-    "suggested_improvements", "prior_art", "hidden_assumptions",
+    "other", "suggested_improvements", "prior_art", "hidden_assumptions",
     "risks", "open_questions", "clarifications",
 )
 
@@ -526,11 +528,9 @@ def _trim_grooming(bundle: dict) -> list[str]:
     place would corrupt the task's stored grooming for a caller elsewhere
     holding the same Task instance.
 
-    Iterates every field actually present in the grooming dict, not just the
-    ones named in GROOMING_TRIM_ORDER — a field outside that list (future
-    schema, direct API write, older data) is dropped first, ahead of any
-    named field, since it has no recorded priority to honour. This guarantees
-    the loop empties the dict by the time it runs out of fields, so a bundle
+    GROOMING_TRIM_ORDER names every schema field, and a Task's grooming holds
+    no other key (taskfw.grooming.normalise runs on every Task), so this
+    loop empties the dict by the time it runs out of fields. A bundle
     that is still over budget after every field is gone reads as "no
     grooming" through the same `if not bundle["grooming"]` check the caller
     already uses for every other outcome — no separate whole-section fallback
@@ -539,10 +539,8 @@ def _trim_grooming(bundle: dict) -> list[str]:
     grooming = dict(bundle.get("grooming") or {})
     bundle["grooming"] = grooming  # same object grooming mutates below, so
                                     # _size(bundle) reflects each drop as it happens
-    known = [f for f in GROOMING_TRIM_ORDER if f in grooming]
-    unknown = [f for f in grooming if f not in GROOMING_TRIM_ORDER]
     dropped: list[str] = []
-    for field in unknown + known:
+    for field in GROOMING_TRIM_ORDER:
         if _size(bundle) <= CHAR_BUDGET:
             break
         if grooming.get(field):

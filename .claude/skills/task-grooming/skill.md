@@ -99,8 +99,11 @@ tasks__update(task_id, grooming={
     "risks":                  [{"text": "...", "graded": None}],  # "id" is assigned for you
     "prior_art":              ["..."],
     "suggested_improvements": ["..."],
+    "other":                  ["..."],   # anything the fields above don't anticipate
 })
 ```
+
+The shape is typed (`taskfw/grooming.py`): an unknown key, on grooming or on a risk or open question, is refused. A thought that fits none of the fields goes in `other` as free text rather than under a new key.
 
 `hidden_assumptions` is something believed and left unverified. `open_questions` is something known to be unknown, with `blocking: true` when work cannot start without an answer. Only add an entry where the distinction changes what happens next — a task with no genuine open question doesn't need an empty list.
 

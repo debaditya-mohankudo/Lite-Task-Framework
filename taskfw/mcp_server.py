@@ -26,6 +26,7 @@ from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.context import TaskContext
 from taskfw.db.connect import connect
 from taskfw.gitutil import head_sha
+from taskfw.grooming import Grooming
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
 from taskfw.risk import coerce, normalise_text
@@ -637,7 +638,7 @@ def tasks__update(
     resolution: list[str] | None = None,
     files: list[str] | None = None,
     tags: list[str] | None = None,
-    grooming: dict | None = None,
+    grooming: Grooming | None = None,
     scope: str = "",
 ) -> dict[str, Any]:
     """Update a task. Only the fields you pass are changed.
@@ -654,6 +655,10 @@ def tasks__update(
     retroactive path to a scope (task:2110cf4c), and Task.scope's comment says
     why that is a different kind of fact from a derived one — so a change
     leaves a note event naming old and new, the only provenance it will have.
+
+    `grooming` is typed (taskfw.grooming.Grooming): an unknown key, or an
+    unknown key on a risk or open question, is refused before this runs.
+    Anything the schema does not anticipate goes in `other` as free text.
     """
     current = store().get(task_id)
     if current is None:

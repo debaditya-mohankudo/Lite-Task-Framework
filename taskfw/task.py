@@ -17,6 +17,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Literal
 
+from taskfw.grooming import Grooming, normalise as normalise_grooming
+
 TASK_STATUSES = ("open", "blocked", "done", "abandoned")
 
 #: Closed vocabulary for task_edges.rel, enforced by lifecycle.check_link_rel.
@@ -74,7 +76,9 @@ class Task:
     tags: list[str] = field(default_factory=list)
     notes: str = ""
     #: Findings from a grooming pass. Replaced wholesale each pass by design.
-    grooming: dict = field(default_factory=dict)
+    #: __post_init__ folds any off-schema key a pre-type row carried into
+    #: `other`, so the annotation holds for rows older than the type too.
+    grooming: Grooming = field(default_factory=dict)  # type: ignore[assignment]
     #: Introspection reports, appended — history is kept here, unlike grooming.
     introspection: list[dict] = field(default_factory=list)
     #: Which project this task belongs to — see taskfw.scope for the one
@@ -98,6 +102,9 @@ class Task:
     scope: str = ""
     created_at: str = field(default_factory=utcnow)
     updated_at: str = field(default_factory=utcnow)
+
+    def __post_init__(self) -> None:
+        self.grooming = normalise_grooming(self.grooming)
 
     # -- serialisation ------------------------------------------------------
 
