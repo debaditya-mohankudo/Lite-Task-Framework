@@ -47,6 +47,14 @@ Nothing is injected, so this call is not optional and there is no activation ste
 
 The bundle returns the task, decisions, prior grooming, parent/children/edges, commits, and full-text neighbours. If `truncated` is present, sections were dropped for space — pull them individually rather than assuming they were empty.
 
+Once per pass — not once per task — also pull how grooming has been predicting in this repo:
+
+```python
+tasks__grooming_accuracy(scope="<scope from the bundle>")
+```
+
+It is the same aggregate for every task in a batch, so call it once before the loop. Read it for the pattern, not the score: if `wrong` risks cluster (e.g. "a test will break"), write fewer of that kind this pass and settle them in `clarifications` instead.
+
 **Batching is not a problem here.** There is no per-task activation cost and nothing to wait a turn for, so grooming twenty tasks is twenty `tasks__context` calls in a loop. No batch-size escape hatch is needed, and none exists — if grooming a large epic ever feels like it needs one, something else has gone wrong.
 
 ## Step 2 — Treat prior grooming as a draft
@@ -75,6 +83,18 @@ concept__uncovered(repo="<abs repo path>", modules=["<file>", "..."])
 ```
 
 `repo` is always required for concept tools; skip silently if the repo has no store. Anything a concept surfaces (an invariant, a contract, a gap no concept covers) goes in `prior_art` with the slug.
+
+The bundle's `lessons` section is approximate and the first thing trimmed. If `lessons` is listed in `truncated`, or came back empty or thin for a task that plainly touches familiar ground, search loop memory directly:
+
+```python
+task_memory__recall(query="<module, symptom, or idea>")
+```
+
+Every lesson carries a `standing`; treat `disputed` or `contradicted` as a claim to check, not a fact. When this task's investigation confirms or contradicts a lesson, record it — that is the lesson's grade:
+
+```python
+task_memory__link(slug="<lesson slug>", task_id=task_id, relation="confirmed_by")  # or "contradicted_by"
+```
 
 For every claim the task's plan rests on — "X is the authoritative file", "Y calls Z", "this is the production path", "this duplication is accidental" — **spend one concrete verification step before accepting it.** Read the file. Grep for callers. Check `git log`. Inspect the running system. This applies as much to a premise you wrote yourself an hour ago as to one you inherited — self-authored premises are exactly as unexamined and feel more trustworthy, which makes them worse.
 

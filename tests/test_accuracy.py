@@ -376,3 +376,16 @@ class TestLegacyReportShape:
                  introspection=[{"missed_surprises": ["a"],
                                  "surprises": [{"lesson": "a"}]}])
         assert grooming_accuracy(store)["missed_surprises_groomed"] == 1
+
+
+class TestWrongBecause:
+    def test_wrong_grades_are_grouped_by_reason_and_sum_to_the_wrong_tally(self, store):
+        finished(store, "t", [
+            {"text": "a", "graded": "wrong", "wrong_because": "settleable-by-grep"},
+            {"text": "b", "graded": "wrong", "wrong_because": "settleable-by-grep"},
+            {"text": "c", "graded": "wrong"},
+            {"text": "d", "graded": "avoided", "wrong_because": "other"},
+        ])
+        r = grooming_accuracy(store)["risks"]
+        assert r["wrong_because"] == {"settleable-by-grep": 2, "unstated": 1}
+        assert sum(r["wrong_because"].values()) == r["wrong"]

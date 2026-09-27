@@ -64,7 +64,7 @@ For each item in `grooming.risks`, grade what actually happened:
 
 - **materialized** — predicted, and it happened. Did the mitigation hold?
 - **avoided** — predicted, and the prediction caused the change that dodged it.
-- **wrong** — predicted, but irrelevant. Noise in that pass.
+- **wrong** — predicted, but irrelevant. Noise in that pass. Also set `wrong_because`: `settleable-by-grep` (one read would have settled it — it belonged in `clarifications`), `did-not-occur` (checkable, and it just didn't happen), `unfalsifiable` (could never have been graded otherwise), or `other`. Any other value is refused; `tasks__grooming_accuracy` groups `wrong` by it.
 - **missed** — a surprise no prediction anticipated. This has no risk to grade against; it goes in `missed_surprises` at Step 6.
 
 `hidden_assumptions` is **not** graded — those are things grooming identified in the present, not predictions about the future.
@@ -76,7 +76,8 @@ tasks__update(task_id, grooming={
     **existing_grooming,
     "risks": [
         {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "avoided"},
-        {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "wrong"},
+        {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "wrong",
+         "wrong_because": "settleable-by-grep"},
     ],
 })
 ```

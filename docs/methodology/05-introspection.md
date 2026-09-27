@@ -13,7 +13,10 @@ For every risk in `grooming.risks`, grade what actually happened:
 
 - **materialized** — predicted, and it happened. Did the mitigation hold?
 - **avoided** — predicted, and the prediction caused the change that dodged it.
-- **wrong** — predicted, but irrelevant. Noise in that pass.
+- **wrong** — predicted, but irrelevant. Noise in that pass. Say why in
+  `wrong_because`: `settleable-by-grep`, `did-not-occur`, `unfalsifiable`,
+  or `other`. The list is closed so the reasons can be counted across tasks;
+  `other` is where an unanticipated reason goes.
 - **missed** — a surprise no prediction anticipated. This has no risk in
   `grooming.risks` to grade against — it is not one of the four grades above,
   it goes in the introspection report's `missed_surprises` field instead.
@@ -33,7 +36,8 @@ tasks__update(task_id, grooming={
     **existing_grooming,
     "risks": [
         {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "avoided"},
-        {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "wrong"},
+        {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "wrong",
+         "wrong_because": "settleable-by-grep"},
     ],
 })
 ```
@@ -47,7 +51,9 @@ Cross-task recurrence in `tasks__grooming_accuracy` still groups by
 normalised `text`, though — there the `id` only disambiguates a reworded
 risk that ended up under two of them.
 
-Repeated `wrong` grades mean grooming is asking the wrong questions. Repeated
+Repeated `wrong` grades mean grooming is asking the wrong questions. `risks.wrong_because` in
+`tasks__grooming_accuracy` says which wrong questions: a pile of
+`settleable-by-grep` means grooming predicts what it should have checked. Repeated
 `missed` grades mean it is not asking enough of them. Both are signals to
 change grooming itself, not just to note the miss.
 

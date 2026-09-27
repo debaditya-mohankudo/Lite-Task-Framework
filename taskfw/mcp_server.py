@@ -523,7 +523,7 @@ def tasks__create(
 
 
 def _keep_grade(current: dict | None, incoming: dict) -> dict:
-    """`incoming`, carrying `current`'s grade when incoming omits one.
+    """`incoming`, carrying `current`'s grade (and its `wrong_because`) when incoming omits one.
 
     A non-empty incoming grade always wins — that is a deliberate re-grade.
     Only an absent or empty one is filled in, because a caller restating a
@@ -532,6 +532,11 @@ def _keep_grade(current: dict | None, incoming: dict) -> dict:
     if current and current.get("graded") and not incoming.get("graded"):
         incoming = dict(incoming)
         incoming["graded"] = current["graded"]
+    # `wrong_because` travels with the grade it explains: kept when omitted,
+    # but only while that grade is still `wrong`.
+    if (current and current.get("graded") == incoming.get("graded") == "wrong"
+            and current.get("wrong_because") and not incoming.get("wrong_because")):
+        incoming = {**incoming, "wrong_because": current["wrong_because"]}
     return incoming
 
 

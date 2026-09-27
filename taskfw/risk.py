@@ -29,11 +29,11 @@ without a cycle.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Literal, get_args
 
 #: The documented risk shape. A consumer may also be handed a bare string (a
 #: plausible thing to write by hand) or, defensively, something malformed.
-RISK_KEYS = ("id", "text", "graded")
+RISK_KEYS = ("id", "text", "graded", "wrong_because")
 
 #: Grades a PREDICTED risk's `graded` field can carry. Here beside RISK_KEYS
 #: because it is part of the risk shape, not an analytics concept — accuracy.py
@@ -43,6 +43,16 @@ RISK_KEYS = ("id", "text", "graded")
 #: a grade outside this set, and accuracy.py buckets that as `unrecognised` and
 #: still reports it rather than dropping it (see grooming-accuracy-aggregate).
 GROOMING_GRADES = ("materialized", "avoided", "wrong")
+
+#: Why a risk graded ``wrong`` was wrong, on its ``wrong_because`` field
+#: (task:0b9de163). Unlike GROOMING_GRADES this IS enforced on write — it is
+#: a Literal on ``grooming.GroomingRisk`` — because a reason exists only to be
+#: grouped, and an ungroupable one teaches nothing; ``other`` is the escape
+#: hatch. ``settleable-by-grep``: one read would have settled it, so it
+#: belonged in ``clarifications``. ``did-not-occur``: checkable, and it simply
+#: did not happen. ``unfalsifiable``: could never have been graded otherwise.
+WrongReason = Literal["settleable-by-grep", "did-not-occur", "unfalsifiable", "other"]
+WRONG_REASONS: tuple[str, ...] = get_args(WrongReason)
 
 
 def normalise_text(text: str) -> str:

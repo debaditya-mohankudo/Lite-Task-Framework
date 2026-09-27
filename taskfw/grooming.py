@@ -26,8 +26,8 @@ rejects a legitimate round-trip.
 ``other`` is the escape hatch, and it is deliberate: where the schema does not
 anticipate a thought, there has to be somewhere to put it.
 
-Stdlib + typing_extensions + pydantic config only, and no ``taskfw`` imports,
-so ``task.py`` can depend on it without a cycle.
+Stdlib + typing_extensions + pydantic config, plus ``taskfw.risk`` (itself
+stdlib only), so ``task.py`` can depend on it without a cycle.
 """
 from __future__ import annotations
 
@@ -37,14 +37,18 @@ from typing import Any
 from pydantic import ConfigDict
 from typing_extensions import NotRequired, TypedDict
 
+from taskfw.risk import WrongReason
+
 
 class GroomingRisk(TypedDict):
     """A falsifiable prediction. ``id`` is framework-assigned — see
-    ``mcp_server._merge_grooming_risks``; ``graded`` is set by introspection."""
+    ``mcp_server._merge_grooming_risks``; ``graded`` is set by introspection,
+    and ``wrong_because`` alongside it when the grade is ``wrong``."""
     __pydantic_config__ = ConfigDict(extra="forbid")  # type: ignore[misc]
     text: str
     id: NotRequired[str]
     graded: NotRequired[str | None]
+    wrong_because: NotRequired[WrongReason | None]
 
 
 class OpenQuestion(TypedDict):

@@ -417,7 +417,8 @@
         "grooming_accuracy(store, limit, scope=None) -> tallies, recurring risks, skipped introspections, self-report disagreements, signals, the scope it counted, and — when scoped and non-empty — unscoped_not_counted. Scoped to status='done' only. Everything except `signals` is a raw count or a list of task ids. Exposed as tasks__grooming_accuracy.",
         "GROOMING_GRADES is imported from taskfw.risk (moved there task:dd4ceb01, co-located with RISK_KEYS as part of the risk shape); accuracy.py uses it only for bucketing and tallying.",
         "Surprises are returned under THREE keys, each naming the population it ranges over: `missed_surprises_groomed` (groomed tasks only, so it stays comparable with the graded-risk tallies beside it), `missed_surprises_ungroomed`, and `ungroomed_tasks_with_surprises`. The RESULT key `missed_surprises_groomed` and the introspection REPORT field `missed_surprises` are different things and only the first was renamed (task:703c3f26); _missed() reads the report field as input, preferring canonical `missed_surprises` and falling back to the legacy `surprises` list, never summing them. tests/test_accuracy.py::TestLegacyReportShape pins the distinction.",
-        "_unscoped_remainder(store, limit, scope) -> {skipped_introspection, ungraded_risks} | None is the ONE home for the remainder rule, shared by loop_debt and grooming_accuracy (task:de2b48b1). Returns None when scope is falsy (an unscoped call excluded nothing) or when the remainder is empty, so a caller adds the key only when there is something to report and silence means 'nothing was left out', never 'not checked'. Taking scope as a parameter lets both call sites be one line: `if (remainder := _unscoped_remainder(store, limit, scope)): result[...] = remainder`."
+        "_unscoped_remainder(store, limit, scope) -> {skipped_introspection, ungraded_risks} | None is the ONE home for the remainder rule, shared by loop_debt and grooming_accuracy (task:de2b48b1). Returns None when scope is falsy (an unscoped call excluded nothing) or when the remainder is empty, so a caller adds the key only when there is something to report and silence means 'nothing was left out', never 'not checked'. Taking scope as a parameter lets both call sites be one line: `if (remainder := _unscoped_remainder(store, limit, scope)): result[...] = remainder`.",
+        "risks.wrong_because: {reason: n} over graded-`wrong` risks only, with `unstated` for a wrong grade that gave no reason, so the buckets always sum to risks.wrong (task:0b9de163). A wrong_because on a non-wrong risk is ignored."
       ],
       "created_at": "2026-08-01T00:00:00+00:00",
       "description": "Grooming accuracy aggregated across finished tasks — the loop's feedback edge read in aggregate. GROOMING_GRADES is imported from taskfw.risk, not defined here. Surprises are reported as three separately-named counts, split by whether the finished task was ever groomed. Both reads that narrow by scope (grooming_accuracy and loop_debt) report the remainder they excluded, through one shared helper.",
@@ -439,7 +440,8 @@
         "taskfw/accuracy.py:_unscoped_remainder",
         "tests/test_scope.py:TestLoopDebtIsHonestAboutWhatItCounted",
         "tests/test_scope.py:TestGroomingAccuracyIsHonestAboutWhatItCounted",
-        "models/derived_values.sysml:GroomingAccuracyTally"
+        "models/derived_values.sysml:GroomingAccuracyTally",
+        "tests/test_accuracy.py:TestWrongBecause"
       ],
       "invariants": [
         "_task_grading(task) -> (risks, ungraded_count, any_graded) is the single per-task classification both grooming_accuracy and loop_debt call — factored out (task:07f9270c) so the two reads can never disagree about what counts as skipped or ungraded.",
@@ -456,7 +458,7 @@
         "Both remainders come from _unscoped_remainder, which counts through _debt_counts — the same code that counts the scoped window. grooming_accuracy and loop_debt can differ on WHICH tasks they counted (different limits by design) but never on what neither of them saw. tests/test_scope.py::TestGroomingAccuracyIsHonestAboutWhatItCounted::test_it_cannot_disagree_with_loop_debt_about_the_remainder pins this.",
         "An unscoped (global) call claims no remainder at all — it excluded nothing, so there is nothing to account for."
       ],
-      "last_validated": "2026-09-07T16:15:18.846416+00:00",
+      "last_validated": "2026-09-27T16:17:40.747148+00:00",
       "module": "taskfw/accuracy.py",
       "name": "grooming-accuracy-aggregate",
       "related": [
@@ -493,7 +495,8 @@
         "GROOMING_FIELDS is derived from Grooming.__annotations__ — the key list and the type cannot disagree.",
         "normalise is the identity on any dict of schema keys; off-schema keys are appended to `other` in insertion order, non-str values json.dumps'd with sort_keys.",
         "`other: list[str]` is the deliberate escape hatch for thoughts the schema does not anticipate.",
-        "No taskfw imports, so task.py can depend on it without a cycle."
+        "No taskfw imports, so task.py can depend on it without a cycle.",
+        "GroomingRisk.wrong_because: WrongReason | None, the Literal defined in taskfw/risk.py beside GROOMING_GRADES (task:0b9de163). Closed on write, unlike `graded`: an off-list reason is refused at the MCP boundary; `other` is the escape hatch."
       ],
       "created_at": "2026-09-27T16:02:02.710645+00:00",
       "description": "The typed grooming shape (Grooming, GroomingRisk, OpenQuestion TypedDicts with extra='forbid') and normalise(), the one fold that brings pre-type stored grooming into it. Write side: tasks__update takes `grooming: Grooming`, so the MCP layer refuses an off-schema key before taskfw code runs. Read side: Task.__post_init__ runs normalise on every Task, folding any off-schema key into `other` as '<key>: <value>' rather than dropping it (task:0b9de163, review 2026-09-27 G2).",
@@ -501,14 +504,15 @@
         "taskfw/grooming.py:Grooming, normalise, GROOMING_FIELDS",
         "taskfw/task.py:__post_init__",
         "taskfw/mcp_server.py:tasks__update",
-        "taskfw/context.py:GROOMING_TRIM_ORDER"
+        "taskfw/context.py:GROOMING_TRIM_ORDER",
+        "tests/test_grooming.py:TestWrongBecause"
       ],
       "invariants": [
         "No Task in memory holds an off-schema grooming key, so anything read back (tasks__context bundle) round-trips through the strict write side — this is what keeps introspection's whole-blob grade write-back from being rejected.",
         "Legacy keys are folded, never dropped: dropping on next write would lose data quietly.",
         "context._trim_grooming has no unknown-key branch because the state it handled is unrepresentable; GROOMING_TRIM_ORDER must cover exactly GROOMING_FIELDS (tests/test_grooming.py)."
       ],
-      "last_validated": "2026-09-27T16:02:02.710684+00:00",
+      "last_validated": "2026-09-27T16:17:40.747148+00:00",
       "module": "taskfw/grooming.py",
       "name": "grooming-shape",
       "related": [
@@ -1027,7 +1031,8 @@
         "normalise_text(text) -> str: lowercases, collapses internal and surrounding whitespace to single spaces, strips one trailing period; None/'' -> ''.",
         "coerce(raw) -> dict: a dict is returned as a shallow copy with NO key added or removed; a str becomes {'text': raw, 'graded': None}; anything else becomes {'text': str(raw), 'graded': None}.",
         "Stdlib-only module -- imports nothing from taskfw, so accuracy.py and mcp_server.py can both depend on it without a cycle.",
-        "GROOMING_GRADES = ('materialized', 'avoided', 'wrong') lives here beside RISK_KEYS (moved from accuracy.py, task:dd4ceb01); accuracy.py imports it. It is closed for COUNTING but NOT enforced on write — introspection may record a grade outside the set and accuracy.py buckets it as 'unrecognised' and still reports it, per grooming-accuracy-aggregate's never-drop-a-grade invariant."
+        "GROOMING_GRADES = ('materialized', 'avoided', 'wrong') lives here beside RISK_KEYS (moved from accuracy.py, task:dd4ceb01); accuracy.py imports it. It is closed for COUNTING but NOT enforced on write — introspection may record a grade outside the set and accuracy.py buckets it as 'unrecognised' and still reports it, per grooming-accuracy-aggregate's never-drop-a-grade invariant.",
+        "RISK_KEYS includes wrong_because, and WrongReason / WRONG_REASONS (settleable-by-grep, did-not-occur, unfalsifiable, other) live here beside GROOMING_GRADES (task:0b9de163). Unlike the grades, the reason IS enforced on write, as a Literal on grooming.GroomingRisk."
       ],
       "created_at": "2026-08-29T05:52:15.692497+00:00",
       "description": "The shared risk-shape primitives (coerce, normalise_text) plus GROOMING_GRADES, the closed grade vocabulary that is part of the risk shape. Stdlib-only so every consumer can depend on it without a cycle.",
@@ -1038,14 +1043,15 @@
         "taskfw/accuracy.py:_risks",
         "taskfw/accuracy.py:_RecurrenceGrouper",
         "tests/test_risk.py",
-        "taskfw/risk.py:GROOMING_GRADES"
+        "taskfw/risk.py:GROOMING_GRADES",
+        "taskfw/risk.py:WrongReason, WRONG_REASONS"
       ],
       "invariants": [
         "coerce never manufactures an 'id' key -- the ABSENCE of 'id' on a risk is how mcp_server._merge_grooming_risks tells a brand-new prediction from a carried-forward one, so adding one would silently change that branch.",
         "coerce never returns None or drops an entry: a malformed risk still carries text, because an ungraded risk that vanished would be an omission indistinguishable from an absence -- the failure taskfw.accuracy exists to prevent.",
         "Risk identity (id-if-present-else-normalised-text, id-less risks in their own keyspace) and the merge/group algorithms are NOT here -- _merge_grooming_risks assigns ids and text-matches, _RecurrenceGrouper keeps id-less risks apart; those are different operations that only share these primitives."
       ],
-      "last_validated": "2026-08-29T10:52:30.235014+00:00",
+      "last_validated": "2026-09-27T16:17:40.747148+00:00",
       "module": "taskfw/risk.py",
       "name": "risk-shape-primitives",
       "related": [

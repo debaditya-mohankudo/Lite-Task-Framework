@@ -181,6 +181,12 @@ class TestDerivedValuesMatchCode:
         for grade in GROOMING_GRADES:
             assert grade in text, f"{grade} missing from GroomingAccuracyTally"
 
+    def test_wrong_reasons_match_the_implementation(self, text):
+        from taskfw.risk import WRONG_REASONS
+
+        for reason in (*WRONG_REASONS, "unstated"):
+            assert reason in text, f"{reason} missing from GroomingAccuracyTally"
+
 
 class TestMcpInterfaceMatchesCode:
     """mcp_interface.sysml's port items are not executed, so they are kept

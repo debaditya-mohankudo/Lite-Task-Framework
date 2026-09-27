@@ -35,7 +35,7 @@ from collections import Counter
 from typing import Any
 
 from taskfw.log import get_logger
-from taskfw.risk import GROOMING_GRADES, coerce, normalise_text
+from taskfw.risk import GROOMING_GRADES, RISK_KEYS, coerce, normalise_text
 from taskfw.task import Task
 from taskfw.store import TaskStore
 
@@ -64,10 +64,10 @@ MAX_RECURRING = 10
 
 
 def _risks(task: Task) -> list[dict]:
-    """The grooming risks of a task, projected to {"id", "text", "graded"}.
+    """The grooming risks of a task, projected to exactly RISK_KEYS.
 
     Shape-coercion (bare string, dict, or worse -> dict) is `taskfw.risk.coerce`;
-    this adds only the projection to the exact three keys this module compares
+    this adds only the projection to RISK_KEYS, the keys this module compares
     on. A plain string is a plausible thing to write and dropping it would make
     an ungraded risk invisible — the one outcome this module exists to prevent.
     `id` is optional: risks written before task:f24be6e4 have none, and are
@@ -80,7 +80,7 @@ def _risks(task: Task) -> list[dict]:
         if not isinstance(risk, (str, dict)):
             continue
         c = coerce(risk)
-        out.append({"id": c.get("id"), "text": c.get("text", ""), "graded": c.get("graded")})
+        out.append({k: c.get(k) for k in RISK_KEYS} | {"text": c.get("text", "")})
     return out
 
 
@@ -317,6 +317,9 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
 
     tallies: Counter[str] = Counter()
     unrecognised: Counter[str] = Counter()
+    #: Keyed by reason, with `unstated` for a `wrong` grade that gave none —
+    #: so the buckets always sum to the `wrong` tally and nothing is hidden.
+    wrong_because: Counter[str] = Counter()
     ungraded = 0
     missed_groomed = 0
     #: Surprises from finished tasks that were never groomed. Kept apart from
@@ -360,6 +363,8 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
             if grade in GROOMING_GRADES:
                 tallies[grade] += 1
                 graded_here[grade] += 1
+                if grade == "wrong":
+                    wrong_because[risk["wrong_because"] or "unstated"] += 1
             else:
                 # Never dropped. An unrecognised grade that vanished would be an
                 # omission indistinguishable from an absence.
@@ -396,6 +401,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
             **{g: tallies.get(g, 0) for g in GROOMING_GRADES},
             "ungraded": ungraded,
             "unrecognised": dict(unrecognised),
+            "wrong_because": dict(wrong_because),
         },
         # Named for the population it ranges over, because it is a
         # narrowing and not a total: groomed tasks only, so it stays

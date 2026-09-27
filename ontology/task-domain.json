@@ -296,6 +296,20 @@
       "form": "transient",
       "definition": "Where a Task stands in the loop: three booleans -- groomed (Grooming non-empty), implemented (every ResolutionItem ticked, independent of TaskStatus), introspected (at least one Introspection report). Computed on read from the Task's own fields and never stored, so it cannot disagree with the checklist or the reports it reads; the same three predicates back the Nudges that speak about those states. Exposed by tasks__phase.",
       "evidence": "taskfw/dispatcher/phase.py:task_phase, is_groomed, is_implemented, is_introspected, taskfw/mcp_server.py:tasks__phase"
+    },
+    "WrongReason": {
+      "bounded_context": "The Loop",
+      "form": "attribute",
+      "definition": "Why a Risk graded `wrong` was wrong, carried on the Risk's `wrong_because` field beside its GroomingGrade. Unlike GroomingGrade, its vocabulary is closed on write: it is a Literal on GroomingRisk, so an off-list value is refused at the tool boundary. `other` is the escape hatch for a reason nobody anticipated. It exists so GroomingAccuracy can say WHICH wrong questions grooming asks, not just how many — a pile of `settleable-by-grep` means grooming predicted what it should have checked (task:0b9de163).",
+      "evidence": "taskfw/risk.py:WrongReason, taskfw/accuracy.py:wrong_because, taskfw/mcp_server.py:_keep_grade",
+      "lifecycle": "Assigned by Introspection together with a `wrong` grade. Carried forward across re-grooming only while the grade stays `wrong`; regrading the Risk away from wrong drops it.",
+      "lifecycle_evidence": "docs/methodology/05-introspection.md",
+      "values": [
+        "settleable-by-grep",
+        "did-not-occur",
+        "unfalsifiable",
+        "other"
+      ]
     }
   },
   "relations": [
@@ -731,6 +745,18 @@
       "predicate": "relates",
       "object": "TaskStatus",
       "note": "One-way: ticking the last item moves an open Task to done (the check_item auto-finish); unticking an item never reopens it. Progress and status are otherwise independent."
+    },
+    {
+      "subject": "WrongReason",
+      "predicate": "part-of",
+      "object": "Risk",
+      "note": "Lives on the Risk's `wrong_because` field and is meaningful only when that Risk's GroomingGrade is `wrong`. It is merged forward by risk id with the grade it explains, through the same _keep_grade path."
+    },
+    {
+      "subject": "GroomingAccuracy",
+      "predicate": "references",
+      "object": "WrongReason",
+      "note": "Tallied as risks.wrong_because, keyed by reason plus `unstated` for a wrong grade that gave none, so the buckets always sum to the `wrong` tally and a missing reason is counted rather than hidden."
     }
   ]
 }

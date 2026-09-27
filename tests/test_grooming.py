@@ -102,3 +102,34 @@ class TestWriteSide:
         saved = store.get(tid).grooming
         assert saved["risks"][0]["graded"] == "avoided"
         assert saved["other"] == ["last_run_at: 2026-07-28"]
+
+
+class TestWrongBecause:
+    """Why a `wrong` grade was wrong — a closed vocabulary plus `other`, so
+    grooming_accuracy can group it (task:0b9de163)."""
+
+    def test_a_listed_reason_validates(self):
+        TypeAdapter(Grooming).validate_python(
+            {"risks": [{"text": "r", "graded": "wrong", "wrong_because": "settleable-by-grep"}]})
+
+    def test_an_unlisted_reason_is_refused(self):
+        with pytest.raises(Exception, match="literal_error|Input should be"):
+            TypeAdapter(Grooming).validate_python(
+                {"risks": [{"text": "r", "graded": "wrong", "wrong_because": "bad luck"}]})
+
+    def test_a_reword_keeps_the_reason_with_its_grade(self, store):
+        t = m.tasks__create(title="t")
+        m.tasks__update(t["id"], grooming={"risks": [
+            {"text": "a", "graded": "wrong", "wrong_because": "did-not-occur"}]})
+        rid = store.get(t["id"]).grooming["risks"][0]["id"]
+        m.tasks__update(t["id"], grooming={"risks": [{"id": rid, "text": "a, reworded"}]})
+        risk = store.get(t["id"]).grooming["risks"][0]
+        assert (risk["graded"], risk["wrong_because"]) == ("wrong", "did-not-occur")
+
+    def test_a_regrade_away_from_wrong_drops_the_reason(self, store):
+        t = m.tasks__create(title="t")
+        m.tasks__update(t["id"], grooming={"risks": [
+            {"text": "a", "graded": "wrong", "wrong_because": "did-not-occur"}]})
+        rid = store.get(t["id"]).grooming["risks"][0]["id"]
+        m.tasks__update(t["id"], grooming={"risks": [{"id": rid, "text": "a", "graded": "avoided"}]})
+        assert "wrong_because" not in store.get(t["id"]).grooming["risks"][0]
