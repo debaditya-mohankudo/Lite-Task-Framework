@@ -560,7 +560,8 @@ def _pop_text_match(pool: list, text: str, text_of: Callable[[Any], str]) -> Any
 def _merge_grooming_risks(current_raw: list | None, incoming_raw: list | None) -> list[dict]:
     """Union current and incoming grooming risks by id — task:f24be6e4.
 
-    Every other grooming field stays wholesale-replace; only `risks` merges,
+    Every other grooming key a payload carries replaces its list, and a key
+    it omits is left unchanged (task:adc1353b); only `risks` merges by item,
     because a risk's `graded` value is the loop's primary evidence and a
     caller that omits a risk from a re-groom should never silently destroy
     its grade. Rules:
@@ -672,6 +673,9 @@ def tasks__update(
     `grooming` is typed (taskfw.grooming.Grooming): an unknown key, or an
     unknown key on a risk or open question, is refused before this runs.
     Anything the schema does not anticipate goes in `other` as free text.
+    Grooming merges per key: a key the payload omits is left unchanged, a
+    key it carries replaces that list, and [] clears it (task:adc1353b).
+    `risks` alone merges by id — see _merge_grooming_risks.
     """
     current = store().get(task_id)
     if current is None:
@@ -698,16 +702,16 @@ def tasks__update(
     if tags is not None:
         updated.tags = tags
     if grooming is not None:
-        merged_grooming = dict(grooming)
-        current_risks = (current.grooming or {}).get("risks")
-        # An absent `risks` key says nothing about risks, so they stay as
-        # they are; only an explicit list (including []) is a re-groom of
-        # them. Treating absence as [] retracted every ungraded risk on a
-        # payload that never mentioned risks at all (task:c0c5ff5f).
+        # An absent key says nothing about that key, so it stays as it is;
+        # only an explicit list (including [] to clear) rewrites it. Replacing
+        # the whole object let a risks-only grading write erase every other
+        # finding (task:adc1353b), as absent-means-[] once did to risks alone
+        # (task:c0c5ff5f).
+        prior = current.grooming or {}
+        merged_grooming = {**prior, **grooming}
         if "risks" in grooming:
-            merged_grooming["risks"] = _merge_grooming_risks(current_risks, grooming["risks"])
-        elif current_risks:
-            merged_grooming["risks"] = current_risks
+            merged_grooming["risks"] = _merge_grooming_risks(
+                prior.get("risks"), grooming["risks"])
         updated.grooming = merged_grooming
 
     parent_task = store().get(updated.parent) if updated.parent else None

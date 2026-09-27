@@ -1,8 +1,8 @@
 """Risk identity — the one shape rule every risk consumer shares.
 
 A grooming risk is stored as a plain dict inside ``Task.grooming['risks']`` and
-replaced wholesale each grooming pass, EXCEPT that a graded verdict is merged
-forward by identity (see ``mcp_server._merge_grooming_risks``). Four code paths
+replaced as a list whenever a grooming payload carries ``risks``, EXCEPT that
+a graded verdict is merged forward by identity (see ``mcp_server._merge_grooming_risks``). Four code paths
 need the same two primitives to do that:
 
 * turn a raw risk — a bare string, a dict, or something malformed — into a

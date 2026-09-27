@@ -75,7 +75,8 @@ class Task:
     files: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     notes: str = ""
-    #: Findings from a grooming pass. Replaced wholesale each pass by design.
+    #: Findings from a grooming pass. Each key a write carries replaces that
+    #: key; omitted keys are left unchanged (task:adc1353b).
     #: __post_init__ folds any off-schema key a pre-type row carried into
     #: `other`, so the annotation holds for rows older than the type too.
     grooming: Grooming = field(default_factory=dict)  # type: ignore[assignment]

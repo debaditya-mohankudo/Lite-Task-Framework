@@ -243,7 +243,7 @@ class TestGroomingRiskMerge:
 
     def test_grooming_without_a_risks_key_leaves_risks_unchanged(self):
         """task:c0c5ff5f: an absent key used to be read as [] and retract every
-        ungraded risk. Other grooming fields still replace wholesale."""
+        ungraded risk. A present key still replaces its own list."""
         t = create()
         m.tasks__update(t["id"], grooming={"risks": [{"text": "a", "graded": None}],
                                            "clarifications": ["old"]})
@@ -318,11 +318,38 @@ class TestGroomingRiskMerge:
         assert len(risks) == 1
         assert risks[0]["graded"] == "wrong"
 
-    def test_other_grooming_fields_stay_wholesale_replace(self):
+    def test_a_present_grooming_key_replaces_its_list(self):
         t = create()
         m.tasks__update(t["id"], grooming={"clarifications": ["old"]})
         m.tasks__update(t["id"], grooming={"clarifications": ["new"]})
         assert m.tasks__get(t["id"])["grooming"]["clarifications"] == ["new"]
+
+    def test_a_risks_only_write_leaves_every_other_key_intact(self):
+        """task:adc1353b: grading used to pass only risks and erase the rest."""
+        t = create()
+        full = {
+            "clarifications": ["c"], "hidden_assumptions": ["h"],
+            "open_questions": [{"question": "q", "blocking": False}],
+            "risks": [{"text": "r", "graded": None}], "prior_art": ["p"],
+            "suggested_improvements": ["s"], "other": ["o"],
+        }
+        m.tasks__update(t["id"], grooming=full)
+        rid = m.tasks__get(t["id"])["grooming"]["risks"][0]["id"]
+        m.tasks__update(t["id"], grooming={
+            "risks": [{"id": rid, "text": "r", "graded": "avoided"}]})
+        after = m.tasks__get(t["id"])["grooming"]
+        for key in full:
+            if key != "risks":
+                assert after[key] == full[key], key
+        assert after["risks"][0]["graded"] == "avoided"
+
+    def test_an_empty_list_clears_a_grooming_key(self):
+        t = create()
+        m.tasks__update(t["id"], grooming={"clarifications": ["c"], "prior_art": ["p"]})
+        m.tasks__update(t["id"], grooming={"clarifications": []})
+        g = m.tasks__get(t["id"])["grooming"]
+        assert g.get("clarifications", []) == []
+        assert g["prior_art"] == ["p"]
 
 
 class TestGroomingAccuracyScope:

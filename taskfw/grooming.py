@@ -19,9 +19,10 @@ TWO HALVES, ONE RULE.
   quietly, which the framework does not allow even for data nobody reads.
 
 Because every Task in memory is already canonical, anything a caller reads
-back (the ``tasks__context`` bundle, which introspection re-passes wholesale
-when grading) contains only schema keys, so the strict write side never
-rejects a legitimate round-trip.
+back (the ``tasks__context`` bundle) contains only schema keys, so the strict
+write side never rejects a legitimate round-trip. A round-trip is no longer
+required either: ``tasks__update`` merges per key, so a payload carrying only
+``risks`` leaves every other finding in place (task:adc1353b).
 
 ``other`` is the escape hatch, and it is deliberate: where the schema does not
 anticipate a thought, there has to be somewhere to put it.

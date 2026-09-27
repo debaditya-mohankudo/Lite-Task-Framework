@@ -27,13 +27,11 @@ is still open, and grading it as inevitable launders a skipped decision into a
 recorded outcome. If grading surfaces a decision you skipped, **make the
 decision now**; that is the loop working, not a failure of it.
 
-Write the grades back by re-passing the whole grooming object with `graded`
-filled in, keeping each risk's `id` (from the grooming bundle) so the grade
+Write the grades back by passing just `risks` with `graded` filled in, keeping each risk's `id` (from the grooming bundle) so the grade
 attaches to the right risk:
 
 ```python
 tasks__update(task_id, grooming={
-    **existing_grooming,
     "risks": [
         {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "avoided"},
         {"id": "<id from the bundle>", "text": "<unchanged or reworded>", "graded": "wrong",
@@ -42,9 +40,9 @@ tasks__update(task_id, grooming={
 })
 ```
 
-**`grooming` replaces wholesale**, so pass the other keys back unchanged or
-they are lost. `risks` is the one exception (task:f24be6e4): it merges by
-`id`, so a risk you omit here is carried forward automatically if it was
+**`grooming` merges per key** (task:adc1353b): a key you omit is left
+unchanged, so a risks-only write cannot erase the other findings. `risks`
+itself merges by `id` (task:f24be6e4), so a risk you omit here is carried forward automatically if it was
 already graded, and rewording a risk's `text` no longer resets its history —
 grading and the carry-forward both key on the `id` now, not the wording.
 Cross-task recurrence in `tasks__grooming_accuracy` still groups by

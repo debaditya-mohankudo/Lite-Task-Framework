@@ -124,7 +124,7 @@
     "Grooming": {
       "bounded_context": "The Loop",
       "form": "part",
-      "definition": "The pre-implementation pass that records a task's current best understanding as falsifiable risks/findings before work starts. Recorded as part of the Task and replaced wholesale each pass -- unlike Introspection, only the latest pass is kept, because grooming is a current-belief snapshot, not a history.",
+      "definition": "The pre-implementation pass that records a task's current best understanding as falsifiable risks/findings before work starts. Recorded as part of the Task; each write replaces the keys it carries and leaves omitted keys unchanged (task:adc1353b) -- unlike Introspection, only the latest pass is kept, because grooming is a current-belief snapshot, not a history.",
       "evidence": "taskfw/task.py:Task.grooming"
     },
     "Risk": {
@@ -425,25 +425,25 @@
       "subject": "Grooming",
       "predicate": "part-of",
       "object": "Task",
-      "note": "Recorded as part of the Task and replaced wholesale each groom pass -- except its Risks, which merge by id (see 'Risk part-of Grooming')."
+      "note": "Recorded as part of the Task; a write replaces each key it carries and leaves omitted keys unchanged -- except its Risks, which merge by id within the key (see 'Risk part-of Grooming')."
     },
     {
       "subject": "Risk",
       "predicate": "part-of",
       "object": "Grooming",
-      "note": "The one exception to Grooming's wholesale-replace rule: risks merge by id across re-groom passes so a graded verdict is never silently lost, while every other Grooming field still replaces in place."
+      "note": "The one exception to Grooming's replace-the-key rule: risks merge by id across re-groom passes so a graded verdict is never silently lost, while every other Grooming key a write carries replaces in place."
     },
     {
       "subject": "HiddenAssumption",
       "predicate": "part-of",
       "object": "Grooming",
-      "note": "Recorded in `grooming.hidden_assumptions`, replaced wholesale on every re-groom like every Grooming field except Risk -- there is no per-item id to merge by, because nothing ever grades a HiddenAssumption, so there is no verdict a re-groom could otherwise lose."
+      "note": "Recorded in `grooming.hidden_assumptions`, replaced as a list whenever a write carries the key, like every Grooming field except Risk -- there is no per-item id to merge by, because nothing ever grades a HiddenAssumption, so there is no verdict a re-groom could otherwise lose."
     },
     {
       "subject": "OpenQuestion",
       "predicate": "part-of",
       "object": "Grooming",
-      "note": "Recorded in `grooming.open_questions` as `{question, blocking}`, replaced wholesale on every re-groom like HiddenAssumption -- an OpenQuestion carries no id and is never graded, so nothing needs to survive being merged forward the way a Risk's verdict does."
+      "note": "Recorded in `grooming.open_questions` as `{question, blocking}`, replaced as a list whenever a write carries the key, like HiddenAssumption -- an OpenQuestion carries no id and is never graded, so nothing needs to survive being merged forward the way a Risk's verdict does."
     },
     {
       "subject": "HiddenAssumption",

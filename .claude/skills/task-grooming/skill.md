@@ -125,9 +125,9 @@ tasks__update(task_id, grooming={
 
 The shape is typed (`taskfw/grooming.py`): an unknown key, on grooming or on a risk or open question, is refused. A thought that fits none of the fields goes in `other` as free text rather than under a new key.
 
-`hidden_assumptions` is something believed and left unverified. `open_questions` is something known to be unknown, with `blocking: true` when work cannot start without an answer. Only add an entry where the distinction changes what happens next — a task with no genuine open question doesn't need an empty list.
+`hidden_assumptions` is something believed and left unverified. `open_questions` is something known to be unknown, with `blocking: true` when work cannot start without an answer. Only add an entry where the distinction changes what happens next — a task that never had a genuine open question doesn't need an empty list, but one whose earlier questions are now all answered does: send `[]`, or they stay live.
 
-`grooming` replaces wholesale — only the latest pass is kept. That is about **storage, not authorship**: the object you pass should be the edited revision from Step 2. If a prior finding is worth keeping as history rather than as a live finding, put it in `prior_art`.
+`grooming` merges per key — a key you pass replaces that key, a key you omit is left unchanged (task:adc1353b), so **clear a fully-resolved key with `[]`**; omitting it keeps stale findings live. Only the latest pass is kept. That is about **storage, not authorship**: the object you pass should be the edited revision from Step 2. If a prior finding is worth keeping as history rather than as a live finding, put it in `prior_art`.
 
 Fixing the checklist, `files`, or `motivation` itself is fine and encouraged — that is repair, not annotation. Findings go in `grooming`; repairs go in the fields they repair.
 

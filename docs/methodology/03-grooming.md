@@ -133,10 +133,12 @@ changes what happens next.
 Findings go in `grooming`, not the motivation. Fixing the checklist, files, or
 motivation itself is fine and encouraged — that is repair, not annotation.
 
-`grooming` replaces wholesale: only the latest pass is kept. That is about
-storage, not authorship — the object you pass should be an edited revision of
-what was there. The one exception is `risks`, which merges by `id` rather than
-replacing (task:f24be6e4): reword a risk by keeping its `id` and its grade
+`grooming` merges per key: a key you pass replaces that key's list, and a key
+you omit is left as it was (task:adc1353b). Only the latest pass is kept, but
+that is about storage, not authorship — the object you pass should be an
+edited revision of what was there. **To drop a key whose findings are all
+resolved, pass it as `[]`** — omitting it keeps the stale entries live.
+`risks` merges one level deeper, by `id` (task:f24be6e4): reword a risk by keeping its `id` and its grade
 history follows; a new risk needs no `id` at all, one is assigned for you.
 Leaving the `risks` key out entirely leaves the current risks untouched; pass
 `"risks": []` to retract the ungraded ones (task:c0c5ff5f).
