@@ -43,7 +43,7 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "f32fc4e600adb4cf06257c200aaf8335daf8d856";
+        derivedFromCommit = "91a4c56105e861a55b615bf43b97f80150c7c7f1";
         derivedAt = "2026-09-27";
         modelledPaths = (
             "taskfw/scope.py",
@@ -254,6 +254,8 @@ package Requirements {
              * inside each task, so nothing could see the series, and the
              * instruction to change grooming itself was unactionable. Per task
              * the loop closed; across tasks it did not.
+             * A `wrong` grade also says WHY (wrong_because, task:0b9de163), so
+             * the series names which wrong questions, not just how many.
              *
              * Tallies are derived from the per-risk grades and never read back
              * from an introspection report's self-reported count — the same

@@ -16,7 +16,7 @@ package DerivedValues {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "a4de1891abea0494d0506096761e18672edbf073";
+        derivedFromCommit = "91a4c56105e861a55b615bf43b97f80150c7c7f1";
         derivedAt = "2026-09-27";
         modelledPaths = (
             "taskfw/task.py",
@@ -67,6 +67,13 @@ package DerivedValues {
              * risk shape (task:dd4ceb01); accuracy.py imports it. It is
              * closed for counting only — an unrecognised grade is bucketed
              * and reported, never refused on write.
+             *
+             * A `wrong` grade is further tallied by its wrong_because reason
+             * (task:0b9de163): settleable-by-grep, did-not-occur,
+             * unfalsifiable, other — the WrongReason Literal in
+             * taskfw/risk.py, enforced by type on write, unlike the grade
+             * itself — plus `unstated` for a wrong grade that gave none, so
+             * the reason buckets always sum to the wrong tally.
              *
              * WHICH finished tasks is now a parameter (task:a5bb2f45): the
              * aggregate is global by default but can be narrowed to one
