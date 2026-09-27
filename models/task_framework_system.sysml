@@ -45,8 +45,8 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "d474f321e5cdf72b18c58ea17d635bebcd2e4925";
-        derivedAt = "2026-09-26";
+        derivedFromCommit = "f32fc4e600adb4cf06257c200aaf8335daf8d856";
+        derivedAt = "2026-09-27";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/store.py",
@@ -152,6 +152,13 @@ package TaskFrameworkSystem {
              *     Neither is ambiguous about it — both name the scope they
              *     counted in their result, and a scoped count additionally
              *     reports the unscoped remainder it left out.
+             *   - ungroomed_start_nudge (tasks__set_active only, task:0b9de163):
+             *     the task being activated is open or blocked, not an epic,
+             *     has nothing ticked, and has empty grooming — the pre-work
+             *     counterpart of ungroomed_progress_nudge, handing over at the
+             *     first tick. Deliberately absent from tasks__create, the
+             *     other activation path: every new task is ungroomed, so it
+             *     would fire on every call and carry nothing.
              * A nudge never refuses a write and never changes what
              * is stored, so it carries none of the properties that earned
              * LifecycleRules or TaskStore their own part: it enforces nothing
