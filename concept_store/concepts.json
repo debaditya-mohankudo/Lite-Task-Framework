@@ -49,7 +49,8 @@
         "stale_memory_nudge(memory: dict) -> str | None; fires when memory['standing'] is 'disputed' or 'contradicted' (never 'superseded', already flagged by definition), wired onto task_memory__link.",
         "ungroomed_progress_nudge(task) -> str | None; fires when task.progress has at least one checked item AND task.grooming is empty, at tasks__check_item/tasks__update.",
         "loop_debt_nudge(skipped: int, tasks_examined: int) -> str | None; fires only when skipped > 0, wired onto tasks__set_active via mcp_server._loop_debt_hook.",
-        "task_debt_nudge(task_id: str, ungraded: int) -> str | None; fires only when ungraded > 0, companion to loop_debt_nudge — that one is about the loop across recent finished tasks, this one about the specific task just made active."
+        "task_debt_nudge(task_id: str, ungraded: int) -> str | None; fires only when ungraded > 0, companion to loop_debt_nudge — that one is about the loop across recent finished tasks, this one about the specific task just made active.",
+        "ungroomed_start_nudge(task) -> str | None (task:0b9de163): fires when the task is not an epic, has status open or blocked, has no checked ResolutionItem, and is_groomed(task) is False. It is the pre-work counterpart of ungroomed_progress_nudge, and the two hand over at the first tick, so they never fire together. Wired on tasks__set_active only; tasks__create is deliberately excluded because every new task is ungroomed."
       ],
       "created_at": "2026-08-23T10:14:44.522149+00:00",
       "description": "The individual nudge functions — each a Callable[[...]] -> str | None encoding one advisory firing condition, wired onto a specific MCP tool via [[nudge-dispatch-chassis]]'s tool_called/combine/apply_nudge, and reading task state through [[task-phase-derivation]] where relevant. A nudge never blocks a write or changes what gets stored; it only surfaces something true about the result that would otherwise be silent. Extracted from the flat taskfw/dispatcher.py into taskfw/dispatcher/nudges.py; re-exported unchanged from taskfw/dispatcher/__init__.py.",
@@ -72,7 +73,8 @@
         "tests/test_mcp_tools.py::TestLoopDebtNudge",
         "tests/test_mcp_tools.py::TestStaleMemoryNudge",
         "tests/test_mcp_tools.py:TestUpdate",
-        "tests/test_mcp_tools.py:TestChecklist"
+        "tests/test_mcp_tools.py:TestChecklist",
+        "taskfw/dispatcher/nudges.py:ungroomed_start_nudge"
       ],
       "invariants": [
         "loop_debt_nudge and task_debt_nudge surface at tasks__set_active, not inside tasks__context's bundle and not on tasks__create — set_active is the earlier of the two documented lifecycle entry points, and tasks__context is already budget-constrained around per-task relevance.",
@@ -87,7 +89,7 @@
         "nudges.py imports is_groomed, is_implemented, and is_introspected from phase.py (one-directional, task:5a5fde0d) and imports nothing from chassis.py — every nudge here is a plain function returning str | None, wiring onto tool_called/apply_nudge happens only at the mcp_server.py call site, not inside this module.",
         "introspection_nudge and loop_debt_nudge are the sole code embodiment of ontology terms IntrospectionNudge and LoopDebtNudge (ontology/task-domain.json); those terms earn their own entry -- rather than folding into the parent Nudge term -- because each binds the nudge mechanism to another vocabulary term (Introspection, and the ungraded-GroomingGrade aggregate). The other nudges here back only the generic Nudge term. Renaming or removing either function breaks tests/test_ontology.py via that term's evidence citation."
       ],
-      "last_validated": "2026-09-01T01:39:11.938759+00:00",
+      "last_validated": "2026-09-27T16:07:58.014399+00:00",
       "module": "taskfw/dispatcher/nudges.py",
       "name": "advisory-nudge-policies",
       "related": [
@@ -316,13 +318,16 @@
     },
     "dispatcher-nudge-firing-conditions-pinned": {
       "confidence": 0.8,
-      "contracts": [],
+      "contracts": [
+        "TestUngroomedStartNudge pins ungroomed_start_nudge: fires on an open, ungroomed task with nothing ticked, and is silent once groomed, once an item is done (handover to ungroomed_progress_nudge), on an epic, and on done/abandoned tasks."
+      ],
       "created_at": "2026-08-23T15:11:01.108436+00:00",
       "description": "Pins the exact firing/silencing conditions for each advisory nudge in taskfw.dispatcher: introspection_nudge only counts new_knowledge and legacy surprises-with-lesson fields (never bare surprises or missed_surprises), and goes permanently silent once any memory has been cited from the task, regardless of report shape. Several nudges (ungroomed_progress_nudge, stale_memory_nudge on contradicted/disputed) are deliberately stateless and re-fire on every call rather than tracking a shown-once flag.",
       "evidence": [
         "tests/test_dispatcher.py:TestIntrospectionNudge",
         "tests/test_dispatcher.py:TestStaleMemoryNudge",
-        "tests/test_dispatcher.py:TestUngroomedProgressNudge"
+        "tests/test_dispatcher.py:TestUngroomedProgressNudge",
+        "tests/test_dispatcher.py:TestUngroomedStartNudge"
       ],
       "invariants": [
         "introspection_nudge fires only when new_knowledge or surprises[].lesson is present, never on missed_surprises or lesson-less surprises.",
@@ -330,7 +335,7 @@
         "stale_memory_nudge fires only on contradicted/disputed standing, never on unverified, confirmed, or superseded.",
         "ungroomed_progress_nudge and finish_reminder_nudge re-fire on every call while their condition still holds -- they hold no internal counter."
       ],
-      "last_validated": "2026-08-23T15:11:01.108586+00:00",
+      "last_validated": "2026-09-27T16:08:01.671143+00:00",
       "module": "tests/test_dispatcher.py",
       "name": "dispatcher-nudge-firing-conditions-pinned",
       "related": [
@@ -721,21 +726,23 @@
       "confidence": 0.9,
       "contracts": [
         "_tool(hook=None) is the single decorator every tool carries instead of @mcp.tool(): it wraps fn in dispatcher.tool_called(fn.__name__, post=hook) and registers the WRAPPED function with mcp.tool() itself, so the module-level name bound is the logged version too. Plain tools use @_tool(); tools needing one or more nudges pass @_tool(hook=some_hook) or @_tool(hook=dispatcher.combine(hook_a, hook_b)).",
-        "The 5 hook functions (_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook) are all Callable[[dict], None], defined once near _tool and referenced by name at each tool's own decorator line -- never centrally dispatched by tool name. Hooks that need the post-mutation task re-fetch it via store().get(result['id']) rather than closing over a local variable computed mid-function, since the mutation is already persisted (store().save() already ran) by the time any hook fires -- this is what let hook-bearing and plain tools converge on one decorator instead of two different wiring mechanisms (task:58782207)."
+        "The 5 hook functions (_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook) are all Callable[[dict], None], defined once near _tool and referenced by name at each tool's own decorator line -- never centrally dispatched by tool name. Hooks that need the post-mutation task re-fetch it via store().get(result['id']) rather than closing over a local variable computed mid-function, since the mutation is already persisted (store().save() already ran) by the time any hook fires -- this is what let hook-bearing and plain tools converge on one decorator instead of two different wiring mechanisms (task:58782207).",
+        "tasks__set_active carries dispatcher.combine(_loop_debt_hook, _ungroomed_start_hook); tasks__create carries _loop_debt_hook alone. _ungroomed_start_hook is deliberately absent from create, where the nudge would fire on every call (task:0b9de163)."
       ],
       "created_at": "2026-08-24T12:02:56.521066+00:00",
       "description": "Pulled out of [[mcp-portable-interface]]. Every one of the ~35 registered tools is wrapped in dispatcher.tool_called for unconditional logging via a single mechanism, mcp_server._tool -- the one route every tool goes through for registration + logging + an optional post-success hook. A tool skips registration entirely if it skips _tool; there is no 'registered but unlogged' state.",
       "evidence": [
         "taskfw/mcp_server.py:_tool",
         "taskfw/mcp_server.py:_finish_reminder_hook, _ungroomed_progress_hook, _finish_hook, _stale_memory_hook, _introspection_hook",
-        "tests/test_mcp_tools.py::TestToolCallLogging"
+        "tests/test_mcp_tools.py::TestToolCallLogging",
+        "taskfw/mcp_server.py:_ungroomed_start_hook"
       ],
       "invariants": [
         "No tool is missing the _tool wrapper and none is double-wrapped -- pinned by tests/test_mcp_tools.py::TestToolCallLogging, which enumerates the live m.mcp.list_tools() registry rather than a hand-maintained list, so a new tool that forgets the decorator fails this test rather than silently going unlogged",
         "There is no drift-reflection or active-task nudge in this module or anywhere in taskfw -- an MCP-tool-wrapper trigger (task:8be768df) and then a PostToolUse hook (task:1c8f0815) were both tried and removed (task:00d9483f); the active task is announced once at tasks__set_active and not re-surfaced.",
         "_introspection_hook checks dispatcher.is_introspected(task) rather than the raw task.introspection truthy test it used before (task:f6be04bf's audit) -- consolidating on task-phase-derivation's single-source predicate rather than re-testing the field, matching finish_nudge/ungroomed_progress_nudge's own consolidation in nudges.py."
       ],
-      "last_validated": "2026-08-24T12:02:56.521133+00:00",
+      "last_validated": "2026-09-27T16:07:59.816559+00:00",
       "module": "taskfw/mcp_server.py",
       "name": "mcp-tool-registration-and-hooks",
       "related": [
@@ -1540,6 +1547,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-09-27T16:02:06.013473+00:00"
+    "updated_at": "2026-09-27T16:08:01.671198+00:00"
   }
 }

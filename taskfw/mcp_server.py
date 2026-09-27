@@ -207,6 +207,14 @@ def _ungroomed_progress_hook(result: dict[str, Any]) -> None:
         dispatcher.apply_nudge(result, dispatcher.ungroomed_progress_nudge, task)
 
 
+def _ungroomed_start_hook(result: dict[str, Any]) -> None:
+    """ungroomed_start_nudge, for tasks__set_active only — not tasks__create,
+    where every task is still ungroomed and the nudge would carry nothing."""
+    task = store().get(result.get("active") or "")
+    if task:
+        dispatcher.apply_nudge(result, dispatcher.ungroomed_start_nudge, task)
+
+
 def _finish_hook(result: dict[str, Any]) -> None:
     """finish_nudge, on any call whose result says it moved a task to done.
 
@@ -1049,7 +1057,7 @@ def tasks__add_commit(task_id: str, sha: str, repo: str = "") -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-@_tool(hook=_loop_debt_hook)
+@_tool(hook=dispatcher.combine(_loop_debt_hook, _ungroomed_start_hook))
 def tasks__set_active(task_id: str) -> dict[str, Any]:
     """Set task_id as the active task for this workspace. In-memory only —
     not persisted, does not survive a restart (task:f5ace343).

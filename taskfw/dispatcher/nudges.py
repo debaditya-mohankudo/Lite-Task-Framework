@@ -147,6 +147,33 @@ def ungroomed_progress_nudge(task) -> str | None:
     )
 
 
+def ungroomed_start_nudge(task) -> str | None:
+    """Advisory nudge for tasks__set_active, or None when there's nothing to say — task:0b9de163.
+
+    The pre-work counterpart of ungroomed_progress_nudge. That one fires only
+    once a checklist item is ticked, which is after the work it exists to
+    precede; tasks__set_active is where implementation starts (the
+    task-implementation skill calls it when work begins), so this is the
+    last moment grooming is still cheap. Of 40 finished tasks, 29 were never
+    groomed and produced 37 of the 58 unpredicted surprises (review
+    2026-09-27 G1).
+
+    Silent once any checklist item is done, handing over to
+    ungroomed_progress_nudge so the two never speak together; silent on an
+    epic, which groups work rather than doing it; silent on a done or
+    abandoned task. Deliberately NOT on tasks__create: a new task is always
+    ungroomed, so a nudge there would fire on every call and carry nothing.
+    Groomed means is_groomed, the same predicate Phase uses.
+    """
+    done, _total = task.progress
+    if task.epic or done or task.status not in ("open", "blocked") or is_groomed(task):
+        return None
+    return (
+        f"task:{task.id} is being activated but was never groomed. "
+        "Run /task-grooming before starting, or record why it is not needed."
+    )
+
+
 def loop_debt_nudge(skipped: int, tasks_examined: int) -> str | None:
     """Advisory nudge for tasks__set_active and tasks__create, or None when there's no debt — task:07f9270c.
 

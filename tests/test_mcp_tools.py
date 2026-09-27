@@ -781,6 +781,23 @@ class TestServerSha:
         assert (Path(m._PACKAGE_REPO) / "taskfw" / "mcp_server.py").is_file()
 
 
+class TestUngroomedStartNudge:
+    """task:0b9de163 — wired on tasks__set_active only."""
+
+    def test_set_active_on_an_ungroomed_task_nudges(self):
+        t = create()
+        assert "ungroomed_start_nudge" in m.tasks__set_active(t["id"])
+
+    def test_create_stays_silent(self):
+        # Every new task is ungroomed; a nudge here would fire on every call.
+        assert "ungroomed_start_nudge" not in create()
+
+    def test_set_active_on_a_groomed_task_is_silent(self):
+        t = create()
+        m.tasks__update(t["id"], grooming={"clarifications": ["x"]})
+        assert "ungroomed_start_nudge" not in m.tasks__set_active(t["id"])
+
+
 class TestLoopDebtNudge:
     """task:07f9270c — skipped introspection surfaced at tasks__set_active."""
 

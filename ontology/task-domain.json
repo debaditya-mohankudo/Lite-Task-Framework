@@ -273,6 +273,12 @@
       "definition": "The Nudge that rides on tasks__update, tasks__check_item and tasks__add_decision when ResolutionItems are being ticked on a Task whose Grooming is still empty -- implementation underway on a Task that never had its uncertainty removed. Uses the same is_groomed predicate as Phase, so the two cannot disagree about what counts as groomed.",
       "evidence": "taskfw/dispatcher/nudges.py:ungroomed_progress_nudge, taskfw/dispatcher/phase.py:is_groomed"
     },
+    "UngroomedStartNudge": {
+      "bounded_context": "The Loop",
+      "form": "transient",
+      "definition": "The Nudge that rides on tasks__set_active -- the moment implementation starts -- when the Task being activated is open or blocked, not an epic, has no ResolutionItem ticked, and its Grooming is still empty. The pre-work counterpart of UngroomedProgressNudge, which only fires after an item is ticked; the two hand over at the first tick and never speak together. Deliberately absent from tasks__create, where every Task is still ungroomed and the nudge would carry nothing. Uses the same is_groomed predicate as Phase.",
+      "evidence": "taskfw/dispatcher/nudges.py:ungroomed_start_nudge, taskfw/mcp_server.py:_ungroomed_start_hook, taskfw/dispatcher/phase.py:is_groomed"
+    },
     "StaleMemoryNudge": {
       "bounded_context": "The Loop",
       "form": "transient",
@@ -640,31 +646,31 @@
       "subject": "FinishNudge",
       "predicate": "is-a",
       "object": "Nudge",
-      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+      "note": "One of the eight concrete Nudges in taskfw/dispatcher/nudges.py."
     },
     {
       "subject": "FinishReminderNudge",
       "predicate": "is-a",
       "object": "Nudge",
-      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+      "note": "One of the eight concrete Nudges in taskfw/dispatcher/nudges.py."
     },
     {
       "subject": "UngroomedProgressNudge",
       "predicate": "is-a",
       "object": "Nudge",
-      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+      "note": "One of the eight concrete Nudges in taskfw/dispatcher/nudges.py."
     },
     {
       "subject": "StaleMemoryNudge",
       "predicate": "is-a",
       "object": "Nudge",
-      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+      "note": "One of the eight concrete Nudges in taskfw/dispatcher/nudges.py."
     },
     {
       "subject": "TaskDebtNudge",
       "predicate": "is-a",
       "object": "Nudge",
-      "note": "One of the seven concrete Nudges in taskfw/dispatcher/nudges.py."
+      "note": "One of the eight concrete Nudges in taskfw/dispatcher/nudges.py."
     },
     {
       "subject": "FinishNudge",
@@ -707,6 +713,18 @@
       "predicate": "references",
       "object": "Phase",
       "note": "Fires when items are ticked but Phase says not groomed."
+    },
+    {
+      "subject": "UngroomedStartNudge",
+      "predicate": "is-a",
+      "object": "Nudge",
+      "note": "One of the eight concrete Nudges in taskfw/dispatcher/nudges.py."
+    },
+    {
+      "subject": "UngroomedStartNudge",
+      "predicate": "references",
+      "object": "Phase",
+      "note": "Fires at activation when Phase says not groomed and nothing is ticked yet."
     },
     {
       "subject": "ResolutionItem",

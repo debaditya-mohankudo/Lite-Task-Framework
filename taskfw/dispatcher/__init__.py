@@ -35,6 +35,7 @@ from taskfw.dispatcher.nudges import (
     stale_memory_nudge,
     task_debt_nudge,
     ungroomed_progress_nudge,
+    ungroomed_start_nudge,
 )
 from taskfw.dispatcher.phase import (
     is_groomed,
@@ -54,6 +55,7 @@ __all__ = [
     "stale_memory_nudge",
     "task_debt_nudge",
     "ungroomed_progress_nudge",
+    "ungroomed_start_nudge",
     "is_groomed",
     "is_implemented",
     "is_introspected",

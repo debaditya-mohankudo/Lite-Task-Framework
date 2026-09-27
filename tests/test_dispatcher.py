@@ -24,6 +24,7 @@ from taskfw.dispatcher import (
     task_phase,
     tool_called,
     ungroomed_progress_nudge,
+    ungroomed_start_nudge,
 )
 from taskfw.memory import MemoryStore
 from taskfw.task import ResolutionItem, Task
@@ -125,6 +126,30 @@ class TestFinishReminderNudge:
         )
         tasks.save(t)
         assert finish_reminder_nudge(t) is None
+
+
+class TestUngroomedStartNudge:
+    """task:0b9de163 — fires at activation, before work, on an ungroomed task."""
+
+    def test_fires_on_an_open_ungroomed_task_with_no_progress(self):
+        t = Task(title="A task", resolution=[ResolutionItem("a")])
+        nudge = ungroomed_start_nudge(t)
+        assert nudge is not None and t.id in nudge
+
+    def test_none_once_grooming_is_recorded(self):
+        assert ungroomed_start_nudge(Task(title="t", grooming={"clarifications": ["x"]})) is None
+
+    def test_hands_over_to_ungroomed_progress_nudge_once_an_item_is_done(self):
+        t = Task(title="t", resolution=[ResolutionItem("a", done=True)])
+        assert ungroomed_start_nudge(t) is None
+        assert ungroomed_progress_nudge(t) is not None
+
+    def test_none_on_an_epic(self):
+        assert ungroomed_start_nudge(Task(title="e", epic=True)) is None
+
+    @pytest.mark.parametrize("status", ["done", "abandoned"])
+    def test_none_on_a_terminal_task(self, status):
+        assert ungroomed_start_nudge(Task(title="t", status=status)) is None
 
 
 class TestUngroomedProgressNudge:
