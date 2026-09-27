@@ -43,7 +43,7 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "91a4c56105e861a55b615bf43b97f80150c7c7f1";
+        derivedFromCommit = "64a64332e14eebea5d6a5ae31013ca4092958a9c";
         derivedAt = "2026-09-27";
         modelledPaths = (
             "taskfw/scope.py",
@@ -289,8 +289,10 @@ package Requirements {
              * dropped by omitting the risk from a later pass, nor by
              * restating a risk without its grade (task:2a7eacc8 closed that
              * for legacy id-less risks matched by text), nor by a payload
-             * that omits the `risks` key altogether (task:c0c5ff5f) — every
-             * other grooming field is unaffected. Recurrence groups by id when
+             * that omits the `risks` key altogether (task:c0c5ff5f). Every
+             * grooming key now follows that omitted-means-unchanged rule
+             * (task:adc1353b), so a risks-only grading write cannot erase
+             * the other findings either. Recurrence groups by id when
              * present, falling back to normalised text only for risks written
              * before this change. Second, the debt this requirement exists to
              * make readable is now also surfaced proactively: every activation

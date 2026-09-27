@@ -45,7 +45,7 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "91a4c56105e861a55b615bf43b97f80150c7c7f1";
+        derivedFromCommit = "64a64332e14eebea5d6a5ae31013ca4092958a9c";
         derivedAt = "2026-09-27";
         modelledPaths = (
             "taskfw/scope.py",
