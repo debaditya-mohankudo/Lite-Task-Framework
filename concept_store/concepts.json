@@ -1090,6 +1090,7 @@
       "confidence": 0.92,
       "contracts": [
         "normalise_remote(url) -> 'git:host/path' | None — pure, git-free, so the rule that decides whether two clones agree is testable without a repository. SSH and HTTPS spellings of one remote must produce the identical string.",
+        "workspace() -> str — TASKFW_SCOPE, else os.getcwd(); the one home of that lookup (task:b0f9f8de). derive()'s default and mcp_server._workspace (the active-pointer key) both call it, so a new task's Scope and its activation can never start from different directories. Read per call, never memoised.",
         "derive(cwd=None) -> str — never raises, never returns empty. Prefers the git origin, falls back to `path:<resolved abs>`. TASKFW_SCOPE selects the directory asked about, not the answer.",
         "for_repo(repo='') -> str — the sole writer of task_commits.repo. Empty derives cwd; an already-prefixed scope (git:/path:/hint:) is returned unchanged, so for_repo is idempotent; a real directory derives that directory; anything else is kept verbatim under `hint:`. Also the narrowing path for tasks__grooming_accuracy(scope=...), so a caller can pass the Scope a task carries (task:2a7eacc8).",
         "Consumed by Task.scope (set once at tasks__create), TaskStore.add_commit, context._same_project, and accuracy.loop_debt/grooming_accuracy.",
@@ -1149,7 +1150,8 @@
         "TestRelatedIsScoped — cross-project neighbours excluded, same-project kept, unscoped never dropped.",
         "TestLessonsAreMarkedNotFiltered — a foreign lesson is still returned, carrying cross_project: True.",
         "TestLoopDebtIsHonestAboutWhatItCounted — scope is echoed either way, and a narrowed count reports unscoped_not_counted.",
-        "TestLocalRoot — a path: scope is its own root (None if the dir is gone); an unscoped '' and a hint: have no root; a git: scope resolves to cwd's git toplevel only when it is this workspace's own scope, and a foreign git: scope returns None rather than borrowing the current repo's root."
+        "TestLocalRoot — a path: scope is its own root (None if the dir is gone); an unscoped '' and a hint: have no root; a git: scope resolves to cwd's git toplevel only when it is this workspace's own scope, and a foreign git: scope returns None rather than borrowing the current repo's root.",
+        "TestWorkspaceHasOneHome — TASKFW_SCOPE and, when unset, the cwd reach both derive() and mcp_server._workspace; patching scope.workspace moves both, pinning that there is one lookup, not two that agree (task:b0f9f8de)."
       ],
       "created_at": "2026-08-29T09:48:06.228364+00:00",
       "description": "Pins the ways scope could fail silently: remote normalisation divergence, erasure of the unscoped pre-field corpus, dishonest narrowing of a scoped count, and local_root pointing at the wrong checkout.",

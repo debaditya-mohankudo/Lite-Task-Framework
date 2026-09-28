@@ -60,10 +60,17 @@
     "ActiveTaskPointer": {
       "bounded_context": "Task Tracking",
       "form": "transient",
-      "definition": "Which task_id is currently 'active' for a given workspace -- a single in-memory value, not a stack, and not a field on Task itself. Keyed by working directory, so two repositories worked on at once each keep their own active task; nothing about it is persisted or survives a restart.",
+      "definition": "Which task_id is currently 'active' for a given Workspace -- a single in-memory value, not a stack, and not a field on Task itself. Keyed by Workspace (a directory, not a project), so two repositories worked on at once each keep their own active task; nothing about it is persisted or survives a restart.",
       "evidence": "taskfw/store.py:TaskStore.set_active, taskfw/mcp_server.py:_workspace",
       "lifecycle": "A workspace names at most one Task active at a time: the Task whose pass through the Methodology is currently in hand. A Task becomes active when its pass begins -- when it is first framed, or when work is deliberately resumed on it later -- and stays active across the whole arc, through Grooming and Implementation. It is released when its Introspection is recorded: capturing the retrospective is itself what ends the Task's turn as active. Nothing else releases it -- reaching a terminal TaskStatus does not, because a finished-but-not-yet-introspected Task is exactly the one Introspection still needs named. Making a different Task active simply replaces the one that was; the active Task is surfaced once, when it becomes active, and not repeated. It is transient by form: it lives only in the moment, is no part of the Task's own record, and does not outlast the working session.",
       "lifecycle_evidence": "docs/methodology/01-framework.md, taskfw/mcp_server.py:tasks__create, tasks__set_active, tasks__add_introspection, models/task_framework_system.sysml"
+    },
+    "Workspace": {
+      "bounded_context": "Task Tracking",
+      "form": "transient",
+      "definition": "The directory this server process is working in: TASKFW_SCOPE when set, otherwise the process's working directory. A raw path, per-directory, so two worktrees of one repository are two Workspaces. It is the one starting point both 'which task is open here?' (ActiveTaskPointer) and 'which project owns a new record?' (Scope) are answered from -- the first keys on it directly, the second resolves it into a project once, at creation. It is the server's directory, not wherever an agent's shell has since cd'd to. Nothing about it is stored: a record keeps the Scope derived from it, never the Workspace itself.",
+      "evidence": "taskfw/scope.py:workspace, taskfw/scope.py:derive, taskfw/mcp_server.py:_workspace",
+      "lifecycle": "Read fresh on every call, never memoised; it exists only as long as the process does."
     },
     "MemoryRecord": {
       "bounded_context": "Loop Memory",
@@ -227,9 +234,9 @@
     "Scope": {
       "bounded_context": "Task Tracking",
       "form": "attribute",
-      "definition": "Which project a record belongs to: a scheme-prefixed string derived from the working directory at creation; the one hand-set path is tasks__update(scope=), a correction that leaves a 'scope corrected: old -> new' note event (task:2110cf4c). `git:<host>/<path>` when a git origin was readable, `path:<abs>` when there was none, `hint:<raw>` when a caller supplied a repo string that could not be resolved to a directory. An attribute, not an entity -- it has no identity of its own, only equality, which is the single operation every consumer needs. The prefix is part of the value because it records HOW the project was known: a fallback must never compare equal to a derived answer, or an omission becomes indistinguishable from an absence. The empty string is a fourth, distinct case meaning 'project unknown', and it is treated as compatible with every scope rather than as a project of its own. No code path backfills or infers it: nothing derives a scope for a record that was written without one, because deriving it later would answer from wherever the reader happens to be standing rather than from where the work happened. It is NOT, however, true that the unscoped set and the written-before-the-field set are the same -- task:e62cefe8 hand-stamped 105 of this repository's own pre-scope rows from their commit trailers, and those rows carry no marker distinguishing a hand-stamped scope from a derived one, so that task's record is their only provenance. See models/requirements.sysml:PullContextRequirement and concept:scope-derivation, which both record the same thing.",
+      "definition": "Which project a record belongs to: a scheme-prefixed string derived from the Workspace at creation; the one hand-set path is tasks__update(scope=), a correction that leaves a 'scope corrected: old -> new' note event (task:2110cf4c). `git:<host>/<path>` when a git origin was readable, `path:<abs>` when there was none, `hint:<raw>` when a caller supplied a repo string that could not be resolved to a directory. An attribute, not an entity -- it has no identity of its own, only equality, which is the single operation every consumer needs. The prefix is part of the value because it records HOW the project was known: a fallback must never compare equal to a derived answer, or an omission becomes indistinguishable from an absence. The empty string is a fourth, distinct case meaning 'project unknown', and it is treated as compatible with every scope rather than as a project of its own. No code path backfills or infers it: nothing derives a scope for a record that was written without one, because deriving it later would answer from wherever the reader happens to be standing rather than from where the work happened. It is NOT, however, true that the unscoped set and the written-before-the-field set are the same -- task:e62cefe8 hand-stamped 105 of this repository's own pre-scope rows from their commit trailers, and those rows carry no marker distinguishing a hand-stamped scope from a derived one, so that task's record is their only provenance. See models/requirements.sysml:PullContextRequirement and concept:scope-derivation, which both record the same thing.",
       "evidence": "taskfw/scope.py:derive, taskfw/scope.py:normalise_remote, taskfw/scope.py:local_root, taskfw/task.py:Task, taskfw/mcp_server.py:tasks__update",
-      "lifecycle": "Derived once, at record creation, from the workspace in hand, and never recomputed on read -- a record does not change project because someone later read it from somewhere else. Changed afterwards only by an explicit tasks__update(scope=) correction."
+      "lifecycle": "Derived once, at record creation, from the Workspace in hand, and never recomputed on read -- a record does not change project because someone later read it from somewhere else. Changed afterwards only by an explicit tasks__update(scope=) correction."
     },
     "ClaimConfidence": {
       "bounded_context": "The Loop",
@@ -348,6 +355,18 @@
       "predicate": "references",
       "object": "Task",
       "note": "Names the currently-active task_id keyed by working directory (`mcp_server._workspace`); never a property stored on Task itself. Deliberately NOT keyed by the Scope term: a `git:` scope collapses two worktrees of one repo onto one project, which is the right answer for 'which project owns this task' and the wrong one for 'which task is open in this window'."
+    },
+    {
+      "subject": "ActiveTaskPointer",
+      "predicate": "references",
+      "object": "Workspace",
+      "note": "The pointer's key. One active task per Workspace, held in memory; see ActiveTaskPointer references Task for why the key is the per-directory Workspace rather than the per-project Scope."
+    },
+    {
+      "subject": "Scope",
+      "predicate": "references",
+      "object": "Workspace",
+      "note": "Resolved from the Workspace exactly once, when a record is created (scope.derive with no argument starts from scope.workspace), then stored and never recomputed on read -- a record does not change project because it is later read from another Workspace. The mapping is many-to-one: several Workspaces (worktrees, a second checkout) resolve to one git: Scope. Before task:b0f9f8de the two sides each spelled the TASKFW_SCOPE-or-cwd lookup out themselves; now both go through the one function."
     },
     {
       "subject": "MemoryRecord",

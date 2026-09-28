@@ -18,9 +18,11 @@ the truth, and a count that does not say so reads as complete.
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 import pytest
 
+from taskfw import mcp_server as m
 from taskfw import scope as scope_mod
 from taskfw.accuracy import grooming_accuracy, loop_debt
 from taskfw.context import _lessons_for, _related_candidates, _same_project
@@ -387,3 +389,34 @@ class TestLocalRootMemoisation:
         assert scope_mod._toplevel(str(tmp_path)) is None
         assert str(tmp_path.resolve()) in scope_mod._toplevel_cache
         assert scope_mod._toplevel(str(tmp_path)) is None
+
+
+class TestWorkspaceHasOneHome:
+    """The active pointer and a new task's Scope start from the same directory.
+
+    task:b0f9f8de -- the TASKFW_SCOPE-or-cwd lookup was spelled out twice
+    (scope.derive's default and mcp_server._workspace), identical only by
+    coincidence. If they ever diverge, a task created here would be activated
+    under one directory and scoped from another, and nothing would say so.
+    """
+
+    def test_env_override_reaches_both(self, tmp_path, monkeypatch):
+        repo = git_repo(tmp_path / "r", "git@github.com:Org/Repo.git")
+        monkeypatch.setenv("TASKFW_SCOPE", str(repo))
+        scope_mod.reset_cache()
+        assert m._workspace() == str(repo)
+        assert scope_mod.derive() == "git:github.com/org/repo"
+
+    def test_cwd_reaches_both_when_env_is_unset(self, tmp_path, monkeypatch):
+        repo = git_repo(tmp_path / "r", "git@github.com:Org/Repo.git")
+        monkeypatch.delenv("TASKFW_SCOPE", raising=False)
+        monkeypatch.chdir(repo)
+        scope_mod.reset_cache()
+        assert Path(m._workspace()).resolve() == repo.resolve()
+        assert scope_mod.derive() == "git:github.com/org/repo"
+
+    def test_both_read_the_one_function(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(scope_mod, "workspace", lambda: str(tmp_path))
+        scope_mod.reset_cache()
+        assert m._workspace() == str(tmp_path)
+        assert scope_mod.derive() == f"{scope_mod.PATH}{tmp_path.resolve()}"

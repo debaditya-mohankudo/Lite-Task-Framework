@@ -11,7 +11,6 @@ neither owns the rules.
 from __future__ import annotations
 
 import functools
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -122,9 +121,10 @@ def _workspace() -> str:
     open in this window". Two different questions, so two different functions,
     and two different names: this was `_scope()` and its responses said
     `scope`, the same key tasks__grooming_accuracy uses for a Scope value
-    (review 2026-09-14 A4, task:a8394f74).
+    (review 2026-09-14 A4, task:a8394f74). The directory itself comes from
+    scope.workspace(), the same one derive() starts from (task:b0f9f8de).
     """
-    return os.environ.get("TASKFW_SCOPE") or os.getcwd()
+    return scope_mod.workspace()
 
 
 def _denied(d: lifecycle.Ruling) -> dict:

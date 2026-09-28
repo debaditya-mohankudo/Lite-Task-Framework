@@ -150,6 +150,21 @@ def _origin_url(cwd: str) -> str | None:
     return out.stdout.strip() or None
 
 
+def workspace() -> str:
+    """The directory this process is working in: TASKFW_SCOPE, else the cwd.
+
+    The one home for that resolution (task:b0f9f8de). Two questions start
+    from it -- "which project owns this?" (`derive()`) and "which task is
+    open in this window?" (`mcp_server._workspace`) -- and they used to spell
+    the lookup out separately, identical by coincidence rather than by
+    construction. A change to one (a new override, symlink handling) would
+    have silently keyed the active pointer and a new task's Scope off two
+    different directories. Read on every call, never memoised: the env can
+    change under a caller (tests monkeypatch it), and the answer is cheap.
+    """
+    return os.environ.get("TASKFW_SCOPE") or os.getcwd()
+
+
 def derive(cwd: str | None = None) -> str:
     """The scope for a working directory. Never raises, never returns empty.
 
@@ -159,7 +174,7 @@ def derive(cwd: str | None = None) -> str:
     that checkout's origin, so the override cannot be used to smuggle in a
     sixth spelling of a project name.
     """
-    cwd = cwd or os.environ.get("TASKFW_SCOPE") or os.getcwd()
+    cwd = cwd or workspace()
     key = _resolve_key(cwd)
     if key in _cache:
         return _cache[key]
