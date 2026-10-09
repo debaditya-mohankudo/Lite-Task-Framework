@@ -38,11 +38,24 @@ _FTS_DDL = f"CREATE VIRTUAL TABLE IF NOT EXISTS {_FTS_TABLE} USING fts5(id UNIND
 _FTS_INSERT = f"INSERT INTO {_FTS_TABLE} (id, tags, text) VALUES (?,?,?)"
 
 
+def _pid_alive(pid: int) -> bool:
+    """Whether a process with this pid exists. EPERM means it does, as another user."""
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 class TaskStore:
     def __init__(self, path: Path | str | None = None, conn: sqlite3.Connection | None = None):
         self.conn = conn if conn is not None else connect(path)
         self.fts = self._try_enable_fts()
         self._active: dict[str, str] = {}
+        # Prune what a previous server process left in the mirror file.
+        self._export_active()
 
     def _try_enable_fts(self) -> bool:
         try:
@@ -362,20 +375,36 @@ class TaskStore:
     def _export_active(self) -> None:
         """Mirror the in-memory pointers to a JSON file for outside readers.
 
-        One-way: nothing reads it back, so the pointer stays ephemeral and the
-        file can never disagree with it for longer than a write. Shape is
-        {scope: {"id", "title"}}. TASKFW_ACTIVE_FILE overrides the path ("0"
-        disables). Never raises -- a status display must not break a tool call.
+        One-way: nothing reads it back into the pointer, so the pointer stays
+        ephemeral. Shape is {scope: {"id", "title", "pid"}}, `pid` being the
+        server process that owns the entry. The write merges into what is on
+        disk rather than replacing it: other live processes' scopes are kept,
+        while entries whose process is dead (or that carry no pid, written
+        before this field existed) and this process's own scopes that are no
+        longer active are dropped. That is what stops a restart leaving the
+        last process's task on the bar, and two sessions overwriting each
+        other. TASKFW_ACTIVE_FILE overrides the path ("0" disables). Never
+        raises -- a status display must not break a tool call.
         """
         target = os.environ.get("TASKFW_ACTIVE_FILE", "~/.taskfw/active.json")
         if target == "0":
             return
         try:
+            path = Path(target).expanduser()
+            me = os.getpid()
             out = {}
+            try:
+                existing = json.loads(path.read_text())
+            except (OSError, ValueError):
+                existing = {}
+            if isinstance(existing, dict):
+                for scope, entry in existing.items():
+                    pid = entry.get("pid") if isinstance(entry, dict) else None
+                    if isinstance(pid, int) and pid != me and _pid_alive(pid):
+                        out[scope] = entry
             for scope, task_id in self._active.items():
                 task = self.get(task_id)
-                out[scope] = {"id": task_id, "title": task.title if task else ""}
-            path = Path(target).expanduser()
+                out[scope] = {"id": task_id, "title": task.title if task else "", "pid": me}
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(".tmp")
             tmp.write_text(json.dumps(out))

@@ -5,6 +5,7 @@ in the prior system left stale edges with no way to clear them.
 """
 from __future__ import annotations
 
+import os
 import pytest
 
 from taskfw.task import ResolutionItem, Task
@@ -280,12 +281,55 @@ class TestActiveExport:
         a, b = store.save(make(title="alpha")), store.save(make(title="beta"))
         store.set_active(a.id, scope="/work/one")
         store.set_active(b.id, scope="/work/two")
+        pid = os.getpid()
         assert self._read(exported) == {
-            "/work/one": {"id": a.id, "title": "alpha"},
-            "/work/two": {"id": b.id, "title": "beta"},
+            "/work/one": {"id": a.id, "title": "alpha", "pid": pid},
+            "/work/two": {"id": b.id, "title": "beta", "pid": pid},
         }
         store.clear_active("/work/one")
         assert list(self._read(exported)) == ["/work/two"]
+
+    def _dead_pid(self):
+        import subprocess
+        import sys
+        p = subprocess.Popen([sys.executable, "-c", "pass"])
+        p.wait()
+        return p.pid
+
+    def test_restart_prunes_the_previous_processes_entry(self, tmp_path, exported):
+        import json
+        exported.write_text(json.dumps({"/w": {"id": "old", "title": "t", "pid": self._dead_pid()}}))
+        TaskStore(tmp_path / "t.db")
+        assert self._read(exported) == {}
+
+    def test_entry_without_a_pid_is_pruned_at_startup(self, tmp_path, exported):
+        import json
+        exported.write_text(json.dumps({"/w": {"id": "old", "title": "t"}}))
+        TaskStore(tmp_path / "t.db")
+        assert self._read(exported) == {}
+
+    def test_other_live_processes_scopes_survive_a_write(self, store, exported):
+        import json
+        import subprocess
+        import sys
+        other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+        try:
+            exported.write_text(json.dumps({"/other": {"id": "x", "title": "t", "pid": other.pid}}))
+            store.set_active(store.save(make(title="mine")).id, scope="/mine")
+            data = self._read(exported)
+            assert data["/other"]["id"] == "x"
+            assert data["/mine"]["pid"] == os.getpid()
+            store.clear_active("/mine")
+            assert list(self._read(exported)) == ["/other"]
+        finally:
+            other.kill()
+            other.wait()
+
+    def test_dead_owner_is_pruned_on_the_next_write(self, store, exported):
+        import json
+        exported.write_text(json.dumps({"/gone": {"id": "x", "title": "t", "pid": self._dead_pid()}}))
+        store.set_active(store.save(make()).id, scope="/mine")
+        assert list(self._read(exported)) == ["/mine"]
 
     def test_disabled_writes_nothing(self, store, exported, monkeypatch):
         monkeypatch.setenv("TASKFW_ACTIVE_FILE", "0")
