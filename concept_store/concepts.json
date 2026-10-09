@@ -1,5 +1,30 @@
 {
   "concepts": {
+    "active-pointer-file-mirror": {
+      "confidence": 0.8,
+      "contracts": [
+        "Entry shape is {scope: {id, title, pid}}, pid being the owning server process (task:dc069942).",
+        "Every export merges into the file: other live processes' scopes are kept; entries with a dead pid or no pid, and this process's scopes no longer active, are dropped.",
+        "TaskStore.__init__ exports once, so a restart prunes the previous process's leftovers on the first tool call (the store is lazy, mcp_server.store()).",
+        "Exporting never raises or blocks a tool call; writes go through tmp + os.replace.",
+        "Readers should skip an entry whose pid is dead; window_title_bar.py (two copies: ~/.config/kitty and claude-hooks/kitty/config) does, and still shows pid-less entries."
+      ],
+      "created_at": "2026-10-09T12:44:17.468963+00:00",
+      "description": "TaskStore mirrors its in-memory active pointers to ~/.taskfw/active.json (TASKFW_ACTIVE_FILE overrides, '0' disables) for outside readers such as the kitty window_title_bar.py banner. The pointer stays the only source of truth; the file is a derived, shared view across server processes.",
+      "evidence": [
+        "taskfw/store.py:TaskStore._export_active",
+        "taskfw/store.py:_pid_alive",
+        "tests/test_store.py:TestActiveExport"
+      ],
+      "invariants": [
+        "Nothing reads the file back into the pointer, so the file can never change what tasks__active reports.",
+        "No lock guards the read-merge-write; a lost update to one scope is repaired by that process's next export."
+      ],
+      "last_validated": "2026-10-09T12:44:17.468983+00:00",
+      "module": "taskfw/store.py",
+      "name": "active-pointer-file-mirror",
+      "related": []
+    },
     "active-task-pointer-lifecycle": {
       "confidence": 0.9,
       "contracts": [
@@ -1555,6 +1580,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-09-27T16:08:01.671198+00:00"
+    "updated_at": "2026-10-09T12:44:17.469032+00:00"
   }
 }
