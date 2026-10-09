@@ -263,3 +263,39 @@ class TestActiveTask:
     def test_clear_active_on_empty_scope_is_a_no_op(self, store):
         store.clear_active()
         assert store.get_active() is None
+
+
+class TestActiveExport:
+    @pytest.fixture
+    def exported(self, tmp_path, monkeypatch):
+        path = tmp_path / "active.json"
+        monkeypatch.setenv("TASKFW_ACTIVE_FILE", str(path))
+        return path
+
+    def _read(self, path):
+        import json
+        return json.loads(path.read_text())
+
+    def test_set_writes_id_and_title_and_clear_removes_only_that_scope(self, store, exported):
+        a, b = store.save(make(title="alpha")), store.save(make(title="beta"))
+        store.set_active(a.id, scope="/work/one")
+        store.set_active(b.id, scope="/work/two")
+        assert self._read(exported) == {
+            "/work/one": {"id": a.id, "title": "alpha"},
+            "/work/two": {"id": b.id, "title": "beta"},
+        }
+        store.clear_active("/work/one")
+        assert list(self._read(exported)) == ["/work/two"]
+
+    def test_disabled_writes_nothing(self, store, exported, monkeypatch):
+        monkeypatch.setenv("TASKFW_ACTIVE_FILE", "0")
+        store.set_active(store.save(make()).id)
+        assert not exported.exists()
+
+    def test_unwritable_target_never_breaks_set_active(self, store, tmp_path, monkeypatch):
+        blocker = tmp_path / "file"
+        blocker.write_text("x")
+        monkeypatch.setenv("TASKFW_ACTIVE_FILE", str(blocker / "sub" / "active.json"))
+        t = store.save(make())
+        store.set_active(t.id)
+        assert store.get_active() == t.id

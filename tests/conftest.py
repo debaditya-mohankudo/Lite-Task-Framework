@@ -27,6 +27,10 @@ os.environ.setdefault(
     os.path.join(tempfile.mkdtemp(prefix="taskfw-test-session-"), "tasks.db"),
 )
 os.environ.setdefault(
+    "TASKFW_ACTIVE_FILE",
+    os.path.join(tempfile.mkdtemp(prefix="taskfw-test-active-"), "active.json"),
+)
+os.environ.setdefault(
     "TASKFW_LOG_JSONL",
     str(Path(__file__).parent / ".taskfw-test-logs.jsonl"),
 )

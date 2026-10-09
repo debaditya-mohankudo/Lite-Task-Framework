@@ -10,6 +10,8 @@ rejects only what it structurally cannot do.
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import sqlite3
 from pathlib import Path
@@ -345,6 +347,7 @@ class TaskStore:
         """Mark task_id as the active task for scope."""
         self._active[scope] = task_id
         log.info("active set task=%s scope=%s", task_id, scope)
+        self._export_active()
 
     def get_active(self, scope: str = "global") -> str | None:
         """The active task for scope, if any."""
@@ -354,3 +357,28 @@ class TaskStore:
         """Clear the active task for scope, if any."""
         if self._active.pop(scope, None) is not None:
             log.info("active clear scope=%s", scope)
+            self._export_active()
+
+    def _export_active(self) -> None:
+        """Mirror the in-memory pointers to a JSON file for outside readers.
+
+        One-way: nothing reads it back, so the pointer stays ephemeral and the
+        file can never disagree with it for longer than a write. Shape is
+        {scope: {"id", "title"}}. TASKFW_ACTIVE_FILE overrides the path ("0"
+        disables). Never raises -- a status display must not break a tool call.
+        """
+        target = os.environ.get("TASKFW_ACTIVE_FILE", "~/.taskfw/active.json")
+        if target == "0":
+            return
+        try:
+            out = {}
+            for scope, task_id in self._active.items():
+                task = self.get(task_id)
+                out[scope] = {"id": task_id, "title": task.title if task else ""}
+            path = Path(target).expanduser()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(out))
+            os.replace(tmp, path)
+        except Exception as exc:
+            log.warning("active export failed: %s", exc)
