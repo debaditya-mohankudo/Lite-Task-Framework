@@ -567,6 +567,52 @@
         "grooming-shape"
       ]
     },
+    "kitty-open-tool": {
+      "confidence": 0.8,
+      "contracts": [
+        "open_task(task_id, worktree, runner, env, timeout) -> dict; never raises; runner is injectable so tests never fork"
+      ],
+      "created_at": "2026-10-10T13:23:34.286862+00:00",
+      "description": "Optional, fail-soft bridge from taskfw to the kitty-taskfw CLI (task:87c91a76). tasks__open_in_kitty shells out to `kitty-taskfw open --worktree <dir> <task_id>` and returns {status, window_id, socket, reason}, status opened / exists / not_opened. Nothing imports kitty-taskfw and nothing runs at import; the command (TASKFW_KITTY_OPEN_CMD shell-split, else kitty-taskfw via shutil.which) is resolved inside the call. Missing command, timeout, bad output or no known directory yield not_opened with a reason, never an exception; only an unknown task_id is an `error`. The kitty store stays in kitty-taskfw (task:dfa67756). Complements the one-way file mirror [[active-pointer-file-mirror]].",
+      "evidence": [
+        "taskfw/kitty_open.py",
+        "taskfw/mcp_server.py:tasks__open_in_kitty",
+        "tests/test_kitty_open.py"
+      ],
+      "invariants": [
+        "task_id is required, so a bare call (TestToolCallLogging) can never launch a tab",
+        "worktree defaults to scope.local_root(task.scope); when unknown the tool returns not_opened and never falls back to the workspace or server cwd",
+        "The tool does not set the active pointer: the new tab's session has its own server"
+      ],
+      "last_validated": "2026-10-10T13:23:34.286919+00:00",
+      "module": "taskfw/kitty_open.py",
+      "name": "kitty-open-tool",
+      "related": [
+        "mcp-tool-registration-and-hooks",
+        "active-pointer-file-mirror"
+      ]
+    },
+    "kitty-open-tool-tests": {
+      "confidence": 0.8,
+      "contracts": [
+        "Tests pin the observable result shape, not how open_task builds its argv beyond the explicit --worktree"
+      ],
+      "created_at": "2026-10-10T13:24:01.408475+00:00",
+      "description": "Tests for the fail-soft kitty open bridge (task:87c91a76). The runner is injected and KITTY_* plus TASKFW_KITTY_OPEN_CMD are cleared, so no test forks and a suite run inside kitty can never touch a live tab. Covers opened / exists passthrough, explicit argv with --worktree, missing command, PATH lookup, unparseable output, timeout, OSError, unknown task id, no-guess when the directory is unknown, and the required task_id. Contract of [[kitty-open-tool]].",
+      "evidence": [
+        "tests/test_kitty_open.py"
+      ],
+      "invariants": [
+        "No test launches a subprocess or a kitty window",
+        "Every not_opened path is asserted to carry a reason and no `error` key"
+      ],
+      "last_validated": "2026-10-10T13:24:01.408544+00:00",
+      "module": "tests/test_kitty_open.py",
+      "name": "kitty-open-tool-tests",
+      "related": [
+        "kitty-open-tool"
+      ]
+    },
     "lifecycle-rules-pure-function-testing": {
       "confidence": 0.8,
       "contracts": [],
@@ -1580,6 +1626,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-09T12:44:17.469032+00:00"
+    "updated_at": "2026-10-10T13:24:01.408682+00:00"
   }
 }

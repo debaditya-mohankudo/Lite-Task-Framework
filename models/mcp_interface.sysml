@@ -70,6 +70,7 @@ package McpInterface {
         item tasks__format_commit_message;
         item tasks__add_commit;
         item tasks__set_active;
+        item tasks__open_in_kitty;
         item tasks__active;
     }
 

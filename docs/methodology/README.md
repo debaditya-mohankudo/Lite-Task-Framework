@@ -60,3 +60,4 @@ Loop memory: `task_memory__record` `task_memory__recall` `task_memory__get` `tas
 Writing: `tasks__create` `tasks__update` `tasks__check_item` `tasks__finish` `tasks__add_decision` `tasks__add_introspection`
 Graph: `tasks__link` `tasks__unlink` `tasks__add_commit`
 Active: `tasks__set_active` `tasks__active` (deactivation is folded into `tasks__add_introspection`)
+Optional: `tasks__open_in_kitty` opens a task in a kitty tab by running `kitty-taskfw open` (override the command with `TASKFW_KITTY_OPEN_CMD`). Fail-soft: it returns `opened` / `exists` / `not_opened` with a reason and never raises when kitty-taskfw or kitty is missing; pass `worktree` when the task's scope has no local directory.

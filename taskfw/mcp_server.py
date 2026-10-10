@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 from mcp.server import MCPServer
 
-from taskfw import dispatcher, lifecycle
+from taskfw import dispatcher, kitty_open, lifecycle
 from taskfw import scope as scope_mod
 from taskfw.accuracy import _task_grading, grooming_accuracy, loop_debt
 from taskfw.concepts import ConceptStore
@@ -1083,6 +1083,33 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
     workspace = _workspace()
     store().set_active(task_id, workspace)
     return {"ok": True, "active": task_id, "workspace": workspace}
+
+
+@_tool()
+def tasks__open_in_kitty(task_id: str, worktree: str = "") -> dict[str, Any]:
+    """Open task_id in a kitty tab by running `kitty-taskfw open`. Fail-soft and optional.
+
+    Returns {status, window_id, socket, reason} with status opened / exists /
+    not_opened. Anything that stops the tab opening (kitty-taskfw absent, a
+    timeout, unparseable output, no known directory) is a not_opened result with
+    a reason, never an exception; only an unknown task_id is an `error`.
+
+    task_id is required so a bare call can never launch a tab. worktree is the
+    tab's working directory; omitted, it is the task scope's local root, and when
+    that is unknown the tool does not guess (not_opened, pass worktree). Does not
+    touch the active pointer: the new tab's session has its own server.
+    Command: TASKFW_KITTY_OPEN_CMD (shell-split), else `kitty-taskfw` on PATH.
+    """
+    task = store().get(task_id)
+    if task is None:
+        return {"error": f"No task {task_id!r}"}
+    worktree = worktree or scope_mod.local_root(task.scope) or ""
+    if not worktree:
+        return {
+            "status": "not_opened", "window_id": None, "socket": None,
+            "reason": "no known directory for this task; pass worktree",
+        }
+    return kitty_open.open_task(task_id, worktree)
 
 
 @_tool()
