@@ -53,10 +53,10 @@ that also touches a `.py` file gets the full suite.
 ## Every commit cites a task
 
 ```
-task:<id>
+task:<id> Subject
 ```
 
-on the second line, after a blank line. This is not decoration — the commit→task
+at the very start of the first line, before the subject text. This is not decoration — the commit→task
 edge is how `tasks__context` reassembles what happened later, and a commit with
 no task is invisible to the loop that is supposed to learn from it.
 
@@ -84,16 +84,14 @@ tasks__format_commit_message(
 )
 ```
 
-This returns the exact shape below — subject, blank, `task:<id>`, blank, body —
+This returns the exact shape below — `task:<id> subject`, blank, body —
 so the shape is produced once, correctly, instead of re-assembled from this
 prose by hand every time. The tool only formats: it validates the task exists,
 rejects an empty or multi-line subject, and strips a trailing period. It does
 not touch the filesystem or git.
 
 ```
-Subject — the claim, in one line
-
-task:<id>
+task:<id> Subject — the claim, in one line
 
 Why this exists. ...
 

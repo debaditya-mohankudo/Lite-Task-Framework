@@ -1029,7 +1029,7 @@ def tasks__edges(task_id: str) -> dict[str, Any]:
 
 @_tool()
 def tasks__format_commit_message(task_id: str, subject: str, body: str = "") -> dict[str, Any]:
-    """Format a commit message in the canonical shape: subject, blank, task:<id>, blank, body.
+    """Format a commit message in the canonical shape: `task:<id> subject`, blank, body.
 
     Formatting only — no filesystem or git side effects. The caller still
     writes the returned message to a file and runs `git commit -F <path>`
@@ -1045,7 +1045,7 @@ def tasks__format_commit_message(task_id: str, subject: str, body: str = "") -> 
         return {"error": "subject must be a single line"}
     if subject.endswith("."):
         subject = subject[:-1]
-    message = f"{subject}\n\ntask:{task_id}"
+    message = f"task:{task_id} {subject}"
     body = body.strip()
     if body:
         message += f"\n\n{body}"

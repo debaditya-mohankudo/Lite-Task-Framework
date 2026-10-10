@@ -616,17 +616,17 @@ class TestFormatCommitMessage:
     def test_trailing_period_is_stripped(self):
         t = create()
         r = m.tasks__format_commit_message(t["id"], "A subject.")
-        assert r["message"].startswith("A subject\n\n")
+        assert r["message"] == f"task:{t['id']} A subject"
 
     def test_shape_without_body(self):
         t = create()
         r = m.tasks__format_commit_message(t["id"], "A subject")
-        assert r["message"] == f"A subject\n\ntask:{t['id']}"
+        assert r["message"] == f"task:{t['id']} A subject"
 
     def test_shape_with_body(self):
         t = create()
         r = m.tasks__format_commit_message(t["id"], "A subject", body="Why this exists.")
-        assert r["message"] == f"A subject\n\ntask:{t['id']}\n\nWhy this exists."
+        assert r["message"] == f"task:{t['id']} A subject\n\nWhy this exists."
 
 
 class TestActiveTask:

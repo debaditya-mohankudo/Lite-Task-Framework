@@ -37,7 +37,7 @@
     "tasks__link": { "namespace": "tasks", "use": "Create an edge between two tasks. Idempotent." },
     "tasks__unlink": { "namespace": "tasks", "use": "Remove an edge, or every edge between two tasks when rel is omitted." },
     "tasks__edges": { "namespace": "tasks", "use": "Edges touching a task, both directions." },
-    "tasks__format_commit_message": { "namespace": "tasks", "use": "Format a commit message in the canonical shape: subject, blank, task:<id>, blank, body." },
+    "tasks__format_commit_message": { "namespace": "tasks", "use": "Format a commit message in the canonical shape: `task:<id> subject`, blank, body." },
     "tasks__add_commit": { "namespace": "tasks", "use": "Record that a commit implemented a task. Idempotent." },
     "tasks__set_active": { "namespace": "tasks", "use": "Set task_id as the active task for this workspace. In-memory only." },
     "tasks__open_in_kitty": { "namespace": "tasks", "use": "Open a task in a kitty tab via `kitty-taskfw open`; fail-soft, returns opened / exists / not_opened with a reason." },
