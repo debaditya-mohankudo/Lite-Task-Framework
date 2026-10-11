@@ -753,12 +753,13 @@
     "kitty-open-tool": {
       "confidence": 0.8,
       "contracts": [
-        "open_task(task_id, worktree, runner, env, timeout, prompt) -> dict; never raises; runner is injectable so tests never fork",
+        "open_task(task_id, worktree, runner, env, timeout, prompt, isolate) -> dict; never raises; runner is injectable so tests never fork",
         "A set-but-unusable TASKFW_KITTY_OPEN_CMD (shlex error, or no program name such as \"''\") gives a not_opened reason naming the env var, never the PATH-miss 'not found' reason, and runs nothing (task:ca657370)",
-        "prompt crosses the subprocess boundary as one `--prompt <text>` argv pair, omitted when empty; the tool's default prompt is a one-line pointer to read the task notes via tasks__get, never the brief itself (context is pulled, not pushed)"
+        "prompt crosses the subprocess boundary as one `--prompt <text>` argv pair, omitted when empty; the tool's default prompt is a one-line pointer to read the task notes via tasks__get, never the brief itself (context is pulled, not pushed)",
+        "isolate is tri-state: True -> `--isolate`, False -> `--no-isolate`, None -> no flag (the opener decides from live sibling tabs); the result carries `worktree` and `isolated` so the caller sees what was chosen (task:d482a160)"
       ],
       "created_at": "2026-10-10T13:23:34.286862+00:00",
-      "description": "Optional, fail-soft bridge from taskfw to the in-repo taskfw.kitty launcher (moved in from the standalone kitty-taskfw repo, task:3ddbfc92) (task:87c91a76). tasks__open_in_kitty shells out to `python -m taskfw.kitty.launcher open --worktree <dir> <task_id> [--prompt P]` and returns {status, window_id, socket, reason}, status opened / exists / not_opened. Nothing imports taskfw.kitty and nothing runs at import; the command (TASKFW_KITTY_OPEN_CMD shell-split, else the in-repo launcher) is resolved inside the call. A missing or unusable command, timeout, bad output or no known directory yield not_opened with a reason, never an exception; only an unknown task_id is an `error`. The tab starts claude with the prompt as its initial argument (task:eff7f915), replacing the fragile send-text handoff. Complements the one-way file mirror [[active-pointer-file-mirror]].",
+      "description": "Optional, fail-soft bridge from taskfw to the in-repo taskfw.kitty launcher (moved in from the standalone kitty-taskfw repo, task:3ddbfc92) (task:87c91a76). tasks__open_in_kitty shells out to `python -m taskfw.kitty.launcher open --worktree <dir> <task_id> [--prompt P] [--isolate|--no-isolate]` and returns {status, window_id, socket, reason, worktree, isolated}, status opened / exists / not_opened. Nothing imports taskfw.kitty and nothing runs at import; the command (TASKFW_KITTY_OPEN_CMD shell-split, else the in-repo launcher) is resolved inside the call. A missing or unusable command, timeout, bad output or no known directory yield not_opened with a reason, never an exception; only an unknown task_id is an `error`. The tab starts claude with the prompt as its initial argument (task:eff7f915), replacing the fragile send-text handoff. Complements the one-way file mirror [[active-pointer-file-mirror]].",
       "evidence": [
         "taskfw/kitty_open.py",
         "taskfw/mcp_server.py:tasks__open_in_kitty",
@@ -769,7 +770,7 @@
         "worktree defaults to scope.local_root(task.scope); when unknown the tool returns not_opened and never falls back to the workspace or server cwd",
         "The tool does not set the active pointer: the new tab's session has its own server"
       ],
-      "last_validated": "2026-10-11T15:35:14.896958+00:00",
+      "last_validated": "2026-10-11T15:45:05.032967+00:00",
       "module": "taskfw/kitty_open.py",
       "name": "kitty-open-tool",
       "related": [
@@ -879,7 +880,7 @@
         "start/resume/open accept --prompt; claude_cmd appends it as ONE argv element after `--` (kitty runs argv with no shell, so quotes and newlines need no escaping; `--` keeps a leading '-' a prompt). No prompt, no extra argv: resume --fresh gets none unless given (task:eff7f915)"
       ],
       "created_at": "2026-10-10T10:52:13.740338+00:00",
-      "description": "`start`/`resume`/`list`/`cleanup`/`open` CLI. Opens a NEW kitty tab per task (in the cwd, or a per-task git worktree with --isolate), sets identity env and user var once, runs `claude --settings <hooks>` and records the tab in the store. An optional --prompt is claude's initial argument, so the handoff is submitted at startup rather than typed in.",
+      "description": "`start`/`resume`/`list`/`cleanup`/`open` CLI. Opens a NEW kitty tab per task (in the cwd, or a per-task git worktree with --isolate; `open` isolates by default when another live tab shares the repo), sets identity env and user var once, runs `claude --settings <hooks>` and records the tab in the store. An optional --prompt is claude's initial argument, so the handoff is submitted at startup rather than typed in.",
       "evidence": [
         "taskfw/kitty/launcher.py"
       ],
@@ -891,10 +892,10 @@
         "The install check lives in main() and the opener, not Launcher.__init__ (tests build Launcher with fake hook paths); it reads DEFAULT_HOOKS at call time",
         "Worktree path and branch are pure functions of (repo, task_id): two tasks cannot share a tree",
         "Worktrees are never removed on hibernate or window close, only by an explicit cleanup (resume reuses the stored cwd)",
-        "Worktree creation lives in resolve_worktree (called from main, only when --isolate), not Launcher._launch; resume never calls it",
-        "The launcher never composes a prompt; it only forwards one (the default pointer is the MCP tool's)"
+        "The launcher never composes a prompt; it only forwards one (the default pointer is the MCP tool's)",
+        "Worktree creation for start lives in resolve_worktree (main, only when --isolate; an explicit --worktree wins); for `open` the --worktree is only a BASE directory and the opener decides isolation, so the launcher open branch just parses --isolate/--no-isolate (default None) (task:d482a160)"
       ],
-      "last_validated": "2026-10-11T15:34:07.185971+00:00",
+      "last_validated": "2026-10-11T15:45:05.032967+00:00",
       "module": "taskfw/kitty/launcher.py",
       "name": "kitty-task-launcher",
       "related": []
@@ -929,19 +930,21 @@
         "Does not set taskfw's active-task pointer",
         "Reachable from PATH as `kitty-taskfw open <task_id>` after an editable install",
         "A broken install (hooks file missing) is not_opened with an install hint, still exit 0 and never raises",
-        "open_task(..., prompt=None) passes the prompt to Launcher.start unchanged (task:eff7f915)"
+        "open_task(..., prompt=None) passes the prompt to Launcher.start unchanged (task:eff7f915)",
+        "open_task(..., isolate=None): None isolates only when another live tab (store row not closed AND window present in kitty ls) has the same repo root, else the directory as given; True/False force it. OpenResult carries `worktree` and `isolated`, and an opened `reason` names an isolation choice (task:d482a160)"
       ],
       "created_at": "2026-10-10T13:02:45.025376+00:00",
-      "description": "`launcher open <task_id>`: fail-soft entry for callers that may be outside kitty. Discovers the kitty socket, dedups against live task_id windows, starts a tab via Launcher.start (forwarding an optional initial prompt), and always returns an OpenResult (opened|exists|not_opened).",
+      "description": "`launcher open <task_id>`: fail-soft entry for callers that may be outside kitty. Discovers the kitty socket, dedups against live task_id windows, chooses the tab's directory (isolating into a per-task worktree when asked or when a live sibling tab shares the repo), starts a tab via Launcher.start (forwarding an optional initial prompt), and always returns an OpenResult (opened|exists|not_opened).",
       "evidence": [
         "taskfw/kitty/opener.py"
       ],
       "invariants": [
         "Every kitten call is time-bounded (adapter._run, 20 s) and a missing/unrunnable kitten is KittyUnreachable, not FileNotFoundError",
         "Liveness comes from kitten ls, never from a store row alone",
-        "No tab is launched unless the worktree exists and claude is on PATH"
+        "No tab is launched unless the worktree exists and claude is on PATH",
+        "A failed worktree is not_opened and launches nothing; it never falls back into the shared tree. Outside a git repo isolation falls back to the directory and the reason says so"
       ],
-      "last_validated": "2026-10-11T15:35:17.046997+00:00",
+      "last_validated": "2026-10-11T15:45:05.032967+00:00",
       "module": "taskfw/kitty/opener.py",
       "name": "kitty-task-opener",
       "related": []
@@ -977,9 +980,9 @@
         "taskfw/kitty/worktrees.py"
       ],
       "invariants": [
-        "Worktrees are never created unless --isolate or --worktree is passed"
+        "Worktrees are never created unless isolation is requested or defaulted on by the opener (a live sibling tab in the same repo), or --worktree is passed"
       ],
-      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "last_validated": "2026-10-11T15:45:05.032967+00:00",
       "module": "taskfw/kitty/worktrees.py",
       "name": "kitty-worktrees",
       "related": []

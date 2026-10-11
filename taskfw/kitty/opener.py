@@ -6,6 +6,11 @@ Contract (what a caller, e.g. a future taskfw MCP tool, may rely on):
   * status "exists"     -> a live window already carries this task; nothing is launched.
   * status "not_opened" -> nothing was launched; `reason` says why. That includes a task that has
     had a tab before and has none now: open never resumes, it points at `resume`.
+  * `worktree` is the directory the tab was started in and `isolated` says whether it is the task's
+    own git worktree. With isolate=None the opener decides: isolated when another live tab (store row
+    not closed, window present in kitty) runs in the same repo, else the directory as given; the
+    `reason` of an opened result names which. Failing to create the worktree is "not_opened", never
+    a fall back into the shared tree.
   * Nothing here sets taskfw's active-task pointer; that lives in the MCP server's memory.
 
 Unlike start/resume, the socket is optional: given none, live kitty sockets are discovered
@@ -24,6 +29,7 @@ from typing import Callable, Mapping
 from .adapter import KittyAdapter, KittyError, KittyVersionMismatch, normalize_socket
 from .launcher import Launcher, check_install
 from .store import Store
+from . import worktrees
 
 SOCKET_GLOB = "/tmp/kitty-*"
 
@@ -34,6 +40,8 @@ class OpenResult:
     window_id: int | None = None
     socket: str | None = None
     reason: str | None = None
+    worktree: str | None = None
+    isolated: bool | None = None
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -47,14 +55,15 @@ def open_task(task_id: str, worktree: str | None = None, *, socket: str | None =
               store: str | None = None, env: Mapping[str, str] = os.environ,
               adapter_factory: Callable[[str], KittyAdapter] = KittyAdapter,
               socket_glob: str = SOCKET_GLOB, claude: str | None = None,
-              prompt: str | None = None) -> OpenResult:
+              prompt: str | None = None, isolate: bool | None = None) -> OpenResult:
     try:
-        return _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt)
+        return _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt,
+                     isolate)
     except Exception as e:  # the whole point: nothing escapes into the caller
         return _not_opened(f"unexpected {type(e).__name__}: {e}")
 
 
-def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt) -> OpenResult:
+def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt, isolate) -> OpenResult:
     wt = Path(worktree or os.getcwd()).expanduser()
     if not wt.is_dir():
         return _not_opened(f"worktree {str(wt)!r} is not a directory")
@@ -105,6 +114,37 @@ def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, c
     else:
         return _not_opened(f"{len(live)} kitty instances are running and none was chosen; "
                            "pass --socket")
+    try:
+        wt, isolated, why = _choose_directory(task_id, wt, isolate, st, windows)
+    except worktrees.WorktreeError as e:  # never launch into a shared tree after a failure
+        return _not_opened(f"worktree: {e}")
     lau = Launcher(live[target], st, claude=claude)
     wid = lau.start(task_id, str(wt), prompt)
-    return OpenResult("opened", wid, target)
+    return OpenResult("opened", wid, target, why, str(wt), isolated)
+
+
+def _live_sibling(st: Store, windows: dict, repo: Path) -> str | None:
+    """task_id of a live tab in `repo`, else None. Live = store row not closed AND its window is
+    still in kitty's ls. Repo root is the main checkout, so a tab already in a worktree counts."""
+    present = {(sock, w.id) for sock, wins in windows.items() for w in wins}
+    for row in st.list(open_only=True):
+        if (row.socket, row.window_id) in present and worktrees.repo_root(row.cwd) == repo:
+            return row.task_id
+    return None
+
+
+def _choose_directory(task_id, wt, isolate, st, windows) -> tuple[Path, bool, str | None]:
+    """(directory, isolated, reason). isolate=None means decide from live sibling tabs."""
+    repo = worktrees.repo_root(wt)
+    if repo is None:
+        why = "not in a git repository; used the directory as given" if isolate else None
+        return wt, False, why
+    sibling = None
+    if isolate is None:
+        sibling = _live_sibling(st, windows, repo)
+        isolate = sibling is not None
+    if not isolate:
+        return wt, False, None
+    why = (f"isolated: task {sibling} has a live tab in {repo}" if sibling
+           else "isolated: requested")
+    return worktrees.ensure(repo, task_id), True, why

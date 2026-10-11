@@ -107,14 +107,16 @@ def test_main_start_default_isolate_and_removed_flag(repo, tmp_path, monkeypatch
         _main_start(monkeypatch, repo, ["start", "t1", "--no-worktree"])
 
 
-def test_main_open_default_and_isolate(repo, tmp_path, monkeypatch, capsys):
+def test_main_open_passes_base_dir_and_tristate_isolate(repo, monkeypatch):
     from taskfw.kitty import launcher, opener
     got = []
     monkeypatch.chdir(repo)
-    monkeypatch.setattr(opener, "open_task", lambda t, wt, **k: got.append(wt) or opener._not_opened("x"))
+    monkeypatch.setattr(opener, "open_task",
+                        lambda t, wt, **k: got.append((wt, k["isolate"])) or opener._not_opened("x"))
     launcher.main(["open", "t1"], env={})
     launcher.main(["open", "t1", "--isolate"], env={})
-    assert got[0] == str(repo.resolve()) and got[1].endswith("proj-worktrees/t1")
+    launcher.main(["open", "t1", "--no-isolate", "--worktree", "/some/dir"], env={})
+    assert got == [(str(repo), None), (str(repo), True), ("/some/dir", False)]
 
 
 def test_resume_keeps_stored_worktree_and_never_creates_one(repo, tmp_path, monkeypatch):

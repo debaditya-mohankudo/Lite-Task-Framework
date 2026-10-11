@@ -1130,10 +1130,11 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
 
 
 @_tool()
-def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "") -> dict[str, Any]:
+def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
+                         isolate: bool | None = None) -> dict[str, Any]:
     """Open task_id in a kitty tab by running `python -m taskfw.kitty.launcher open`. Fail-soft and optional.
 
-    Returns {status, window_id, socket, reason} with status opened / exists /
+    Returns {status, window_id, socket, reason, worktree, isolated} with status opened / exists /
     not_opened. Anything that stops the tab opening (a broken kitty setup, a
     timeout, unparseable output, no known directory) is a not_opened result with
     a reason, never an exception; only an unknown task_id is an `error`.
@@ -1145,6 +1146,12 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "") -> 
     prompt is claude's initial argument in the new tab (submitted at startup, so
     no send-text race). Omitted, it is a one-line pointer to read the task notes
     via tasks__get, never the brief itself: context is pulled, not pushed.
+    isolate: True runs the tab in the task's own git worktree of worktree's repo
+    (<repo>-worktrees/<task_id>, branch task/<task_id>); False never does; omitted, it
+    is isolated only when another live tab already runs in that repo, so a lone tab
+    keeps the plain directory. The result's `worktree`/`isolated` (and `reason` for an
+    automatic choice) say what was chosen; a failed worktree is not_opened, never a
+    fall back into the shared tree.
     Command: TASKFW_KITTY_OPEN_CMD (shell-split), else the in-repo taskfw.kitty launcher.
     """
     task = store().get(task_id)
@@ -1158,7 +1165,7 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "") -> 
         }
     prompt = prompt or (f"Task {task_id}: read its notes via tasks__get, then run /task-grooming "
                         "and implement.")
-    return kitty_open.open_task(task_id, worktree, prompt=prompt)
+    return kitty_open.open_task(task_id, worktree, prompt=prompt, isolate=isolate)
 
 
 @_tool()

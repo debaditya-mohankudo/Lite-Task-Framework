@@ -187,3 +187,89 @@ def test_prompt_reaches_claude_argv_only_when_given(ctx):
     w2 = World(**{"unix:/tmp/kitty-1": []})
     run(w2, {**ctx, "store": ctx["store"] + "2"}, socket="/tmp/kitty-1")
     assert "go: read notes" not in w2.launches()[0] and w2.launches()[0].count("--") == 1
+
+
+# --- isolation (task:d482a160) -------------------------------------------------------------
+
+def _git(cwd, *a):
+    subprocess.run(["git", "-C", str(cwd), *a], check=True, capture_output=True)
+
+
+@pytest.fixture
+def repo(tmp_path):
+    r = tmp_path / "proj"
+    r.mkdir()
+    _git(r, "init", "-b", "main")
+    _git(r, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--allow-empty", "-m", "init")
+    return r
+
+
+def _sibling(ctx, cwd, window_id=7, closed=False):
+    st = Store(ctx["store"])
+    row = st.record_launch(task_id="sib", window_id=window_id, tab_id=1, socket="unix:/tmp/kitty-1", cwd=str(cwd))
+    if closed:
+        st.mark_closed(row)
+    st.db.close()
+
+
+def _cwd_of(w):
+    return next(a for a in w.launches()[0] if a.startswith("--cwd=")).removeprefix("--cwd=")
+
+
+def _open(ctx, repo, wins, **kw):
+    w = World(**{"unix:/tmp/kitty-1": wins})
+    return w, run(w, {**ctx, "worktree": str(repo)}, socket="/tmp/kitty-1", **kw)
+
+
+def test_lone_tab_keeps_the_plain_directory(ctx, repo):
+    _, r = _open(ctx, repo, [])
+    assert (r.status, r.isolated, r.worktree) == ("opened", False, str(repo))
+
+
+def test_live_sibling_in_the_same_repo_isolates_by_default_and_says_so(ctx, repo):
+    _sibling(ctx, repo)
+    w, r = _open(ctx, repo, [(3, 7, {"task_id": "sib"})])
+    assert r.status == "opened" and r.isolated is True
+    assert r.worktree.endswith("proj-worktrees/abc") and "sib" in r.reason
+    assert _cwd_of(w) == r.worktree
+
+
+def test_sibling_already_in_a_worktree_still_counts_as_the_same_repo(ctx, repo):
+    from taskfw.kitty import worktrees
+    _sibling(ctx, worktrees.ensure(repo, "sib"))
+    assert _open(ctx, repo, [(3, 7, {"task_id": "sib"})])[1].isolated is True
+
+
+@pytest.mark.parametrize("case", ["closed", "vanished", "other-repo"])
+def test_closed_row_or_vanished_window_or_other_repo_is_not_a_sibling(ctx, repo, tmp_path, case):
+    other = tmp_path / "other"
+    other.mkdir()
+    _git(other, "init", "-b", "main")
+    _sibling(ctx, other if case == "other-repo" else repo, closed=case == "closed")
+    _, r = _open(ctx, repo, [] if case == "vanished" else [(3, 7, {})])
+    assert (r.status, r.isolated) == ("opened", False)
+
+
+def test_explicit_true_isolates_a_lone_tab(ctx, repo):
+    _, r = _open(ctx, repo, [], isolate=True)
+    assert r.isolated is True and r.worktree.endswith("proj-worktrees/abc") and "requested" in r.reason
+
+
+def test_explicit_false_beats_a_live_sibling(ctx, repo):
+    _sibling(ctx, repo)
+    _, r = _open(ctx, repo, [(3, 7, {"task_id": "sib"})], isolate=False)
+    assert (r.isolated, r.worktree) == (False, str(repo))
+
+
+def test_isolate_outside_a_repo_falls_back_and_says_so(ctx):
+    w = World(**{"unix:/tmp/kitty-1": []})
+    r = run(w, ctx, socket="/tmp/kitty-1", isolate=True)
+    assert (r.status, r.isolated) == ("opened", False) and "not in a git repository" in r.reason
+
+
+def test_worktree_failure_is_not_opened_and_launches_nothing(ctx, repo, monkeypatch):
+    from taskfw.kitty import worktrees
+    monkeypatch.setattr(worktrees, "ensure",
+                        lambda *a: (_ for _ in ()).throw(worktrees.WorktreeError("boom")))
+    w, r = _open(ctx, repo, [], isolate=True)
+    assert r.status == "not_opened" and "boom" in r.reason and not w.launches()

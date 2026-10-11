@@ -142,8 +142,10 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     o.add_argument("task_id")
     o.add_argument("--worktree", default=None)
     o.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
-    o.add_argument("--isolate", action="store_true",
-                   help="run in a git worktree of this repo derived from the task id")
+    o.add_argument("--isolate", dest="isolate", action="store_true", default=None,
+                   help="run in a git worktree of the --worktree directory's repo, derived from the task id")
+    o.add_argument("--no-isolate", dest="isolate", action="store_false",
+                   help="never isolate; default: isolate only when another live tab shares the repo")
     c = sub.add_parser("cleanup", help="remove a task's worktree and branch; refuses dirty or unmerged work")
     c.add_argument("task_id")
     a = ap.parse_args(argv)
@@ -159,14 +161,10 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
             return 1
         return 0
     if a.cmd == "open":  # socket optional here and nothing below may fail the caller
-        from .opener import open_task, _not_opened
-        try:
-            wt = resolve_worktree(a.task_id, a.worktree, a.isolate)
-        except worktrees.WorktreeError as e:  # never launch into a shared tree after a failure
-            print(json.dumps(_not_opened(f"worktree: {e}").as_dict()))
-            return 0
-        print(json.dumps(open_task(a.task_id, wt, socket=a.socket, store=a.store,
-                                   env=env, prompt=a.prompt).as_dict()))
+        from .opener import open_task
+        # the directory is only a base here: the opener isolates it (or not) once it knows the live tabs
+        print(json.dumps(open_task(a.task_id, a.worktree or os.getcwd(), socket=a.socket, store=a.store,
+                                   env=env, prompt=a.prompt, isolate=a.isolate).as_dict()))
         return 0
     if not a.socket:
         ap.error("no kitty socket: pass --socket or run inside kitty")
