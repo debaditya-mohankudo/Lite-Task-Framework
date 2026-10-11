@@ -43,7 +43,7 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "9635859dcffa6a209fb06e44906d6ea9dc2285b5";
+        derivedFromCommit = "e3b8d9135bee6d4eda56065be23b4d30de243337";
         derivedAt = "2026-10-11";
         modelledPaths = (
             "taskfw/scope.py",
