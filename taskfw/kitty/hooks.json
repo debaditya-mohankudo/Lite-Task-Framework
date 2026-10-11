@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "command": "\"${KITTY_TASKFW_PYTHON}\" -m taskfw.kitty.hook",
             "timeout": 10
           }
         ]
@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "command": "\"${KITTY_TASKFW_PYTHON}\" -m taskfw.kitty.hook",
             "timeout": 10
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "command": "\"${KITTY_TASKFW_PYTHON}\" -m taskfw.kitty.hook",
             "timeout": 10
           }
         ]
@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "command": "\"${KITTY_TASKFW_PYTHON}\" -m taskfw.kitty.hook",
             "timeout": 10
           }
         ]
@@ -49,7 +49,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "command": "\"${KITTY_TASKFW_PYTHON}\" -m taskfw.kitty.hook",
             "timeout": 10
           }
         ]
