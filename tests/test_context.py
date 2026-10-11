@@ -497,3 +497,80 @@ class TestTaskContext:
             "see the pull-context-bundle and mcp-portable-interface concepts"
         )
         assert "_related_candidates(" not in src
+
+
+class TestRecallObservability:
+    """task:3cba4be6 — the lesson-candidate log line is observation only.
+
+    Logging fails silently by nature, so both halves are pinned: the line
+    tells delivered from merely-fetched candidates, and a logger that raises
+    changes neither the lessons delivered nor the hit counters.
+    """
+
+    @pytest.fixture
+    def memory(self, store):
+        return MemoryStore(conn=store.conn)
+
+    @pytest.fixture
+    def records(self):
+        import logging
+        got: list[str] = []
+
+        class H(logging.Handler):
+            def emit(self, record):
+                got.append(record.getMessage())
+
+        lg = logging.getLogger("taskfw.memory")
+        h = H()
+        lg.addHandler(h)
+        yield got
+        lg.removeHandler(h)
+
+    def _seed(self, store, memory):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        memory.record("migrations-are-additive", task_id=t.id, kind="constraint",
+                      text="Sqlite migration steps must be additive; a rewrite loses rows.")
+        memory.record("noise-lesson", task_id=t.id, kind="technique",
+                      text="Grind the espresso beans coarser for a longer extraction.")
+        return t
+
+    def test_candidate_line_separates_delivered_from_floor_rejected(self, store, memory, records):
+        import json
+        t = self._seed(store, memory)
+        c = _build_context(store, t.id, memory=memory)
+        line = next(r for r in records if r.startswith("memory recall candidates"))
+        assert f"caller=bundle task={t.id}" in line
+        entries = json.loads(line.split("json=", 1)[1])
+        by = {e["slug"]: e for e in entries}
+        assert {"rank", "score", "created_at", "floor", "delivered"} <= set(entries[0])
+        assert [m["slug"] for m in c["lessons"]] == [s for s, e in by.items() if e["delivered"]]
+        assert by["migrations-are-additive"]["delivered"] is True
+        assert by["noise-lesson"]["floor"] is False and by["noise-lesson"]["delivered"] is False
+
+    def test_old_recall_line_keeps_its_fields_and_names_the_caller(self, store, memory, records):
+        import re
+        t = self._seed(store, memory)
+        _build_context(store, t.id, memory=memory)
+        memory.recall("sqlite migration")
+        old = re.compile(r"^memory recall query=.* kind=.* fetched=\d+ counted=\w+ slugs=\[.*\]")
+        lines = [r for r in records if old.match(r)]
+        assert any(f"caller=bundle task={t.id}" in r and "counted=False" in r for r in lines)
+        assert any("caller=recall task=-" in r and "counted=True" in r for r in lines)
+
+    def test_a_failing_log_call_changes_nothing(self, store, memory, monkeypatch):
+        t = self._seed(store, memory)
+        before = _build_context(store, t.id, memory=memory)["lessons"]
+        hits = memory.conn.execute("SELECT slug, hit_count FROM memories ORDER BY slug").fetchall()
+        direct = memory.recall("sqlite migration", count_hit=False)
+
+        def boom(*a, **k):
+            raise RuntimeError("log sink down")
+
+        import taskfw.memory as m
+        monkeypatch.setattr(m.log, "info", boom)
+        monkeypatch.setattr(m.log, "warning", boom)
+        after = _build_context(store, t.id, memory=memory)["lessons"]
+        assert after == before
+        assert memory.recall("sqlite migration", count_hit=False) == direct
+        assert [tuple(r) for r in memory.conn.execute(
+            "SELECT slug, hit_count FROM memories ORDER BY slug")] == [tuple(r) for r in hits]

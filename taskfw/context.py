@@ -428,9 +428,25 @@ def _lessons_for(store: TaskStore, task: Task,
     if not query:
         return []
     store_ = memory if memory is not None else MemoryStore(conn=store.conn)
-    candidates = store_.recall(query, limit=MAX_LESSONS * 4, count_hit=False)
+    trace: list[dict] = []
+    candidates = store_.recall(query, limit=MAX_LESSONS * 4, count_hit=False,
+                               caller="bundle", task_id=task.id, trace=trace)
     passing = [m for m in candidates if _passes_floor(query, f"{m['slug']} {m['text']}")]
-    return _mark_cross_project(store, task, passing[:MAX_LESSONS])
+    delivered = passing[:MAX_LESSONS]
+    # Observation only (task:3cba4be6): which candidates cleared the floor and
+    # which were delivered, so the ranking question can be answered from data.
+    try:
+        by_slug = {m["slug"]: m for m in candidates}
+        passed = {m["slug"] for m in passing}
+        sent = {m["slug"] for m in delivered}
+        store_.log_bundle_candidates(query, task.id, [
+            {**t, "created_at": by_slug[t["slug"]]["created_at"],
+             "floor": t["slug"] in passed, "delivered": t["slug"] in sent}
+            for t in trace
+        ])
+    except Exception:
+        pass  # observation only; MemoryStore reports its own logging failures
+    return _mark_cross_project(store, task, delivered)
 
 
 def _mark_cross_project(store: TaskStore, task: Task, lessons: list[dict]) -> list[dict]:

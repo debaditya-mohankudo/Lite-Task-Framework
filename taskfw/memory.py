@@ -44,6 +44,7 @@ hit, the context bundle does not. See recall's `count_hit`.
 """
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from dataclasses import dataclass
@@ -55,6 +56,15 @@ from taskfw.log import get_logger
 from taskfw.task import utcnow
 
 log = get_logger(__name__)
+
+
+def _warn_quietly(msg: str, *args) -> None:
+    """Report a failed observation without being able to fail the caller —
+    the logger itself may be what is broken (task:3cba4be6)."""
+    try:
+        log.warning(msg, *args)
+    except Exception:
+        pass
 
 #: What introspection actually produces. Deliberately short — a taxonomy longer
 #: than this is a decision to make on every capture, and doc 05 names only two
@@ -211,13 +221,18 @@ class MemoryStore:
         return memory
 
     def recall(self, query: str = "", kind: str = "", limit: int = DEFAULT_RECALL_LIMIT,
-               include_superseded: bool = False, count_hit: bool = True) -> list[dict]:
+               include_superseded: bool = False, count_hit: bool = True,
+               caller: str = "recall", task_id: str = "",
+               trace: list | None = None) -> list[dict]:
         """`recall_capped` without the omission flag, for callers that cap on purpose."""
-        return self.recall_capped(query, kind, limit, include_superseded, count_hit)[0]
+        return self.recall_capped(query, kind, limit, include_superseded, count_hit,
+                                  caller, task_id, trace)[0]
 
     def recall_capped(self, query: str = "", kind: str = "", limit: int = DEFAULT_RECALL_LIMIT,
                       include_superseded: bool = False,
-                      count_hit: bool = True) -> tuple[list[dict], bool]:
+                      count_hit: bool = True, caller: str = "recall",
+                      task_id: str = "",
+                      trace: list | None = None) -> tuple[list[dict], bool]:
         """(rows, truncated): `truncated` is True when more matched than `limit`.
 
         Fetches one probe row past the limit to know, and drops it before hit
@@ -236,9 +251,17 @@ class MemoryStore:
         counters measure bundle assembly instead, and there would be no way
         afterwards to separate the two. Passing False deletes that failure
         mode rather than leaving a contaminated number to be reconciled later.
+
+        OBSERVABILITY ONLY (task:3cba4be6): `caller` ("recall" = a deliberate
+        task_memory__recall, "bundle" = tasks__context assembly) and `task_id`
+        are appended to the log line and change nothing else. `trace`, when a
+        list is passed, is filled with {slug, rank, score} per returned row so
+        the caller can log candidates beside what it did with them; scores
+        stay out of the returned rows. Neither affects ranking or counting.
         """
         limit = max(limit, 0)
-        slugs = self._matching_slugs(query, limit + 1) if query.strip() else None
+        ranked = self._matching_ranked(query, limit + 1) if query.strip() else None
+        slugs = [slug for slug, _ in ranked] if ranked is not None else None
         sql = "SELECT * FROM memories"
         where, params = [], []
         if slugs is not None:
@@ -276,21 +299,47 @@ class MemoryStore:
             for m in rows:
                 m["hit_count"] += 1
                 m["last_hit"] = hit_at
-        log.info(
-            "memory recall query=%r kind=%r fetched=%d counted=%s slugs=%s",
-            query, kind, len(rows), count_hit, [r["slug"] for r in rows],
-        )
+        # Logging must never alter or fail a recall: it runs after the result
+        # is final and swallows its own errors.
+        try:
+            scores = dict(ranked) if ranked is not None else {}
+            if trace is not None:
+                trace.extend(
+                    {"slug": m["slug"], "rank": i, "score": scores.get(m["slug"])}
+                    for i, m in enumerate(rows, 1)
+                )
+            log.info(
+                "memory recall query=%r kind=%r fetched=%d counted=%s slugs=%s caller=%s task=%s",
+                query, kind, len(rows), count_hit, [r["slug"] for r in rows],
+                caller, task_id or "-",
+            )
+        except Exception as exc:
+            _warn_quietly("memory recall logging failed (%s)", exc)
         return rows, truncated
 
+    def log_bundle_candidates(self, query: str, task_id: str, entries: list[dict]) -> None:
+        """One structured line for the automatic path: every candidate, with
+        rank, bm25 score, created_at, `floor` (passed the relevance floor) and
+        `delivered` (made it into the bundle). Pure observation — fails open."""
+        try:
+            log.info("memory recall candidates caller=bundle task=%s query=%r json=%s",
+                     task_id or "-", query, json.dumps(entries))
+        except Exception as exc:
+            _warn_quietly("memory recall candidates logging failed (%s)", exc)
+
     def _matching_slugs(self, query: str, limit: int) -> list[str]:
+        return [slug for slug, _ in self._matching_ranked(query, limit)]
+
+    def _matching_ranked(self, query: str, limit: int) -> list[tuple[str, float | None]]:
+        """(slug, bm25) best first; score is None on the LIKE fallback."""
         if self.fts:
             try:
                 rows = self.conn.execute(
-                    "SELECT slug FROM memories_fts WHERE memories_fts MATCH ? "
-                    "ORDER BY bm25(memories_fts) LIMIT ?",
+                    "SELECT slug, bm25(memories_fts) AS score FROM memories_fts "
+                    "WHERE memories_fts MATCH ? ORDER BY bm25(memories_fts) LIMIT ?",
                     (self._fts_or_query(query), limit * 4),
                 ).fetchall()
-                return [r["slug"] for r in rows]
+                return [(r["slug"], round(r["score"], 4)) for r in rows]
             except sqlite3.OperationalError as exc:
                 # A malformed FTS5 query is user input, not a reason to claim
                 # there are no matching memories.
@@ -300,7 +349,7 @@ class MemoryStore:
             "SELECT slug FROM memories WHERE slug LIKE ? OR text LIKE ? LIMIT ?",
             (like, like, limit * 4),
         ).fetchall()
-        return [r["slug"] for r in rows]
+        return [(r["slug"], None) for r in rows]
 
     @staticmethod
     def _fts_or_query(query: str) -> str:
