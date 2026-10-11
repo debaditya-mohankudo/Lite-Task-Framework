@@ -10,12 +10,8 @@ rejects only what it structurally cannot do.
 """
 from __future__ import annotations
 
-import contextlib
-import json
-import os
 import re
 import sqlite3
-import tempfile
 from pathlib import Path
 
 from taskfw.db.connect import connect, transaction
@@ -40,24 +36,11 @@ _FTS_DDL = f"CREATE VIRTUAL TABLE IF NOT EXISTS {_FTS_TABLE} USING fts5(id UNIND
 _FTS_INSERT = f"INSERT INTO {_FTS_TABLE} (id, tags, text) VALUES (?,?,?)"
 
 
-def _pid_alive(pid: int) -> bool:
-    """Whether a process with this pid exists. EPERM means it does, as another user."""
-    try:
-        os.kill(pid, 0)
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
-
-
 class TaskStore:
     def __init__(self, path: Path | str | None = None, conn: sqlite3.Connection | None = None):
         self.conn = conn if conn is not None else connect(path)
         self.fts = self._try_enable_fts()
         self._active: dict[str, str] = {}
-        # Prune what a previous server process left in the mirror file.
-        self._export_active()
 
     def _try_enable_fts(self) -> bool:
         try:
@@ -362,7 +345,6 @@ class TaskStore:
         """Mark task_id as the active task for scope."""
         self._active[scope] = task_id
         log.info("active set task=%s scope=%s", task_id, scope)
-        self._export_active()
 
     def get_active(self, scope: str = "global") -> str | None:
         """The active task for scope, if any."""
@@ -372,53 +354,3 @@ class TaskStore:
         """Clear the active task for scope, if any."""
         if self._active.pop(scope, None) is not None:
             log.info("active clear scope=%s", scope)
-            self._export_active()
-
-    def _export_active(self) -> None:
-        """Mirror the in-memory pointers to a JSON file for outside readers.
-
-        One-way: nothing reads it back into the pointer, so the pointer stays
-        ephemeral. Shape is {scope: {"id", "title", "pid"}}, `pid` being the
-        server process that owns the entry. The write merges into what is on
-        disk rather than replacing it: other live processes' scopes are kept,
-        while entries whose process is dead (or that carry no pid, written
-        before this field existed) and this process's own scopes that are no
-        longer active are dropped. That is what stops a restart leaving the
-        last process's task on the bar, and two sessions overwriting each
-        other. TASKFW_ACTIVE_FILE overrides the path ("0" disables). Never
-        raises -- a status display must not break a tool call.
-        """
-        target = os.environ.get("TASKFW_ACTIVE_FILE", "~/.taskfw/active.json")
-        if target == "0":
-            return
-        try:
-            path = Path(target).expanduser()
-            me = os.getpid()
-            out = {}
-            try:
-                existing = json.loads(path.read_text())
-            except (OSError, ValueError):
-                existing = {}
-            if isinstance(existing, dict):
-                for scope, entry in existing.items():
-                    pid = entry.get("pid") if isinstance(entry, dict) else None
-                    if isinstance(pid, int) and pid != me and _pid_alive(pid):
-                        out[scope] = entry
-            for scope, task_id in self._active.items():
-                task = self.get(task_id)
-                out[scope] = {"id": task_id, "title": task.title if task else "", "pid": me}
-            path.parent.mkdir(parents=True, exist_ok=True)
-            # A temp file per write, in the target's directory so os.replace
-            # stays atomic: a shared fixed name let two concurrent exporters
-            # rename each other's file. Unlinked if the replace never happens.
-            fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
-            try:
-                with os.fdopen(fd, "w") as f:
-                    f.write(json.dumps(out))
-                os.replace(tmp, path)
-            except BaseException:
-                with contextlib.suppress(OSError):
-                    os.unlink(tmp)
-                raise
-        except Exception as exc:
-            log.warning("active export failed: %s", exc)

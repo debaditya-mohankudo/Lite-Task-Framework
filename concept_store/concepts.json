@@ -1,30 +1,5 @@
 {
   "concepts": {
-    "active-pointer-file-mirror": {
-      "confidence": 0.8,
-      "contracts": [
-        "Entry shape is {scope: {id, title, pid}}, pid being the owning server process (task:dc069942).",
-        "Every export merges into the file: other live processes' scopes are kept; entries with a dead pid or no pid, and this process's scopes no longer active, are dropped.",
-        "TaskStore.__init__ exports once, so a restart prunes the previous process's leftovers on the first tool call (the store is lazy, mcp_server.store()).",
-        "Exporting never raises or blocks a tool call; each write goes through its own mkstemp temp file beside the target + os.replace, so concurrent exporters never share a temp path, and the temp file is unlinked if the replace fails (task:ca657370). The file is mode 0600.",
-        "Readers should skip an entry whose pid is dead; window_title_bar.py (two copies: ~/.config/kitty and claude-hooks/kitty/config) does, and still shows pid-less entries."
-      ],
-      "created_at": "2026-10-09T12:44:17.468963+00:00",
-      "description": "TaskStore mirrors its in-memory active pointers to ~/.taskfw/active.json (TASKFW_ACTIVE_FILE overrides, '0' disables) for outside readers such as the kitty window_title_bar.py banner. The pointer stays the only source of truth; the file is a derived, shared view across server processes.",
-      "evidence": [
-        "taskfw/store.py:TaskStore._export_active",
-        "taskfw/store.py:_pid_alive",
-        "tests/test_store.py:TestActiveExport"
-      ],
-      "invariants": [
-        "Nothing reads the file back into the pointer, so the file can never change what tasks__active reports.",
-        "No lock guards the read-merge-write; a lost update to one scope is repaired by that process's next export."
-      ],
-      "last_validated": "2026-10-11T14:00:05.341304+00:00",
-      "module": "taskfw/store.py",
-      "name": "active-pointer-file-mirror",
-      "related": []
-    },
     "active-task-pointer-lifecycle": {
       "confidence": 0.9,
       "contracts": [
@@ -759,7 +734,7 @@
         "isolate is tri-state: True -> `--isolate`, False -> `--no-isolate`, None -> no flag (the opener decides from live sibling tabs); the result carries `worktree` and `isolated` so the caller sees what was chosen (task:d482a160)"
       ],
       "created_at": "2026-10-10T13:23:34.286862+00:00",
-      "description": "Optional, fail-soft bridge from taskfw to the in-repo taskfw.kitty launcher (moved in from the standalone kitty-taskfw repo, task:3ddbfc92) (task:87c91a76). tasks__open_in_kitty shells out to `python -m taskfw.kitty.launcher open --worktree <dir> <task_id> [--prompt P] [--isolate|--no-isolate]` and returns {status, window_id, socket, reason, worktree, isolated}, status opened / exists / not_opened. Nothing imports taskfw.kitty and nothing runs at import; the command (TASKFW_KITTY_OPEN_CMD shell-split, else the in-repo launcher) is resolved inside the call. A missing or unusable command, timeout, bad output or no known directory yield not_opened with a reason, never an exception; only an unknown task_id is an `error`. The tab starts claude with the prompt as its initial argument (task:eff7f915), replacing the fragile send-text handoff. An optional `parent` (the caller's session name) makes the DEFAULT prompt also tell the tab to SendMessage it once when done (id, one-line outcome, commit ids, never the brief); it is built only in mcp_server, an explicit prompt is never modified, and a multi-line or control-character parent is not_opened. Complements the one-way file mirror [[active-pointer-file-mirror]].",
+      "description": "Optional, fail-soft bridge from taskfw to the in-repo taskfw.kitty launcher (moved in from the standalone kitty-taskfw repo, task:3ddbfc92) (task:87c91a76). tasks__open_in_kitty shells out to `python -m taskfw.kitty.launcher open --worktree <dir> <task_id> [--prompt P] [--isolate|--no-isolate]` and returns {status, window_id, socket, reason, worktree, isolated}, status opened / exists / not_opened. Nothing imports taskfw.kitty and nothing runs at import; the command (TASKFW_KITTY_OPEN_CMD shell-split, else the in-repo launcher) is resolved inside the call. A missing or unusable command, timeout, bad output or no known directory yield not_opened with a reason, never an exception; only an unknown task_id is an `error`. The tab starts claude with the prompt as its initial argument (task:eff7f915), replacing the fragile send-text handoff. An optional `parent` (the caller's session name) makes the DEFAULT prompt also tell the tab to SendMessage it once when done (id, one-line outcome, commit ids, never the brief); it is built only in mcp_server, an explicit prompt is never modified, and a multi-line or control-character parent is not_opened.",
       "evidence": [
         "taskfw/kitty_open.py",
         "taskfw/mcp_server.py:tasks__open_in_kitty",
@@ -774,7 +749,6 @@
       "module": "taskfw/kitty_open.py",
       "name": "kitty-open-tool",
       "related": [
-        "active-pointer-file-mirror",
         "kitty-task-launcher",
         "kitty-task-opener"
       ]
@@ -2047,6 +2021,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-11T15:35:17.047044+00:00"
+    "updated_at": "2026-10-11T15:55:32.007930+00:00"
   }
 }
