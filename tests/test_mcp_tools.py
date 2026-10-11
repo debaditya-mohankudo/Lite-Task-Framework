@@ -1024,9 +1024,9 @@ class TestSkillInvocationLogging:
         test_logging.py's TestJsonlSink) — tasks__logs (SQL-only) intentionally
         never sees test-mode log calls, same as any other taskfw log line, so
         this asserts against the same session jsonl file real calls land in.
-        In production, query back with tasks__logs(logger="taskfw.skill.<name>")
-        — get_logger() prefixes every name with "taskfw." (see
-        test_logging.py::TestSQLiteSink::test_skill_invocation_logger_name_is_queryable_with_taskfw_prefix).
+        In production, query back with tasks__logs(logger="taskfw.skill") and
+        filter the messages — see
+        test_logging.py::TestSQLiteSink::test_skill_invocations_share_one_queryable_logger.
         """
         import os
 
@@ -1035,7 +1035,16 @@ class TestSkillInvocationLogging:
 
         path = os.environ["TASKFW_LOG_JSONL"]
         with open(path) as f:
-            assert any("skill.a-test-skill" in line and "abc123" in line for line in f)
+            assert any("skill=a-test-skill" in line and "abc123" in line for line in f)
+
+    def test_distinct_skill_names_create_no_new_loggers(self):
+        import logging
+
+        m.tasks__log_skill_invocation("warm-up-skill")
+        before = len(logging.root.manager.loggerDict)
+        for i in range(25):
+            m.tasks__log_skill_invocation(f"distinct-skill-{i}", task_id="t")
+        assert len(logging.root.manager.loggerDict) == before
 
     def test_empty_task_id_does_not_error(self):
         r = m.tasks__log_skill_invocation("another-skill")

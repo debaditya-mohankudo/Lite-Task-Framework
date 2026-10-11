@@ -68,7 +68,9 @@ class tool_called:
     though; tool_called is usable directly wherever a tool needs it.
 
     `name` is the tool being called — every exit logs exactly one line,
-    `tool=<name> OK` / `tool=<name> REFUSE rule=<rule>` / `tool=<name> ERROR
+    `tool=<name> OK` / `tool=<name> REFUSE rule=<rule>` (a result with an
+    "error" and a "rule") / `tool=<name> FAILED: <error>` (an "error" with no
+    rule — a miss or bad input, not a refusal) / `tool=<name> ERROR
     <type>: <msg>`. This is the only place in the framework that logs tool
     usage itself, rather than the state changes a tool happened to cause —
     those are store.py's and lifecycle.py's job and unaffected by this.
@@ -113,9 +115,15 @@ class tool_called:
         if exc_type is not None:
             log.info("tool=%s ERROR %s: %s", self.name, exc_type.__name__, exc)
             return
-        refused = isinstance(self.result, dict) and "error" in self.result
-        if refused:
-            log.info("tool=%s REFUSE rule=%s", self.name, self.result.get("rule"))
+        failed = isinstance(self.result, dict) and "error" in self.result
+        if failed:
+            # A refusal is a rule saying no — _denied() always carries the
+            # rule. An error with no rule (a miss, bad input) is not one, and
+            # logging it as REFUSE rule=None polluted refusal counts.
+            if "rule" in self.result:
+                log.info("tool=%s REFUSE rule=%s", self.name, self.result["rule"])
+            else:
+                log.info("tool=%s FAILED: %s", self.name, self.result["error"])
             return
         log.info("tool=%s OK", self.name)
         if self.post and isinstance(self.result, dict):

@@ -364,6 +364,13 @@ class TestToolCalled:
                 call.result = {"error": "No task 'x'", "rule": "exists"}
         assert "tool=tasks__probe REFUSE rule=exists" in caplog.text
 
+    def test_an_error_without_a_rule_is_logged_as_failed_not_refuse(self, caplog):
+        with caplog.at_level(logging.INFO, logger="taskfw"):
+            with tool_called("tasks__probe") as call:
+                call.result = {"found": False, "error": "No concept 'x'"}
+        assert "tool=tasks__probe FAILED: No concept 'x'" in caplog.text
+        assert "REFUSE" not in caplog.text
+
     def test_logs_error_and_reraises_on_an_exception(self, caplog):
         with caplog.at_level(logging.INFO, logger="taskfw"):
             with pytest.raises(ValueError):

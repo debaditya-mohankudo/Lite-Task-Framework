@@ -404,15 +404,16 @@ def tasks__log_skill_invocation(skill: str, task_id: str = "") -> dict[str, Any]
     Thin wrapper around the existing get_logger()/SQLiteHandler machinery —
     no new sink, no new table. Scoped narrowly to invocation tracking rather
     than a generic log-write tool, so it can't become a second home for
-    decisions or notes, which already have one. get_logger() prefixes every
-    name with "taskfw.", so query back with
-    tasks__logs(logger=f"taskfw.skill.{skill}").
+    decisions or notes, which already have one. Every call logs under the one
+    logger "taskfw.skill" — a logger per skill name would live for the whole
+    process — with the name in the message as `skill=<name> invoked task=<id>`,
+    so query tasks__logs(logger="taskfw.skill") and filter by message.
 
     task_id is not validated — this is an observability signal, not a
     referentially-integral record, matching `logs` having no foreign key to
     tasks at all.
     """
-    get_logger(f"skill.{skill}").info(f"invoked task={task_id or '-'}")
+    get_logger("skill").info(f"skill={skill} invoked task={task_id or '-'}")
     return {"ok": True, "skill": skill, "task_id": task_id}
 
 

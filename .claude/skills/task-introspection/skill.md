@@ -44,11 +44,11 @@ If that is empty because commits were never tagged, fall back to `git log --sinc
 The bundle also carries no operational trace — what the tools actually did while the task was active, as opposed to what was decided. `tasks__logs` fills that gap:
 
 ```python
-tasks__logs(logger="taskfw.skill.<name>/<step-slug>", limit=50)   # one section's calls
-tasks__logs(limit=200)                                            # everything, filter client-side by prefix
+tasks__logs(logger="taskfw.skill", limit=200)   # every skill invocation; messages read "skill=<name>/<step-slug> invoked task=<id>"
+tasks__logs(limit=200)                          # everything, filter client-side
 ```
 
-`logger` is exact-match only — there is no prefix query — so auditing a whole skill's run means either the exact name per section or an unfiltered pull filtered afterward.
+`logger` is exact-match only, and all skill invocations share the one logger `taskfw.skill`, so auditing a skill's run means pulling that logger and filtering the messages for `skill=<name>/<step-slug>`.
 
 Use Read and Grep for the code. The framework ships no code search of its own, deliberately.
 

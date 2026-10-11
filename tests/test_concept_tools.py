@@ -202,6 +202,15 @@ class TestTools:
     def test_get_missing_reports_found_false(self, repo):
         assert m.concept__get(str(repo), "nope")["found"] is False
 
+    def test_get_miss_is_logged_as_failed_not_refuse_and_keeps_its_shape(self, repo, caplog):
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="taskfw"):
+            r = m.concept__get(str(repo), "nope")
+        assert r["found"] is False and "error" in r
+        assert "tool=concept__get FAILED" in caplog.text
+        assert "REFUSE" not in caplog.text
+
     def test_get_found_nests_the_concept_rather_than_flattening_it(self, repo):
         """{"found": bool, "concept": {...}} on both branches — not the fields
         flattened onto the response. Matches claude-hooks' own concept__get,

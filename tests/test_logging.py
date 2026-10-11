@@ -191,34 +191,26 @@ class TestSQLiteSink:
         result = m.tasks__logs(limit=500)
         assert any(marker in row["message"] for row in result["logs"])
 
-    def test_skill_invocation_logger_name_is_queryable_with_taskfw_prefix(self):
-        """Regression for a docstring bug found via task:6c916379:
-
-        get_logger(name) always prefixes with "taskfw.", so a skill logged
-        via get_logger(f"skill.{skill}") (as tasks__log_skill_invocation
-        does) is stored under "taskfw.skill.<name>", not "skill.<name>".
-        A caller querying tasks__logs(logger=f"skill.{skill}") (as the
-        tool's docstring used to say) would silently never match a real row.
-        Exercised directly against SQLiteHandler, same as this class's other
-        tests — a test run's global logger uses JsonlHandler, so round
-        tripping through get_logger()/tasks__log_skill_invocation itself
-        would test nothing here.
+    def test_skill_invocations_share_one_queryable_logger(self):
+        """tasks__log_skill_invocation logs under the single logger
+        "taskfw.skill" (get_logger prefixes "taskfw."), carrying the skill
+        name in the message — so tasks__logs(logger="taskfw.skill") finds it.
+        Exercised against SQLiteHandler directly: a test run's global logger
+        uses JsonlHandler, so a round trip through the tool would test nothing.
         """
         import uuid
 
         from taskfw import mcp_server as m
         from taskfw.log import SQLiteHandler
 
-        marker = f"probe-{uuid.uuid4().hex}"
         skill = f"probe-skill-{uuid.uuid4().hex}"
-        record = logging.LogRecord(f"taskfw.skill.{skill}", logging.INFO, __file__, 1, marker, None, None)
+        record = logging.LogRecord("taskfw.skill", logging.INFO, __file__, 1,
+                                   f"skill={skill} invoked task=abc", None, None)
         SQLiteHandler().emit(record)
 
-        wrong_prefix = m.tasks__logs(logger=f"skill.{skill}", limit=500)
-        assert wrong_prefix["logs"] == []
-
-        result = m.tasks__logs(logger=f"taskfw.skill.{skill}", limit=500)
-        assert any(marker in row["message"] for row in result["logs"])
+        assert m.tasks__logs(logger=f"skill.{skill}", limit=500)["logs"] == []
+        result = m.tasks__logs(logger="taskfw.skill", limit=500)
+        assert any(skill in row["message"] for row in result["logs"])
 
 
 class TestJsonlSink:
