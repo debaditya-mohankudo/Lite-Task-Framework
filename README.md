@@ -95,3 +95,33 @@ doesn't cross-activate each other's tasks.
 If you want tasks themselves kept apart per project, point `TASKFW_DB` at a
 different file per project — there's no built-in filtering by workspace, so
 this is the way to get real separation.
+
+## The Jira perspective
+
+Jira gave software teams a system of record for the SDLC. Work had an owner and a state, commits pointed back at the ticket that caused them, and epics held the larger intent. Because all of it lived outside anyone's head, people could join, leave and hand off without losing why anything was done.
+
+Two things make Jira a poor fit for a solo developer working with agents:
+
+- **It was built for humans.** Its screens, boards, notifications and permissions assume a team of people clicking through a UI. An agent can't use that interface, and it can't resume from a board it never saw.
+- **It's priced for the enterprise.** Seats, tiers and an admin to run it make sense for an organisation. They're overhead for one person.
+
+task-framework takes the part of Jira that made the SDLC work, a durable and linked record of what was decided, built and learned, and makes it **agent-native and solo-sized**. It is one local SQLite file behind a local MCP server, with no hosted service, no seats and no admin. The developer and their agents share one record that survives every session, and every fact in it is something an agent can read, write and be held to.
+
+| In Jira's SDLC | Here |
+|---|---|
+| Ticket, epic | `task`, with one `epic` boolean and one hierarchy rule |
+| Workflow states | Four statuses: `open`, `blocked`, `done`, `abandoned` |
+| Linked issues | Typed `task_edges` with a closed vocabulary |
+| Commit linked to ticket | `task:<id>` leads the commit message, and `tasks__add_commit` records the link. `taskfw-backfill` rebuilds missed links from git history. |
+| Acceptance criteria | Resolution checklist items, checked as they land |
+| Comments, history | Decisions and logs recorded at the moment they happen |
+| Grooming, sprint planning | `/task-grooming`: pull context, verify premises, record falsifiable risks |
+| Retrospective | `/task-introspection`: grade grooming's predictions, then fold lessons into concepts and skills |
+| Tribal knowledge | `concept_store`, `task_memory` and the ontology: architecture and lessons that outlive any one task |
+
+Jira stops at the board. This framework adds the step Jira never closed, **grading the plan against what happened**. Grooming makes claims that can be proven wrong, and introspection checks them. Each task leaves behind something that makes the next one cheaper. Without that step, planning is only paperwork, and a solo developer has no team around to catch that.
+
+Two further differences follow from the user being an agent:
+
+- **Context is pulled, never pushed.** An agent gets only what it asks for (`tasks__context`, `task_memory__recall`). Anything left out for space is reported as left out, so a gap is never mistaken for an absence.
+- **The rules live in one place.** Every client goes through the same store and the same checks, so no path can enforce different rules from another.
