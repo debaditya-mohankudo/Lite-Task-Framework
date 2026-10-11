@@ -309,6 +309,27 @@ class TestToolCalled:
                 raise ValueError("boom")
         assert calls == []
 
+    def test_a_raising_post_is_logged_and_swallowed(self, caplog):
+        def boom(result):
+            raise RuntimeError("nudge broke")
+
+        def call_it():
+            with tool_called("tasks__probe", post=boom) as call:
+                call.result = {"ok": True, "id": "x"}
+                return call.result
+
+        with caplog.at_level(logging.WARNING):
+            assert call_it() == {"ok": True, "id": "x"}
+        assert "POST-HOOK FAILED" in caplog.text and "nudge broke" in caplog.text
+
+    def test_a_keyboard_interrupt_in_post_still_propagates(self):
+        def stop(result):
+            raise KeyboardInterrupt
+
+        with pytest.raises(KeyboardInterrupt):
+            with tool_called("tasks__probe", post=stop) as call:
+                call.result = {"ok": True}
+
     def test_post_mutation_is_visible_in_the_returned_dict(self):
         def add_marker(result):
             result["marker"] = True

@@ -212,7 +212,18 @@ class MemoryStore:
 
     def recall(self, query: str = "", kind: str = "", limit: int = DEFAULT_RECALL_LIMIT,
                include_superseded: bool = False, count_hit: bool = True) -> list[dict]:
-        """Search memories. Superseded ones are excluded unless asked for.
+        """`recall_capped` without the omission flag, for callers that cap on purpose."""
+        return self.recall_capped(query, kind, limit, include_superseded, count_hit)[0]
+
+    def recall_capped(self, query: str = "", kind: str = "", limit: int = DEFAULT_RECALL_LIMIT,
+                      include_superseded: bool = False,
+                      count_hit: bool = True) -> tuple[list[dict], bool]:
+        """(rows, truncated): `truncated` is True when more matched than `limit`.
+
+        Fetches one probe row past the limit to know, and drops it before hit
+        counting — the row the caller never saw must not count as recalled.
+
+        Search memories. Superseded ones are excluded unless asked for.
 
         Excluding by default is the point of superseding: stale knowledge that
         keeps surfacing is worse than none, because it reads as current.
@@ -226,12 +237,13 @@ class MemoryStore:
         afterwards to separate the two. Passing False deletes that failure
         mode rather than leaving a contaminated number to be reconciled later.
         """
-        slugs = self._matching_slugs(query, limit) if query.strip() else None
+        limit = max(limit, 0)
+        slugs = self._matching_slugs(query, limit + 1) if query.strip() else None
         sql = "SELECT * FROM memories"
         where, params = [], []
         if slugs is not None:
             if not slugs:
-                return []
+                return [], False
             where.append(f"slug IN ({','.join('?' * len(slugs))})")
             params.extend(slugs)
         if kind:
@@ -244,7 +256,7 @@ class MemoryStore:
         if slugs is None:
             sql += " ORDER BY updated_at DESC"
         sql += " LIMIT ?"
-        params.append(limit)
+        params.append(limit + 1)
         rows = [self._hydrate(r) for r in self.conn.execute(sql, params)]
         if slugs is not None:
             # _matching_slugs is already ranked by bm25 (best match first);
@@ -252,6 +264,8 @@ class MemoryStore:
             # re-sort by it here rather than falling back to recency.
             rank = {slug: i for i, slug in enumerate(slugs)}
             rows.sort(key=lambda m: rank.get(m["slug"], len(slugs)))
+        truncated = len(rows) > limit
+        rows = rows[:limit]
         if rows and count_hit:
             hit_at = utcnow()
             with transaction(self.conn):
@@ -266,7 +280,7 @@ class MemoryStore:
             "memory recall query=%r kind=%r fetched=%d counted=%s slugs=%s",
             query, kind, len(rows), count_hit, [r["slug"] for r in rows],
         )
-        return rows
+        return rows, truncated
 
     def _matching_slugs(self, query: str, limit: int) -> list[str]:
         if self.fts:

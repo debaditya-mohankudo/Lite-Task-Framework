@@ -75,7 +75,7 @@ class tool_called:
 
     `pre` runs on entry. `post` (the "hook") runs on a clean, non-refused
     exit — refused means `call.result` is a dict containing an "error" key.
-    A non-dict result (e.g. tasks__list's bare list) is never a refusal, so
+    A non-dict result (e.g. a bare list) is never a refusal, so
     it's treated as success for both logging and the hook; `post` is only
     actually invoked when `call.result` is a dict, since apply_nudge (what
     every hook calls) needs somewhere to write the nudge key. Mutating
@@ -119,7 +119,14 @@ class tool_called:
             return
         log.info("tool=%s OK", self.name)
         if self.post and isinstance(self.result, dict):
-            self.post(self.result)
+            # The body has already returned, so any write it made has landed.
+            # A raising nudge must cost only the nudge: letting it propagate
+            # would report a landed write as an error and invite a retry that
+            # double-appends. Exception, not BaseException — Ctrl-C still stops.
+            try:
+                self.post(self.result)
+            except Exception:
+                log.warning("tool=%s POST-HOOK FAILED, result unchanged", self.name, exc_info=True)
 
 
 def combine(*hooks: Callable[[dict[str, Any]], None]) -> Callable[[dict[str, Any]], None]:

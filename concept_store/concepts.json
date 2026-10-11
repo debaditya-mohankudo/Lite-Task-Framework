@@ -947,10 +947,11 @@
     "nudge-dispatch-chassis": {
       "confidence": 0.8,
       "contracts": [
-        "tool_called(name, pre=None, post=None): context manager wrapping one MCP tool call. `pre` runs on entry. `post` runs once, after the block exits with no exception and call.result is a dict not containing an 'error' key (a refusal). A non-dict result (e.g. tasks__list's bare list) is treated as success for logging but never invokes `post`, since apply_nudge needs a dict to write into.",
+        "tool_called(name, pre=None, post=None): context manager wrapping one MCP tool call. `pre` runs on entry. `post` runs once, after the block exits with no exception and call.result is a dict not containing an 'error' key (a refusal). A non-dict result (e.g. a future list-returning tool) is treated as success for logging but never invokes `post`, since apply_nudge needs a dict to write into.",
         "Exactly one log line per exit: 'tool=<name> OK' / 'tool=<name> REFUSE rule=<rule>' / 'tool=<name> ERROR <type>: <msg>' at INFO level, no arguments or payloads logged.",
         "combine(*hooks) -> Callable[[dict], None]: runs each hook in order against the same result dict, letting a tool that needs several nudges (e.g. tasks__update) compose them at its own call site rather than tool_called/_tool needing a multi-hook parameter.",
-        "apply_nudge(result, nudge, *args) calls nudge(*args) and sets result[nudge.__name__] to its text only if the text is truthy, and logs the firing there. The key is the function's own name, never a separate string, so a response key cannot name a different nudge than the one that fired (task:a8394f74 -- finish_nudge had been keyed 'introspection_nudge' and introspection_nudge 'memory_nudge') — so any nudge added later is observable in the logs table for free, without remembering a log line at each new call site."
+        "apply_nudge(result, nudge, *args) calls nudge(*args) and sets result[nudge.__name__] to its text only if the text is truthy, and logs the firing there. The key is the function's own name, never a separate string, so a response key cannot name a different nudge than the one that fired (task:a8394f74 -- finish_nudge had been keyed 'introspection_nudge' and introspection_nudge 'memory_nudge') — so any nudge added later is observable in the logs table for free, without remembering a log line at each new call site.",
+        "A raising `post` hook is logged (WARNING 'POST-HOOK FAILED') and swallowed in tool_called.__exit__: the body has already returned, so the write landed and the result is left unchanged (task:055102f9). Only Exception is caught; KeyboardInterrupt/SystemExit propagate."
       ],
       "created_at": "2026-08-23T10:14:15.066461+00:00",
       "description": "Shared machinery every advisory nudge runs through: unconditional per-call tool logging (tool_called), hook composition (combine), and the one shared result-mutation helper (apply_nudge). Distinct from the nudge functions' own firing policies — see [[advisory-nudge-policies]] — and from [[task-phase-derivation]]'s pure state helpers. Extracted from the flat taskfw/dispatcher.py into taskfw/dispatcher/chassis.py; taskfw/dispatcher/__init__.py re-exports every name so `from taskfw import dispatcher` and `from taskfw.dispatcher import tool_called` are unaffected by the split.",
@@ -970,7 +971,7 @@
         "Call sites build `post` with a lambda, not functools.partial: apply_nudge takes `result` first, but partial appends new positional args after the pre-bound ones, so partial(apply_nudge, nudge, arg) called as p(result) would call apply_nudge(nudge, arg, result) — wrong order.",
         "chassis.py imports nothing from nudges.py or phase.py — it is pure mechanism operating only on a Callable[[dict], None] hook and a result dict, never on task state itself; that is what keeps it the one module none of the others need to change when a nudge's condition changes."
       ],
-      "last_validated": "2026-08-25T13:41:23.425049+00:00",
+      "last_validated": "2026-10-11T14:21:02.769008+00:00",
       "module": "taskfw/dispatcher/chassis.py",
       "name": "nudge-dispatch-chassis",
       "related": [
@@ -1402,7 +1403,8 @@
         "tasks__add_decision(task_id, decision, resolves=None) -> {'ok','id'} when resolves is omitted (byte-identical to its pre-task:1f400ecf shape), or the full _apply_check_item result plus 'decision_recorded': True when given one. `resolves` is the zero-based index of the checklist item the decision ANSWERS; which item that is stays the caller's knowledge and is never inferred. The index is validated BEFORE the event is written, so a rejected index records nothing at all -- a decision on the record with no tick beside it is the exact state the parameter exists to make unreachable, and a half-applied call would recreate it.",
         "_apply_check_item(task_id, index, done) is the single implementation of ticking, shared by tasks__check_item and tasks__add_decision's resolve path (task:1f400ecf). Both therefore auto-finish on the last open item because there is one path, not two that agree today. Ticking does NOT touch the active pointer (task:c88b8730 removed _auto_activate_on_checklist_progress): tasks__create and the task-implementation skill are the activation paths, so ticking no longer stands in for a forgotten set_active. _resolution_index_error is likewise one home for the range rule, because add_decision must ask it earlier in its sequence than check_item does.",
         "tasks__check_item's log line carries `waited=<n>s` -- seconds since the task's most recent decision event, via _seconds_since_last_decision and store.last_event_ts. It is an OBSERVABLE with no automatic reader: nothing branches on it. It exists because which item a decision answers is not a fact the framework holds, so the gap between answering and ticking can be measured after the fact but never judged in the moment. The field is OMITTED, never printed as zero, when the task carries no decision -- a zero would read as 'ticked the instant it was answered', the opposite of what it means. task-implementation's close-out step is its intended reader.",
-        "tasks__get returns Task.to_dict() and carries NO `progress` key; progress reaches a caller through tasks__context's task section instead. The asymmetry is not obvious from either tool's name and has caught test authors (task:1f400ecf)."
+        "tasks__get returns Task.to_dict() and carries NO `progress` key; progress reaches a caller through tasks__context's task section instead. The asymmetry is not obvious from either tool's name and has caught test authors (task:1f400ecf).",
+        "Capped reads (tasks__list, tasks__search, tasks__logs, task_memory__recall) say when rows were omitted: the response carries `truncated: {\"limit\": N}` only when more rows existed than the limit (detected by fetching limit+1); an absent key means nothing was cut. tasks__list/tasks__search return {\"tasks\": [...]}, not a bare list. A negative limit is clamped to 0 (task:055102f9); the rule lives in mcp_server._capped."
       ],
       "created_at": "2026-08-24T12:03:13.375728+00:00",
       "description": "Pulled out of [[mcp-portable-interface]]. Per-tool response-shape and semantics contracts for individual tasks__* tools not covered by registration/hooks or active-task mechanics -- context fallback, finish idempotency, introspection append-vs-replace, commit-message formatting, and tasks__logs' exact-match-only log query.",
@@ -1627,6 +1629,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-11T14:00:08.876601+00:00"
+    "updated_at": "2026-10-11T14:21:02.769093+00:00"
   }
 }

@@ -354,6 +354,19 @@ def tasks__grooming_accuracy(limit: int = 25, scope: str = "") -> dict[str, Any]
                              scope=scope_for_repo(scope) if scope else None)
 
 
+def _capped(key: str, rows: list, limit: int) -> dict[str, Any]:
+    """The one home for how a capped read says it was capped.
+
+    `rows` holds up to limit+1 rows (the extra is a probe). When the probe
+    exists the answer carries `truncated: {"limit": N}`; when it does not the
+    key is absent — the same conditional-key convention as tasks__context.
+    """
+    out: dict[str, Any] = {key: rows[:limit]}
+    if len(rows) > limit:
+        out["truncated"] = {"limit": limit}
+    return out
+
+
 @_tool()
 def tasks__logs(logger: str = "", level: str = "", limit: int = 50) -> dict[str, Any]:
     """Operational log lines from the `logs` table, most recent first.
@@ -376,10 +389,11 @@ def tasks__logs(logger: str = "", level: str = "", limit: int = 50) -> dict[str,
         params.append(level)
     if where:
         sql += " WHERE " + " AND ".join(where)
+    limit = max(limit, 0)
     sql += " ORDER BY id DESC LIMIT ?"
-    params.append(limit)
+    params.append(limit + 1)
     rows = log_conn().execute(sql, params).fetchall()
-    return {"logs": [dict(r) for r in rows]}
+    return _capped("logs", [dict(r) for r in rows], limit)
 
 
 @_tool()
@@ -424,30 +438,39 @@ def tasks__phase(task_id: str) -> dict[str, Any]:
 
 
 @_tool()
-def tasks__list(status: str = "open,blocked", epic: bool | None = None, parent: str = "", limit: int = 50) -> list[dict]:
+def tasks__list(status: str = "open,blocked", epic: bool | None = None, parent: str = "", limit: int = 50) -> dict[str, Any]:
     """List tasks. status is comma-separated; empty means every status.
+
+    Returns {"tasks": [...]}, plus `truncated: {"limit": N}` when more rows
+    matched than the limit — absent means nothing was cut.
 
     epic omitted lists both; epic=true lists only epics, epic=false only
     non-epic tasks. Rows come back ordered by updated_at, most recently
     touched first.
     """
     statuses = tuple(s.strip() for s in status.split(",") if s.strip()) or None
-    tasks = store().list(status=statuses, epic=epic, parent=parent or None, limit=limit)
-    return [
+    limit = max(limit, 0)
+    tasks = store().list(status=statuses, epic=epic, parent=parent or None, limit=limit + 1)
+    return _capped("tasks", [
         {"id": t.id, "epic": t.epic, "status": t.status, "title": t.title,
          "parent": t.parent, "progress": list(t.progress),
          "created_at": t.created_at, "updated_at": t.updated_at}
         for t in tasks
-    ]
+    ], limit)
 
 
 @_tool()
-def tasks__search(query: str, limit: int = 25) -> list[dict]:
-    """Full-text search over titles, motivation, notes, tags, files, and checklist items."""
-    return [
+def tasks__search(query: str, limit: int = 25) -> dict[str, Any]:
+    """Full-text search over titles, motivation, notes, tags, files, and checklist items.
+
+    Returns {"tasks": [...]}, plus `truncated: {"limit": N}` when more tasks
+    matched than the limit — absent means nothing was cut.
+    """
+    limit = max(limit, 0)
+    return _capped("tasks", [
         {"id": t.id, "epic": t.epic, "status": t.status, "title": t.title}
-        for t in store().search(query, limit=limit)
-    ]
+        for t in store().search(query, limit=limit + 1)
+    ], limit)
 
 
 # ---------------------------------------------------------------------------
@@ -1258,8 +1281,13 @@ def task_memory__recall(query: str = "", kind: str = "", limit: int = DEFAULT_RE
     keeps surfacing is worse than none, because it reads as current. Every
     result carries a derived `standing` — unverified, confirmed, disputed, or
     contradicted — so a disputed lesson is never returned as settled fact.
+    `truncated: {"limit": N}` appears only when more matched than the limit.
     """
-    return {"memories": memory().recall(query, kind, limit, include_superseded)}
+    rows, truncated = memory().recall_capped(query, kind, limit, include_superseded)
+    out: dict[str, Any] = {"memories": rows}
+    if truncated:
+        out["truncated"] = {"limit": max(limit, 0)}
+    return out
 
 
 @_tool()

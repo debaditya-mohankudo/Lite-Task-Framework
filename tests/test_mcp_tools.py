@@ -552,13 +552,13 @@ class TestListAndSearch:
         a = create(title="open one")
         b = create(title="done one")
         m.tasks__finish(b["id"])
-        assert [t["title"] for t in m.tasks__list()] == ["open one"]
-        assert len(m.tasks__list(status="")) == 2
+        assert [t["title"] for t in m.tasks__list()["tasks"]] == ["open one"]
+        assert len(m.tasks__list(status="")["tasks"]) == 2
 
     def test_search_finds_by_motivation(self):
         create(title="alpha", motivation="uses a widget")
         create(title="beta")
-        assert [t["title"] for t in m.tasks__search("widget")] == ["alpha"]
+        assert [t["title"] for t in m.tasks__search("widget")["tasks"]] == ["alpha"]
 
     def test_list_exposes_timestamps_newest_first(self, monkeypatch):
         import taskfw.store as store_mod
@@ -567,9 +567,55 @@ class TestListAndSearch:
         create(title="older")
         monkeypatch.setattr(store_mod, "utcnow", lambda: "2030-01-01 00:00:00")
         create(title="newer")
-        rows = m.tasks__list(status="")
+        rows = m.tasks__list(status="")["tasks"]
         assert all("created_at" in r and "updated_at" in r for r in rows)
         assert [r["title"] for r in rows] == ["newer", "older"]
+
+
+class TestCappedReadsSayTheyWereCapped:
+    def test_list_reports_truncation_only_when_rows_were_cut(self):
+        for i in range(3):
+            create(title=f"t{i}")
+        cut = m.tasks__list(limit=2)
+        assert len(cut["tasks"]) == 2 and cut["truncated"] == {"limit": 2}
+        whole = m.tasks__list(limit=3)
+        assert len(whole["tasks"]) == 3 and "truncated" not in whole
+
+    def test_search_reports_truncation(self):
+        for i in range(3):
+            create(title=f"widget {i}")
+        cut = m.tasks__search("widget", limit=2)
+        assert len(cut["tasks"]) == 2 and cut["truncated"] == {"limit": 2}
+        assert "truncated" not in m.tasks__search("widget", limit=3)
+
+    def test_logs_reports_truncation_and_clamps_negative_limit(self):
+        import logging
+        import uuid
+
+        from taskfw.log import SQLiteHandler
+
+        name = f"taskfw.cap_probe_{uuid.uuid4().hex}"
+        handler = SQLiteHandler()
+        for i in range(3):
+            handler.emit(logging.LogRecord(name, logging.INFO, __file__, 1, f"row {i}", None, None))
+        cut = m.tasks__logs(logger=name, limit=2)
+        assert len(cut["logs"]) == 2 and cut["truncated"] == {"limit": 2}
+        assert "truncated" not in m.tasks__logs(logger=name, limit=3)
+        # a negative limit must not mean "no limit" (SQLite's LIMIT -1 does)
+        neg = m.tasks__logs(logger=name, limit=-1)
+        assert neg["logs"] == [] and neg["truncated"] == {"limit": 0}
+
+    def test_recall_reports_truncation_and_probe_row_is_not_counted_as_a_hit(self):
+        tid = create(title="Source")["id"]
+        for slug in ("lesson-a", "lesson-b", "lesson-c"):
+            m.task_memory__record(slug=slug, task_id=tid,
+                                  text="A lesson long enough to count as one.")
+        cut = m.task_memory__recall(limit=2)
+        assert len(cut["memories"]) == 2 and cut["truncated"] == {"limit": 2}
+        assert "truncated" not in m.task_memory__recall(limit=3)
+        hits = {x["slug"]: x["hit_count"] for x in m.task_memory__recall(limit=10)["memories"]}
+        # two recalls above covered a/b/c at most twice; the probe never added a hit
+        assert sum(hits.values()) <= 2 + 3 + 3
 
 
 class TestGraph:
