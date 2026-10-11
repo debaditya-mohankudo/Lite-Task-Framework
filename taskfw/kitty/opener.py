@@ -46,14 +46,15 @@ def _not_opened(reason: str) -> OpenResult:
 def open_task(task_id: str, worktree: str | None = None, *, socket: str | None = None,
               store: str | None = None, env: Mapping[str, str] = os.environ,
               adapter_factory: Callable[[str], KittyAdapter] = KittyAdapter,
-              socket_glob: str = SOCKET_GLOB, claude: str | None = None) -> OpenResult:
+              socket_glob: str = SOCKET_GLOB, claude: str | None = None,
+              prompt: str | None = None) -> OpenResult:
     try:
-        return _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude)
+        return _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt)
     except Exception as e:  # the whole point: nothing escapes into the caller
         return _not_opened(f"unexpected {type(e).__name__}: {e}")
 
 
-def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude) -> OpenResult:
+def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt) -> OpenResult:
     wt = Path(worktree or os.getcwd()).expanduser()
     if not wt.is_dir():
         return _not_opened(f"worktree {str(wt)!r} is not a directory")
@@ -105,5 +106,5 @@ def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, c
         return _not_opened(f"{len(live)} kitty instances are running and none was chosen; "
                            "pass --socket")
     lau = Launcher(live[target], st, claude=claude)
-    wid = lau.start(task_id, str(wt))
+    wid = lau.start(task_id, str(wt), prompt)
     return OpenResult("opened", wid, target)

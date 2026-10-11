@@ -86,6 +86,28 @@ def test_resume_null_session_reports_or_goes_fresh(tmp_path):
     assert "--resume" not in [c for c in f.calls if "launch" in c][-1]
 
 
+def test_prompt_is_one_trailing_argv_after_double_dash(tmp_path):
+    lau, st, f = make(handler, tmp_path)
+    p = "-x it's \"q\"\nline2"
+    lau.start("abc", str(tmp_path), prompt=p)
+    argv = next(c for c in f.calls if "launch" in c)
+    assert argv[-2:] == ["--", p] and argv.count("--") == 2
+
+
+def test_resume_fresh_has_no_prompt_unless_given(tmp_path):
+    lau, st, f = make(handler, tmp_path)
+    lau.start("abc", str(tmp_path))
+    lau.resume("abc", fresh=True)
+    assert argv_tail(f) == ["/bin/claude", "--settings", "/h/settings.json"]
+    lau.resume("abc", fresh=True, prompt="go")
+    assert argv_tail(f)[-2:] == ["--", "go"]
+
+
+def argv_tail(f):
+    a = [c for c in f.calls if "launch" in c][-1]
+    return a[a.index("--") + 1:]
+
+
 def test_list_marks_gone_windows(tmp_path):
     lau, st, f = make(handler, tmp_path)
     lau.start("abc", str(tmp_path))

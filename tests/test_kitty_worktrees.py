@@ -85,8 +85,8 @@ def _main_start(monkeypatch, repo, argv):
 
     class FakeLauncher:
         def __init__(self, *a, **k): pass
-        def start(self, task_id, wt): seen["start"] = wt; return 1
-        def resume(self, task_id, wt, fresh): seen["resume"] = wt; return 1
+        def start(self, task_id, wt, prompt=None): seen["start"] = wt; return 1
+        def resume(self, task_id, wt, fresh, prompt=None): seen["resume"] = wt; return 1
 
     monkeypatch.chdir(repo)
     monkeypatch.setattr(launcher, "Launcher", FakeLauncher)

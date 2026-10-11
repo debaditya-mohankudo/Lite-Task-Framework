@@ -178,3 +178,12 @@ def test_cli_prints_json_and_exits_zero_when_not_opened(capsys, tmp_path):
               env={"PATH": "/bin:/usr/bin", "KITTY_LISTEN_ON": "unix:/nonexistent/kitty"})
     out = json.loads(capsys.readouterr().out)
     assert rc == 0 and out["status"] == "not_opened" and out["reason"]
+
+
+def test_prompt_reaches_claude_argv_only_when_given(ctx):
+    w = World(**{"unix:/tmp/kitty-1": []})
+    run(w, ctx, socket="/tmp/kitty-1", prompt="go: read notes")
+    assert w.launches()[0][-2:] == ["--", "go: read notes"]
+    w2 = World(**{"unix:/tmp/kitty-1": []})
+    run(w2, {**ctx, "store": ctx["store"] + "2"}, socket="/tmp/kitty-1")
+    assert "go: read notes" not in w2.launches()[0] and w2.launches()[0].count("--") == 1

@@ -1130,7 +1130,7 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
 
 
 @_tool()
-def tasks__open_in_kitty(task_id: str, worktree: str = "") -> dict[str, Any]:
+def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "") -> dict[str, Any]:
     """Open task_id in a kitty tab by running `python -m taskfw.kitty.launcher open`. Fail-soft and optional.
 
     Returns {status, window_id, socket, reason} with status opened / exists /
@@ -1142,6 +1142,9 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "") -> dict[str, Any]:
     tab's working directory; omitted, it is the task scope's local root, and when
     that is unknown the tool does not guess (not_opened, pass worktree). Does not
     touch the active pointer: the new tab's session has its own server.
+    prompt is claude's initial argument in the new tab (submitted at startup, so
+    no send-text race). Omitted, it is a one-line pointer to read the task notes
+    via tasks__get, never the brief itself: context is pulled, not pushed.
     Command: TASKFW_KITTY_OPEN_CMD (shell-split), else the in-repo taskfw.kitty launcher.
     """
     task = store().get(task_id)
@@ -1153,7 +1156,9 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "") -> dict[str, Any]:
             "status": "not_opened", "window_id": None, "socket": None,
             "reason": "no known directory for this task; pass worktree",
         }
-    return kitty_open.open_task(task_id, worktree)
+    prompt = prompt or (f"Task {task_id}: read its notes via tasks__get, then run /task-grooming "
+                        "and implement.")
+    return kitty_open.open_task(task_id, worktree, prompt=prompt)
 
 
 @_tool()

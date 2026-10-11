@@ -56,6 +56,14 @@ class TestOpenTask:
         assert argv == ["kt-fake", "--flag", "open", "--worktree", "/repo", "abc"]
         assert kw["timeout"] == kitty_open.TIMEOUT_S
 
+    def test_prompt_is_one_argv_element_and_absent_by_default(self):
+        r = fake(json.dumps({"status": "opened"}))
+        kitty_open.open_task("abc", "/repo", runner=r, env=ENV, prompt="it's \"q\"\nline2")
+        assert r.calls[0][0][-2:] == ["--prompt", "it's \"q\"\nline2"]
+        r2 = fake(json.dumps({"status": "opened"}))
+        kitty_open.open_task("abc", "/repo", runner=r2, env=ENV)
+        assert "--prompt" not in r2.calls[0][0]
+
     def test_exists_passes_through(self):
         r = fake(json.dumps({"status": "exists", "window_id": 3}))
         assert kitty_open.open_task("abc", "/r", runner=r, env=ENV)["status"] == "exists"
@@ -106,11 +114,13 @@ class TestTool:
         seen = {}
         monkeypatch.setattr(
             m.kitty_open, "open_task",
-            lambda tid, wt: seen.update(tid=tid, wt=wt) or {"status": "opened"},
+            lambda tid, wt, prompt="": seen.update(tid=tid, wt=wt, prompt=prompt) or {"status": "opened"},
         )
         before = m.store().get_active(m._workspace())
         assert m.tasks__open_in_kitty(t["id"], worktree="/w")["status"] == "opened"
-        assert seen == {"tid": t["id"], "wt": "/w"}
+        assert seen["tid"] == t["id"] and seen["wt"] == "/w"
+        # default prompt is a short pointer to the notes, never the brief itself
+        assert "tasks__get" in seen["prompt"] and len(seen["prompt"]) < 200
         assert m.store().get_active(m._workspace()) == before
 
     def test_task_id_is_required(self):

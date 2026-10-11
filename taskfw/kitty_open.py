@@ -51,8 +51,9 @@ def open_task(
     runner: Callable[..., Any] = subprocess.run,
     env: dict[str, str] | None = None,
     timeout: float = TIMEOUT_S,
+    prompt: str = "",
 ) -> dict[str, Any]:
-    """Run `taskfw.kitty.launcher open --worktree <worktree> <task_id>`; never raises.
+    """Run `taskfw.kitty.launcher open --worktree <worktree> <task_id> [--prompt P]`; never raises.
 
     Returns {status, window_id, socket, reason}, status one of
     opened / exists / not_opened. `runner` is injectable so tests never fork.
@@ -62,6 +63,8 @@ def open_task(
     if cmd is None:
         return _not_opened(why_not)
     argv = [*cmd, "open", "--worktree", worktree, task_id]
+    if prompt:  # one argv element: the launcher hands it to claude as its initial argument
+        argv += ["--prompt", prompt]
     try:
         proc = runner(
             argv, capture_output=True, text=True, timeout=timeout, env=env,

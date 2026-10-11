@@ -56,10 +56,15 @@ def build_env(task_id: str, worktree: str, db: str, path: str, store: str | None
     return env
 
 
-def claude_cmd(claude: str, hooks: str | Path, resume_session: str | None = None) -> list[str]:
+def claude_cmd(claude: str, hooks: str | Path, resume_session: str | None = None,
+               prompt: str | None = None) -> list[str]:
+    """argv for the tab's claude. The prompt is one trailing argv element after `--` (kitty runs
+    argv with no shell, so quotes and newlines need no escaping; `--` keeps a leading '-' a prompt)."""
     cmd = [claude, "--settings", str(hooks)]
     if resume_session:
         cmd += ["--resume", resume_session]
+    if prompt:
+        cmd += ["--", prompt]
     return cmd
 
 
@@ -73,11 +78,12 @@ class Launcher:
         self.db = str(Path(db).expanduser()) if db else str(DB_PATH)
         self.path = path if path is not None else os.environ.get("PATH", "")
 
-    def _launch(self, task_id: str, worktree: str, resume_session: str | None) -> int:
+    def _launch(self, task_id: str, worktree: str, resume_session: str | None,
+                prompt: str | None = None) -> int:
         worktree = str(Path(worktree).expanduser().resolve())
         wid = self.adapter.launch(
             cwd=worktree,
-            cmd=claude_cmd(self.claude, self.hooks, resume_session),
+            cmd=claude_cmd(self.claude, self.hooks, resume_session, prompt),
             env=build_env(task_id, worktree, self.db, self.path, self.store.path),
             user_vars={"task_id": task_id},
             title=f"task:{task_id}",
@@ -90,10 +96,11 @@ class Launcher:
                                  socket=self.adapter.socket, cwd=worktree)
         return wid
 
-    def start(self, task_id: str, worktree: str) -> int:
-        return self._launch(task_id, worktree, None)
+    def start(self, task_id: str, worktree: str, prompt: str | None = None) -> int:
+        return self._launch(task_id, worktree, None, prompt)
 
-    def resume(self, task_id: str, worktree: str | None = None, fresh: bool = False) -> int:
+    def resume(self, task_id: str, worktree: str | None = None, fresh: bool = False,
+               prompt: str | None = None) -> int:
         last = self.store.latest_for_task(task_id)
         sid = self.store.latest_session_for_task(task_id)
         if sid is None and not fresh:
@@ -101,7 +108,7 @@ class Launcher:
                 f"task {task_id}: no claude session id recorded (session died before "
                 "SessionStart backfilled it); pass --fresh to start a new session")
         wt = worktree or (last.cwd if last else os.getcwd())
-        return self._launch(task_id, wt, sid)
+        return self._launch(task_id, wt, sid, prompt)
 
     def list(self) -> list[tuple[str, int, str]]:
         """(task_id, window_id, state) for open rows; state is the live `state` user var,
@@ -124,6 +131,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
         p = sub.add_parser(name)
         p.add_argument("task_id")
         p.add_argument("--worktree", default=None, help="explicit cwd; default: the current directory")
+        p.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
         if name == "start":
             p.add_argument("--isolate", action="store_true",
                            help="run in a git worktree of this repo derived from the task id")
@@ -133,6 +141,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     o = sub.add_parser("open", help="open a task in a tab if kitty allows; always prints JSON, exits 0")
     o.add_argument("task_id")
     o.add_argument("--worktree", default=None)
+    o.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
     o.add_argument("--isolate", action="store_true",
                    help="run in a git worktree of this repo derived from the task id")
     c = sub.add_parser("cleanup", help="remove a task's worktree and branch; refuses dirty or unmerged work")
@@ -157,7 +166,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
             print(json.dumps(_not_opened(f"worktree: {e}").as_dict()))
             return 0
         print(json.dumps(open_task(a.task_id, wt, socket=a.socket, store=a.store,
-                                   env=env).as_dict()))
+                                   env=env, prompt=a.prompt).as_dict()))
         return 0
     if not a.socket:
         ap.error("no kitty socket: pass --socket or run inside kitty")
@@ -169,9 +178,9 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     try:
         lau = Launcher(KittyAdapter(a.socket), store)
         if a.cmd == "start":
-            print(lau.start(a.task_id, resolve_worktree(a.task_id, a.worktree, a.isolate)))
+            print(lau.start(a.task_id, resolve_worktree(a.task_id, a.worktree, a.isolate), a.prompt))
         elif a.cmd == "resume":
-            print(lau.resume(a.task_id, a.worktree, a.fresh))
+            print(lau.resume(a.task_id, a.worktree, a.fresh, a.prompt))
         else:
             for t, w, s in lau.list():
                 print(f"{t}\twindow={w}\t{s}")
