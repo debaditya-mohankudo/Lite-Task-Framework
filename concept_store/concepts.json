@@ -995,7 +995,7 @@
       "confidence": 0.8,
       "contracts": [
         "tool_called(name, pre=None, post=None): context manager wrapping one MCP tool call. `pre` runs on entry. `post` runs once, after the block exits with no exception and call.result is a dict not containing an 'error' key (a refusal). A non-dict result (e.g. a future list-returning tool) is treated as success for logging but never invokes `post`, since apply_nudge needs a dict to write into.",
-        "Exactly one log line per exit: 'tool=<name> OK' / 'tool=<name> REFUSE rule=<rule>' / 'tool=<name> ERROR <type>: <msg>' at INFO level, no arguments or payloads logged.",
+        "Exactly one log line per exit: 'tool=<name> OK' / 'tool=<name> REFUSE rule=<rule>' (an error result that carries a rule) / 'tool=<name> FAILED: <error>' (an error result with no rule -- a miss or bad input, not a refusal) / 'tool=<name> ERROR <type>: <msg>' at INFO level, no arguments or payloads logged.",
         "combine(*hooks) -> Callable[[dict], None]: runs each hook in order against the same result dict, letting a tool that needs several nudges (e.g. tasks__update) compose them at its own call site rather than tool_called/_tool needing a multi-hook parameter.",
         "apply_nudge(result, nudge, *args) calls nudge(*args) and sets result[nudge.__name__] to its text only if the text is truthy, and logs the firing there. The key is the function's own name, never a separate string, so a response key cannot name a different nudge than the one that fired (task:a8394f74 -- finish_nudge had been keyed 'introspection_nudge' and introspection_nudge 'memory_nudge') — so any nudge added later is observable in the logs table for free, without remembering a log line at each new call site.",
         "A raising `post` hook is logged (WARNING 'POST-HOOK FAILED') and swallowed in tool_called.__exit__: the body has already returned, so the write landed and the result is left unchanged (task:055102f9). Only Exception is caught; KeyboardInterrupt/SystemExit propagate."
@@ -1443,7 +1443,7 @@
         "tasks__add_introspection appends where tasks__update(grooming=...) replaces; its result is {ok, id, reports, active_cleared} and it clears the active pointer as a side effect when the reported task is the active one (task:2d24165a) -- the sole deactivation path, symmetric with tasks__create being the sole non-explicit activation",
         "tasks__format_commit_message(task_id, subject, body) validates the task exists and returns the canonical message shape",
         "tasks__logs(logger, level, limit) reads config.db_path() directly via log_conn(), never store().conn",
-        "tasks__logs(logger, level, limit) filters by EXACT match only (SQL 'logger=?'/'level=?'), no LIKE/prefix/wildcard support -- auditing a family of related logger names (e.g. every 'taskfw.skill.<name>/<step>' row for one skill) requires either querying each exact name individually or pulling unfiltered rows and filtering client-side by string prefix (verified task:a0bb2c26).",
+        "tasks__logs(logger, level, limit) filters by EXACT match only (SQL 'logger=?'/'level=?'), no LIKE/prefix/wildcard support -- auditing a family of related logger names requires pulling rows and filtering client-side by string prefix (verified task:a0bb2c26). Skill invocations all share the one logger 'taskfw.skill' with the name in the message ('skill=<name> invoked task=<id>'), so one logger query plus a message filter audits a skill (task:7034bce5).",
         "tasks__log_skill_invocation(skill, task_id='') is a thin wrapper around get_logger()",
         "tasks__phase(task_id) returns {id, groomed, implemented, introspected} or {'error': ...} for an unknown task",
         "tasks__create(...) returns {ok, id, epic, status} plus an OPTIONAL related_candidates key (list of task summaries, from TaskContext(store()).related(task) against the new task's title -- task:01fba67f) -- present only when at least one candidate is found, omitted entirely otherwise. Advisory only; never creates a tasks__link edge itself (task:78853657).",
@@ -1611,13 +1611,13 @@
       "confidence": 0.8,
       "contracts": [],
       "created_at": "2026-08-23T15:11:05.130058+00:00",
-      "description": "Pins tool_called's exact gating rule: its post hook and its OK/REFUSE/ERROR log line are both keyed on the absence of an 'error' key in call.result, never on a truthy 'ok' key or on the result being a dict at all. This lets read tools (no 'ok' key) and list tools (bare list, no key to write a marker into) compose uniformly with write tools under the same hook.",
+      "description": "Pins tool_called's exact gating rule: its post hook and its OK log line are both keyed on the absence of an 'error' key in call.result (an error with a 'rule' logs REFUSE, one without logs FAILED, and neither runs post), never on a truthy 'ok' key or on the result being a dict at all. This lets read tools (no 'ok' key) and list tools (bare list, no key to write a marker into) compose uniformly with write tools under the same hook.",
       "evidence": [
         "tests/test_dispatcher.py:TestToolCalled"
       ],
       "invariants": [
         "post runs exactly when call.result is a dict without an 'error' key; it never runs on a dict with 'error', a non-dict result, or when the wrapped block raises.",
-        "Logging (OK/REFUSE rule=/ERROR) is unconditional and independent of whether post/pre hooks are supplied -- it must fire even with zero hooks configured.",
+        "Logging (OK/REFUSE rule=/FAILED/ERROR) is unconditional and independent of whether post/pre hooks are supplied -- it must fire even with zero hooks configured.",
         "A raised exception inside the with-block always re-raises after being logged; post is never invoked in that case."
       ],
       "last_validated": "2026-08-23T15:11:05.130076+00:00",
