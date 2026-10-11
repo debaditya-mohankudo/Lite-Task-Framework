@@ -26,6 +26,7 @@ from taskfw.context import TaskContext
 from taskfw.db.connect import connect
 from taskfw.gitutil import head_sha
 from taskfw.grooming import Grooming
+from taskfw.introspection import IntrospectionReport, has_content
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected
 from taskfw.risk import coerce, normalise_text
@@ -298,7 +299,7 @@ def _introspection_hook(result: dict[str, Any]) -> None:
     saved, rather than threading the argument through result just for this.
     """
     task = _refetch(result)
-    if task and dispatcher.is_introspected(task):
+    if task and not result.get("duplicate") and dispatcher.is_introspected(task):
         dispatcher.apply_nudge(
             result, dispatcher.introspection_nudge,
             task.introspection[-1], result["id"], store().conn,
@@ -922,7 +923,7 @@ def tasks__finish(task_id: str, reason: str = "") -> dict[str, Any]:
 
 
 @_tool(hook=_introspection_hook)
-def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
+def tasks__add_introspection(task_id: str, report: IntrospectionReport) -> dict[str, Any]:
     """Append an introspection report to a task's history.
 
     Appends rather than replaces, unlike grooming: grooming records the current
@@ -944,10 +945,22 @@ def tasks__add_introspection(task_id: str, report: dict) -> dict[str, Any]:
     none) was active, which is not an error. The pointer is in-memory, so a
     report filed against a non-active task simply leaves whatever was active
     in place, and it self-heals on the next tasks__create / tasks__set_active.
+
+    `report` is typed (taskfw.introspection.IntrospectionReport): an unknown
+    key is refused before this runs, and free text goes in `other`. Every key
+    is optional but an empty report is refused, since it would count as a pass.
+    A report identical to one already recorded is a retry, not new evidence:
+    nothing is appended and the result says `duplicate: true`.
     """
+    if not has_content(report):
+        return {"error": "Empty introspection report: carry at least one non-empty field "
+                         "(free text goes in `other`)."}
     task = store().get(task_id)
     if task is None:
         return {"error": f"No task {task_id!r}"}
+    if report in task.introspection:
+        return {"ok": True, "id": task_id, "reports": len(task.introspection),
+                "duplicate": True, "active_cleared": False}
     task.introspection.append(report)
     store().save(task)
     workspace = _workspace()

@@ -32,7 +32,7 @@
     "tasks__update": { "namespace": "tasks", "use": "Update a task. Only the fields you pass are changed." },
     "tasks__check_item": { "namespace": "tasks", "use": "Tick or untick one resolution checklist item by its zero-based index." },
     "tasks__finish": { "namespace": "tasks", "use": "Mark a task done." },
-    "tasks__add_introspection": { "namespace": "tasks", "use": "Append an introspection report to a task's history." },
+    "tasks__add_introspection": { "namespace": "tasks", "use": "Append a typed introspection report (unknown keys refused, free text in `other`, empty refused, identical retry a no-op)." },
     "tasks__add_decision": { "namespace": "tasks", "use": "Record a design decision. Surfaces in tasks__context, where it explains the task's shape." },
     "tasks__link": { "namespace": "tasks", "use": "Create an edge between two tasks. Idempotent." },
     "tasks__unlink": { "namespace": "tasks", "use": "Remove an edge, or every edge between two tasks when rel is omitted." },

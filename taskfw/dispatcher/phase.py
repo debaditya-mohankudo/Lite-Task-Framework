@@ -8,6 +8,8 @@ out of sync with the checklist or grooming/introspection history it reads.
 """
 from __future__ import annotations
 
+from taskfw.introspection import has_content
+
 
 def is_groomed(task) -> bool:
     """Whether task has been through a grooming pass.
@@ -22,13 +24,16 @@ def is_groomed(task) -> bool:
 
 
 def is_introspected(task) -> bool:
-    """Whether task has at least one introspection report.
+    """Whether task has at least one introspection report with content.
+
+    An empty ``{}`` is not a pass (taskfw.introspection.has_content), so it
+    cannot silence finish_nudge.
 
     The single predicate task_phase and every caller that needs this
     specific signal (e.g. finish_nudge) share, so a future change to what
     "introspected" means only has to change here.
     """
-    return bool(task.introspection)
+    return any(has_content(r) for r in task.introspection)
 
 
 def is_implemented(task) -> bool:

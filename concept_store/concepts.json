@@ -567,6 +567,53 @@
         "grooming-shape"
       ]
     },
+    "introspection-report-shape": {
+      "confidence": 0.85,
+      "contracts": [
+        "tasks__add_introspection takes IntrospectionReport: an unknown key is refused at the MCP boundary, free text goes in `other`.",
+        "Every field is optional (live survey of 290 reports: no key is universal and no reader needs one); the only floor is has_content — {} or all-empty values is refused and does not count as introspected.",
+        "An identical retry is a no-op (result duplicate: true), decided in tasks__add_introspection."
+      ],
+      "created_at": "2026-10-11T14:26:22.790805+00:00",
+      "description": "The typed write shape of an introspection report (IntrospectionReport, extra=forbid) and has_content, the one floor a report must clear. Mirrors taskfw.grooming's write half; stored reports are deliberately not folded on read.",
+      "evidence": [
+        "taskfw/introspection.py:IntrospectionReport",
+        "taskfw/introspection.py:has_content",
+        "taskfw/mcp_server.py:tasks__add_introspection"
+      ],
+      "invariants": [
+        "`surprises` stays in the schema while nudges._lesson_texts and accuracy._missed still read it.",
+        "is_introspected uses has_content, so a stored {} cannot silence finish_nudge."
+      ],
+      "last_validated": "2026-10-11T14:26:22.791230+00:00",
+      "module": "taskfw/introspection.py",
+      "name": "introspection-report-shape",
+      "related": [
+        "grooming-shape"
+      ]
+    },
+    "introspection-report-shape-tested": {
+      "confidence": 0.85,
+      "contracts": [
+        "Rejection goes through m.mcp.call_tool so pydantic validation actually runs; other tests call the tool directly because call_tool's worker thread cannot use the test store's SQLite connection."
+      ],
+      "created_at": "2026-10-11T14:26:24.639681+00:00",
+      "description": "Pins the typed introspection report: unknown key refused through call_tool before any write, no field required, live-shaped reports validate, empty reports refused and not counted as introspected, identical retry appends nothing.",
+      "evidence": [
+        "tests/test_introspection.py:TestSchema",
+        "tests/test_introspection.py:TestEmptyReport",
+        "tests/test_introspection.py:TestIdempotentRetry"
+      ],
+      "invariants": [
+        "test_an_empty_stored_report_does_not_silence_finish_nudge covers a stored {} that the write side would now refuse."
+      ],
+      "last_validated": "2026-10-11T14:26:24.639705+00:00",
+      "module": "tests/test_introspection.py",
+      "name": "introspection-report-shape-tested",
+      "related": [
+        "introspection-report-shape"
+      ]
+    },
     "kitty-open-tool": {
       "confidence": 0.8,
       "contracts": [
@@ -1629,6 +1676,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-11T14:21:02.769093+00:00"
+    "updated_at": "2026-10-11T14:26:24.639784+00:00"
   }
 }
