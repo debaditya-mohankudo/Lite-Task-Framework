@@ -6,7 +6,7 @@
         "Entry shape is {scope: {id, title, pid}}, pid being the owning server process (task:dc069942).",
         "Every export merges into the file: other live processes' scopes are kept; entries with a dead pid or no pid, and this process's scopes no longer active, are dropped.",
         "TaskStore.__init__ exports once, so a restart prunes the previous process's leftovers on the first tool call (the store is lazy, mcp_server.store()).",
-        "Exporting never raises or blocks a tool call; writes go through tmp + os.replace.",
+        "Exporting never raises or blocks a tool call; each write goes through its own mkstemp temp file beside the target + os.replace, so concurrent exporters never share a temp path, and the temp file is unlinked if the replace fails (task:ca657370). The file is mode 0600.",
         "Readers should skip an entry whose pid is dead; window_title_bar.py (two copies: ~/.config/kitty and claude-hooks/kitty/config) does, and still shows pid-less entries."
       ],
       "created_at": "2026-10-09T12:44:17.468963+00:00",
@@ -20,7 +20,7 @@
         "Nothing reads the file back into the pointer, so the file can never change what tasks__active reports.",
         "No lock guards the read-merge-write; a lost update to one scope is repaired by that process's next export."
       ],
-      "last_validated": "2026-10-09T12:44:17.468983+00:00",
+      "last_validated": "2026-10-11T14:00:05.341304+00:00",
       "module": "taskfw/store.py",
       "name": "active-pointer-file-mirror",
       "related": []
@@ -570,10 +570,11 @@
     "kitty-open-tool": {
       "confidence": 0.8,
       "contracts": [
-        "open_task(task_id, worktree, runner, env, timeout) -> dict; never raises; runner is injectable so tests never fork"
+        "open_task(task_id, worktree, runner, env, timeout) -> dict; never raises; runner is injectable so tests never fork",
+        "A set-but-unusable TASKFW_KITTY_OPEN_CMD (shlex error, or no program name such as \"''\") gives a not_opened reason naming the env var, never the PATH-miss 'not found' reason, and runs nothing (task:ca657370)"
       ],
       "created_at": "2026-10-10T13:23:34.286862+00:00",
-      "description": "Optional, fail-soft bridge from taskfw to the kitty-taskfw CLI (task:87c91a76). tasks__open_in_kitty shells out to `kitty-taskfw open --worktree <dir> <task_id>` and returns {status, window_id, socket, reason}, status opened / exists / not_opened. Nothing imports kitty-taskfw and nothing runs at import; the command (TASKFW_KITTY_OPEN_CMD shell-split, else kitty-taskfw via shutil.which) is resolved inside the call. Missing command, timeout, bad output or no known directory yield not_opened with a reason, never an exception; only an unknown task_id is an `error`. The kitty store stays in kitty-taskfw (task:dfa67756). Complements the one-way file mirror [[active-pointer-file-mirror]].",
+      "description": "Optional, fail-soft bridge from taskfw to the kitty-taskfw CLI (task:87c91a76). tasks__open_in_kitty shells out to `kitty-taskfw open --worktree <dir> <task_id>` and returns {status, window_id, socket, reason}, status opened / exists / not_opened. Nothing imports kitty-taskfw and nothing runs at import; the command (TASKFW_KITTY_OPEN_CMD shell-split, else kitty-taskfw via shutil.which) is resolved inside the call. A missing or unusable command, timeout, bad output or no known directory yield not_opened with a reason, never an exception; only an unknown task_id is an `error`. The kitty store stays in kitty-taskfw (task:dfa67756). Complements the one-way file mirror [[active-pointer-file-mirror]].",
       "evidence": [
         "taskfw/kitty_open.py",
         "taskfw/mcp_server.py:tasks__open_in_kitty",
@@ -584,7 +585,7 @@
         "worktree defaults to scope.local_root(task.scope); when unknown the tool returns not_opened and never falls back to the workspace or server cwd",
         "The tool does not set the active pointer: the new tab's session has its own server"
       ],
-      "last_validated": "2026-10-10T13:23:34.286919+00:00",
+      "last_validated": "2026-10-11T14:00:08.876554+00:00",
       "module": "taskfw/kitty_open.py",
       "name": "kitty-open-tool",
       "related": [
@@ -1626,6 +1627,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-10T13:24:01.408682+00:00"
+    "updated_at": "2026-10-11T14:00:08.876601+00:00"
   }
 }

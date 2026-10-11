@@ -26,15 +26,25 @@ def _not_opened(reason: str) -> dict[str, Any]:
     return {"status": "not_opened", "window_id": None, "socket": None, "reason": reason}
 
 
-def _command(env: dict[str, str]) -> list[str] | None:
+def _command(env: dict[str, str]) -> tuple[list[str] | None, str]:
+    """(argv, "") when a command was found, else (None, why not).
+
+    A set-but-unusable override gets its own reason: reporting it as "not
+    found" would send the user to PATH when the problem is the env var.
+    """
     override = env.get(CMD_ENV, "").strip()
     if override:
         try:
-            return shlex.split(override) or None
-        except ValueError:
-            return None
+            argv = shlex.split(override)
+        except ValueError as e:
+            return None, f"{CMD_ENV} is set but unparseable ({e}): {override!r}"
+        if not argv or not argv[0]:  # "''" splits to [''], not []
+            return None, f"{CMD_ENV} is set but names no command: {override!r}"
+        return argv, ""
     found = shutil.which("kitty-taskfw", path=env.get("PATH"))
-    return [found] if found else None
+    if not found:
+        return None, f"kitty-taskfw not found (set {CMD_ENV} or put it on PATH)"
+    return [found], ""
 
 
 def open_task(
@@ -50,9 +60,9 @@ def open_task(
     opened / exists / not_opened. `runner` is injectable so tests never fork.
     """
     env = dict(os.environ if env is None else env)
-    cmd = _command(env)
+    cmd, why_not = _command(env)
     if cmd is None:
-        return _not_opened(f"kitty-taskfw not found (set {CMD_ENV} or put it on PATH)")
+        return _not_opened(why_not)
     argv = [*cmd, "open", "--worktree", worktree, task_id]
     try:
         proc = runner(argv, capture_output=True, text=True, timeout=timeout, env=env)

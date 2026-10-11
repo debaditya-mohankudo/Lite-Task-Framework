@@ -6,6 +6,8 @@ in the prior system left stale edges with no way to clear them.
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
 import pytest
 
 from taskfw.task import ResolutionItem, Task
@@ -330,6 +332,24 @@ class TestActiveExport:
         exported.write_text(json.dumps({"/gone": {"id": "x", "title": "t", "pid": self._dead_pid()}}))
         store.set_active(store.save(make()).id, scope="/mine")
         assert list(self._read(exported)) == ["/mine"]
+
+    def test_each_write_uses_its_own_temp_file_beside_the_target(self, store, exported, monkeypatch):
+        # A shared fixed temp name let concurrent exporters rename each other's file.
+        real_replace, sources = os.replace, []
+        monkeypatch.setattr(os, "replace", lambda src, dst: (sources.append(Path(src)), real_replace(src, dst)))
+        store.set_active(store.save(make()).id, scope="/a")
+        store.set_active(store.save(make()).id, scope="/b")
+        assert len(sources) == 2 and sources[0] != sources[1]
+        assert all(src.parent == exported.parent for src in sources)
+        assert list(self._read(exported)) == ["/a", "/b"]
+
+    def test_failed_replace_leaves_no_temp_file_and_never_raises(self, store, exported, monkeypatch):
+        def boom(src, dst):
+            raise OSError("replace failed")
+        monkeypatch.setattr(os, "replace", boom)
+        store.set_active(store.save(make()).id)
+        assert list(exported.parent.glob("*.tmp")) == []
+        assert not exported.exists()
 
     def test_disabled_writes_nothing(self, store, exported, monkeypatch):
         monkeypatch.setenv("TASKFW_ACTIVE_FILE", "0")

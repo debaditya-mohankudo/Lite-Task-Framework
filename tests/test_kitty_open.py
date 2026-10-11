@@ -65,6 +65,15 @@ class TestOpenTask:
         assert out["status"] == "not_opened" and "not found" in out["reason"]
         assert r.calls == []
 
+    @pytest.mark.parametrize("override", ["'unterminated", "''"])
+    def test_set_but_unusable_override_is_not_reported_as_not_found(self, override):
+        # The user did set the var; "not found" would send them to PATH instead.
+        r = fake()
+        out = kitty_open.open_task("abc", "/r", runner=r, env={"TASKFW_KITTY_OPEN_CMD": override})
+        assert out["status"] == "not_opened"
+        assert "TASKFW_KITTY_OPEN_CMD" in out["reason"] and "not found" not in out["reason"]
+        assert r.calls == []
+
     def test_path_lookup_is_used_without_override(self, tmp_path):
         exe = tmp_path / "kitty-taskfw"
         exe.write_text("#!/bin/sh\n")

@@ -10,10 +10,12 @@ rejects only what it structurally cannot do.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
 import sqlite3
+import tempfile
 from pathlib import Path
 
 from taskfw.db.connect import connect, transaction
@@ -406,8 +408,17 @@ class TaskStore:
                 task = self.get(task_id)
                 out[scope] = {"id": task_id, "title": task.title if task else "", "pid": me}
             path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(".tmp")
-            tmp.write_text(json.dumps(out))
-            os.replace(tmp, path)
+            # A temp file per write, in the target's directory so os.replace
+            # stays atomic: a shared fixed name let two concurrent exporters
+            # rename each other's file. Unlinked if the replace never happens.
+            fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    f.write(json.dumps(out))
+                os.replace(tmp, path)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp)
+                raise
         except Exception as exc:
             log.warning("active export failed: %s", exc)
