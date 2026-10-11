@@ -1,0 +1,225 @@
+[
+ {
+  "active_tab_history": [
+   1
+  ],
+  "background_opacity": 0.9200000166893005,
+  "id": 1,
+  "is_active": true,
+  "is_focused": true,
+  "last_focused": true,
+  "platform_window_id": 4630,
+  "tabs": [
+   {
+    "active_window_history": [
+     1
+    ],
+    "enabled_layouts": [
+     "fat",
+     "grid",
+     "horizontal",
+     "splits",
+     "stack",
+     "tall",
+     "vertical"
+    ],
+    "groups": [
+     {
+      "id": 1,
+      "windows": [
+       1
+      ]
+     }
+    ],
+    "id": 1,
+    "is_active": true,
+    "is_focused": true,
+    "layout": "fat",
+    "layout_opts": {
+     "bias": 50,
+     "full_size": 1,
+     "mirrored": "n"
+    },
+    "layout_state": {
+     "all_windows": {
+      "active_group_history": [
+       1
+      ],
+      "active_group_idx": 0,
+      "window_groups": [
+       {
+        "id": 1,
+        "window_ids": [
+         1
+        ]
+       }
+      ]
+     },
+     "biased_map": {},
+     "class": "Fat",
+     "main_bias": [
+      0.5,
+      0.5
+     ],
+     "opts": {
+      "bias": 50,
+      "full_size": 1,
+      "mirrored": "n"
+     }
+    },
+    "title": "\u25cf claude",
+    "title_overridden": true,
+    "windows": [
+     {
+      "at_prompt": false,
+      "cmdline": [
+       "/bin/zsh"
+      ],
+      "columns": 110,
+      "created_at": 1791559430947073000,
+      "cwd": "/Users/debaditya",
+      "env": {
+       "COLORTERM": "x",
+       "COMMAND_MODE": "x",
+       "HOME": "x",
+       "KITTY_INSTALLATION_DIR": "x",
+       "KITTY_LISTEN_ON": "x",
+       "KITTY_PID": "x",
+       "KITTY_PUBLIC_KEY": "x",
+       "KITTY_WINDOW_ID": "x",
+       "LANG": "x",
+       "LOGNAME": "x",
+       "MANPATH": "x",
+       "OSLogRateLimit": "x",
+       "PATH": "x",
+       "PWD": "x",
+       "SHELL": "x",
+       "SSH_AUTH_SOCK": "x",
+       "TERM": "x",
+       "TERMINFO": "x",
+       "TMPDIR": "x",
+       "USER": "x",
+       "WINDOWID": "x",
+       "XPC_FLAGS": "x",
+       "XPC_SERVICE_NAME": "x",
+       "__CFBundleIdentifier": "x",
+       "__CF_USER_TEXT_ENCODING": "x"
+      },
+      "foreground_processes": [
+       {
+        "cmdline": [
+         "caffeinate",
+         "-i",
+         "-t",
+         "300"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 39799
+       },
+       {
+        "cmdline": [
+         "/Users/debaditya/workspace/astrology-mcp/.venv/bin/python3",
+         "/Users/debaditya/workspace/astrology-mcp/mcp_server.py"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 37246
+       },
+       {
+        "cmdline": [
+         "uv",
+         "run",
+         "--project",
+         "/Users/debaditya/workspace/astrology-mcp",
+         "python",
+         "/Users/debaditya/workspace/astrology-mcp/mcp_server.py"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 37245
+       },
+       {
+        "cmdline": [
+         "/Users/debaditya/workspace/stock-tracker-mcp/.venv/bin/python",
+         "/Users/debaditya/workspace/stock-tracker-mcp/stock_tracker/mcp_server.py"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 37243
+       },
+       {
+        "cmdline": [
+         "/Users/debaditya/workspace/task-framework/.venv/bin/python3",
+         "/Users/debaditya/workspace/task-framework/.venv/bin/taskfw-mcp"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 37241
+       },
+       {
+        "cmdline": [
+         "/Users/debaditya/workspace/claude-hooks/.venv/bin/python3",
+         "/Users/debaditya/workspace/claude-hooks/mcp_server.py"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 37228
+       },
+       {
+        "cmdline": [
+         "node",
+         "/Users/debaditya/workspace/mbse-claude-hooks-model/sysml-mcp/dist/server/mcpServer.js"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 37223
+       },
+       {
+        "cmdline": [
+         "uv",
+         "run",
+         "--project",
+         "/Users/debaditya/workspace/claude-hooks",
+         "python",
+         "/Users/debaditya/workspace/claude-hooks/mcp_server.py"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 37222
+       },
+       {
+        "cmdline": [
+         "/Users/debaditya/workspace/claude_for_mac_local/.venv/bin/python3",
+         "/Users/debaditya/workspace/claude_for_mac_local/mcp_server.py"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 37221
+       },
+       {
+        "cmdline": [
+         "claude"
+        ],
+        "cwd": "/Users/debaditya/workspace/kitty-taskfw",
+        "pid": 37194
+       }
+      ],
+      "has_activity_since_last_focus": false,
+      "id": 1,
+      "in_alternate_screen": false,
+      "is_active": true,
+      "is_focused": true,
+      "is_self": true,
+      "last_cmd_exit_status": 0,
+      "last_focused_at": 68686.665331,
+      "last_reported_cmdline": "claude",
+      "lines": 31,
+      "needs_attention": false,
+      "neighbors": {
+       "bottom": []
+      },
+      "pid": 12156,
+      "session_name": "",
+      "title": "\u25d1 Adapter implementation",
+      "title_overridden": false,
+      "user_vars": {}
+     }
+    ]
+   }
+  ],
+  "wm_class": "kitty",
+  "wm_name": "kitty"
+ }
+]

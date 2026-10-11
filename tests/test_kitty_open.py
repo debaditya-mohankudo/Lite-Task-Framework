@@ -1,4 +1,4 @@
-"""task:87c91a76 — tasks__open_in_kitty shells out to `kitty-taskfw open`, fail-soft.
+"""task:87c91a76 — tasks__open_in_kitty shells out to `taskfw.kitty.launcher open`, fail-soft.
 
 No test forks: the runner is injected, and KITTY_* is cleared so a suite run
 inside kitty cannot touch live tabs.
@@ -7,6 +7,7 @@ inside kitty cannot touch live tabs.
 from __future__ import annotations
 
 import json
+import sys
 import subprocess
 from types import SimpleNamespace
 
@@ -59,12 +60,6 @@ class TestOpenTask:
         r = fake(json.dumps({"status": "exists", "window_id": 3}))
         assert kitty_open.open_task("abc", "/r", runner=r, env=ENV)["status"] == "exists"
 
-    def test_missing_command_is_not_opened(self):
-        r = fake()
-        out = kitty_open.open_task("abc", "/r", runner=r, env={"PATH": ""})
-        assert out["status"] == "not_opened" and "not found" in out["reason"]
-        assert r.calls == []
-
     @pytest.mark.parametrize("override", ["'unterminated", "''"])
     def test_set_but_unusable_override_is_not_reported_as_not_found(self, override):
         # The user did set the var; "not found" would send them to PATH instead.
@@ -74,13 +69,10 @@ class TestOpenTask:
         assert "TASKFW_KITTY_OPEN_CMD" in out["reason"] and "not found" not in out["reason"]
         assert r.calls == []
 
-    def test_path_lookup_is_used_without_override(self, tmp_path):
-        exe = tmp_path / "kitty-taskfw"
-        exe.write_text("#!/bin/sh\n")
-        exe.chmod(0o755)
+    def test_default_command_is_the_in_repo_launcher(self):
         r = fake(json.dumps({"status": "opened"}))
-        kitty_open.open_task("abc", "/r", runner=r, env={"PATH": str(tmp_path)})
-        assert r.calls[0][0][0] == str(exe)
+        kitty_open.open_task("abc", "/r", runner=r, env={"PATH": ""})
+        assert r.calls[0][0][:3] == [sys.executable, "-m", "taskfw.kitty.launcher"]
 
     @pytest.mark.parametrize("stdout", ["", "Traceback...", "[]", '{"status": "weird"}'])
     def test_bad_output_is_not_opened(self, stdout):

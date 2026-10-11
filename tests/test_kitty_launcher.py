@@ -1,0 +1,142 @@
+import json
+import subprocess
+
+import pytest
+
+from taskfw.kitty.adapter import KittyAdapter
+from taskfw.kitty.launcher import Launcher, NoSessionToResume
+from taskfw.kitty.store import Store
+
+
+def cp(rc=0, out="", err=""):
+    return subprocess.CompletedProcess([], rc, out, err)
+
+
+def ls_json(*wins):
+    return json.dumps([{"id": 1, "tabs": [{"id": t, "windows": [
+        {"id": w, "user_vars": uv} for (w, uv) in [(wid, v)]]} for (t, wid, v) in wins]}])
+
+
+class Fake:
+    def __init__(self, handler):
+        self.handler, self.calls = handler, []
+
+    def __call__(self, argv):
+        self.calls.append(list(argv))
+        return self.handler(list(argv))
+
+
+def make(handler, tmp_path):
+    f = Fake(handler)
+    ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
+    st = Store(":memory:")
+    return Launcher(ad, st, hooks="/h/settings.json", claude="/bin/claude", db="/db/t.db",
+                    path="/opt/bin:/usr/bin"), st, f
+
+
+_next = iter(range(7, 1000))
+_last = [7]
+
+
+def handler(argv):
+    # real kitty hands out a fresh window id per launch
+    if "launch" in argv:
+        _last[0] = next(_next)
+        return cp(out=f"{_last[0]}\n")
+    if "ls" in argv and "--match" not in argv:
+        return cp(out=ls_json((3, _last[0], {"task_id": "abc"})))
+    if "ls" in argv:
+        wid = int(argv[argv.index("--match") + 1].split(":")[1])
+        return cp(out=ls_json((3, wid, {"task_id": "abc"})))
+    return cp()
+
+
+def test_start_passes_identity_path_vars_and_records(tmp_path):
+    lau, st, f = make(handler, tmp_path)
+    wt = tmp_path / "work tree"  # space on purpose
+    wt.mkdir()
+    wid = lau.start("abc", str(wt))
+    assert wid >= 7
+    argv = next(c for c in f.calls if "launch" in c)
+    assert "--env" in argv and f"TASKFW_TASK_ID=abc" in argv
+    assert f"TASKFW_WORKTREE={wt.resolve()}" in argv
+    assert "TASKFW_DB=/db/t.db" in argv and "PATH=/opt/bin:/usr/bin" in argv
+    assert "task_id=abc" in argv and f"--cwd={wt.resolve()}" in argv
+    assert argv[argv.index("--") + 1:] == ["/bin/claude", "--settings", "/h/settings.json"]
+    row = st.latest_for_task("abc")
+    assert (row.window_id, row.tab_id, row.claude_session_id) == (wid, 3, None)
+
+
+def test_resume_uses_backfilled_session_in_new_tab(tmp_path):
+    lau, st, f = make(handler, tmp_path)
+    wid = lau.start("abc", str(tmp_path))
+    assert st.backfill_session(socket="unix:/tmp/s", window_id=wid, session_id="sess-1")
+    lau.resume("abc")
+    argv = [c for c in f.calls if "launch" in c][-1]
+    assert argv[-2:] == ["--resume", "sess-1"]
+    assert len(st.list()) == 2  # always a new tab, never re-pointed
+
+
+def test_resume_null_session_reports_or_goes_fresh(tmp_path):
+    lau, st, f = make(handler, tmp_path)
+    lau.start("abc", str(tmp_path))
+    with pytest.raises(NoSessionToResume):
+        lau.resume("abc")
+    lau.resume("abc", fresh=True)
+    assert "--resume" not in [c for c in f.calls if "launch" in c][-1]
+
+
+def test_list_marks_gone_windows(tmp_path):
+    lau, st, f = make(handler, tmp_path)
+    lau.start("abc", str(tmp_path))
+    st.record_launch(task_id="old", window_id=99, tab_id=None, socket="unix:/tmp/s", cwd="/x")
+    states = {t: s for t, _, s in lau.list()}
+    assert states == {"abc": "-", "old": "gone"}
+
+
+def test_store_path_passed_to_hooks_but_not_for_memory_store(tmp_path):
+    lau, _, f = make(handler, tmp_path)
+    lau.start("abc", str(tmp_path))
+    argv = next(c for c in f.calls if "launch" in c)
+    assert not any(a.startswith("KITTY_TASKFW_STORE=") for a in argv)  # :memory: is not shareable
+    ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=Fake(handler), check_version=False)
+    f2 = ad._runner
+    lau2 = Launcher(ad, Store(str(tmp_path / "s.sqlite")), hooks="/h/s.json", claude="/bin/claude",
+                    db="/db/t.db", path="/usr/bin")
+    lau2.start("abc", str(tmp_path))
+    argv2 = next(c for c in f2.calls if "launch" in c)
+    assert f"KITTY_TASKFW_STORE={tmp_path / 's.sqlite'}" in argv2
+
+
+def test_start_attaches_the_watcher_per_window(tmp_path):
+    lau, st, f = make(handler, tmp_path)
+    lau.start("abc", str(tmp_path))
+    argv = next(c for c in f.calls if "launch" in c)
+    assert any(a.startswith("--watcher=") and a.endswith("watcher.py") for a in argv)
+
+
+def test_console_script_targets_launcher_main():
+    import tomllib
+    from pathlib import Path
+    proj = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+    assert proj["project"]["scripts"]["taskfw-kitty"] == "taskfw.kitty.launcher:main"
+
+
+def test_missing_hooks_file_is_reported_not_launched(tmp_path):
+    from taskfw.kitty.launcher import check_install
+    assert check_install(tmp_path / "nope.json") and "not found" in check_install(tmp_path / "nope.json")
+    (tmp_path / "ok.json").write_text("{}")
+    assert check_install(tmp_path / "ok.json") is None
+
+
+def test_open_and_start_refuse_a_broken_install_before_touching_kitty(monkeypatch, capsys, tmp_path):
+    import json
+    from taskfw.kitty import launcher, opener
+    monkeypatch.setattr(launcher, "DEFAULT_HOOKS", tmp_path / "nope.json")
+    r = opener.open_task("abc", str(tmp_path), socket="/tmp/kitty-1", store=str(tmp_path / "s.sqlite"),
+                         env={"PATH": "/bin"}, claude="/bin/claude",
+                         adapter_factory=lambda s: (_ for _ in ()).throw(AssertionError("touched kitty")))
+    assert r.status == "not_opened" and "hooks file" in r.reason
+    rc = launcher.main(["--socket", "unix:/tmp/kitty-1", "--store", str(tmp_path / "s.sqlite"),
+                        "start", "abc"], env={})
+    assert rc == 1 and "hooks file" in capsys.readouterr().err

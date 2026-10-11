@@ -12,6 +12,7 @@ dependencies = [
 # `taskfw-backfill` before any entry point existed to provide it.
 taskfw-mcp = "taskfw.mcp_server:main"
 taskfw-backfill = "taskfw.backfill:main"
+taskfw-kitty = "taskfw.kitty.launcher:main"
 
 [project.optional-dependencies]
 dev = [

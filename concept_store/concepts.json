@@ -614,6 +614,142 @@
         "introspection-report-shape"
       ]
     },
+    "kitty-adapter": {
+      "confidence": 0.8,
+      "contracts": [
+        "Socket is an explicit input to every call; no ambient default",
+        "Argv is always a list, never a shell string",
+        "Typed errors: KittyError > KittyUnreachable, KittyVersionMismatch",
+        "ls() returns Window(id, tab_id, os_window_id, pid, cwd, title, env, user_vars)"
+      ],
+      "created_at": "2026-10-10T10:52:09.941265+00:00",
+      "description": "The only module that shells out to `kitten @`. Every kitty remote-control call goes through KittyAdapter so kitty can be swapped (WezTerm/tmux).",
+      "evidence": [
+        "taskfw/kitty/adapter.py"
+      ],
+      "invariants": [
+        "Pinned to kitty 0.49.2 (major.minor checked); re-run the spike before upgrading",
+        "No other module calls kitten directly",
+        "Kitty socket path carries a PID suffix, so callers must not hardcode it"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "taskfw/kitty/adapter.py",
+      "name": "kitty-adapter",
+      "related": []
+    },
+    "kitty-adapter-tests": {
+      "confidence": 0.7,
+      "contracts": [
+        "Tests pin observable behaviour, not internals"
+      ],
+      "created_at": "2026-10-11T15:22:01.625668+00:00",
+      "description": "Tests for taskfw/kitty/adapter.py, moved in from the standalone kitty-taskfw repo (task:3ddbfc92). Kitty is faked; no test touches a live window.",
+      "evidence": [
+        "tests/test_kitty_adapter.py"
+      ],
+      "invariants": [
+        "No test launches a real kitty window or claude process"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "tests/test_kitty_adapter.py",
+      "name": "kitty-adapter-tests",
+      "related": [
+        "kitty-adapter"
+      ]
+    },
+    "kitty-event-watcher": {
+      "confidence": 0.8,
+      "contracts": [
+        "Attached per window by the launcher (adapter.launch watcher=); kitty.conf is untouched",
+        "Event row = (socket, window_id, task_id, kind, data JSON <=2000 chars, ts); socket is kitty's `unix:` form, matching tabs.socket",
+        "Windows with no task marker (task_id user var or TASKFW_TASK_ID) spawn nothing",
+        "In a task window that runs claude directly, only set_user_var, focus and close are emitted; cmd_start/cmd_stop need shell integration and never fire there (verified with a non-shell stand-in window, not a real claude process)",
+        "A failed write leaves one line in the error log (default ~/.kitty-taskfw/watcher-errors.log, override KITTY_TASKFW_ERRORS from the window env) naming time, event kind, window id, task id, store and the exception; the log is ~64 KB with one rotation to .1",
+        "The log is independent of the store path, so a wrong or unwritable store is still reported"
+      ],
+      "created_at": "2026-10-10T11:02:37.235583+00:00",
+      "description": "kitty watcher (taskfw/kitty/watcher.py) attached per task window via `launch --watcher`. on_close/on_focus_change/on_set_user_var/on_cmd_startstop each hand one event to a fire-and-forget writer process that appends to the store's `events` table; writer failures are appended to a bounded error log.",
+      "evidence": [
+        "taskfw/kitty/watcher.py"
+      ],
+      "invariants": [
+        "Never raises and never touches the DB in kitty's process: kitty's bundled Python cannot import sqlite3, so a writer subprocess (KITTY_TASKFW_PYTHON, fallback /usr/bin/python3) does the insert",
+        "Store path and interpreter come from the window's child environ, not os.environ (that is kitty's own)",
+        "kitty caches watcher modules by path for its lifetime: after changing watcher.py a running kitty keeps the old code until restart",
+        "Stdlib only; never host a server in a watcher",
+        "Writer failures are silent (errors swallowed, stdio to DEVNULL): a missing events table or bad interpreter leaves no trace",
+        "Store path, interpreter and error-log path come from the window's child environ, not os.environ (that is kitty's own)",
+        "An unusable error log degrades to discarding stderr: it never drops the event or raises into kitty",
+        "The parent closes its log handle after spawning; leaking it would exhaust kitty's file descriptors"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "taskfw/kitty/watcher.py",
+      "name": "kitty-event-watcher",
+      "related": []
+    },
+    "kitty-event-watcher-tests": {
+      "confidence": 0.7,
+      "contracts": [
+        "Tests pin observable behaviour, not internals"
+      ],
+      "created_at": "2026-10-11T15:22:01.625668+00:00",
+      "description": "Tests for taskfw/kitty/watcher.py, moved in from the standalone kitty-taskfw repo (task:3ddbfc92). Kitty is faked; no test touches a live window.",
+      "evidence": [
+        "tests/test_kitty_watcher.py"
+      ],
+      "invariants": [
+        "No test launches a real kitty window or claude process"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "tests/test_kitty_watcher.py",
+      "name": "kitty-event-watcher-tests",
+      "related": [
+        "kitty-event-watcher"
+      ]
+    },
+    "kitty-hook-bridge": {
+      "confidence": 0.8,
+      "contracts": [
+        "SessionStart/Stop/Notification -> state=waiting; UserPromptSubmit -> running; SessionEnd -> done",
+        "last_active (epoch s) stamped only on SessionStart/UserPromptSubmit/Stop",
+        "Reads task context read-only from taskfw DB"
+      ],
+      "created_at": "2026-10-10T10:52:17.768013+00:00",
+      "description": "Claude Code hooks (python -m taskfw.kitty.hook, wired by taskfw/kitty/hooks.json) that mirror session events into kitty user vars, backfill the session id and inject task context from $TASKFW_TASK_ID.",
+      "evidence": [
+        "taskfw/kitty/hook.py"
+      ],
+      "invariants": [
+        "State mirroring and task-context injection act only when TASKFW_TASK_ID is set; the one exception is the prompt offload (offload.maybe_offload), which runs first in handle() for any session carrying the hook (task:125d60bd)",
+        "Never fails the session: swallow all errors, exit 0",
+        "Notification must not stamp last_active (it fires while idle and would reset the idle clock)",
+        "Hook commands use absolute interpreter paths, not PATH"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "taskfw/kitty/hook.py",
+      "name": "kitty-hook-bridge",
+      "related": []
+    },
+    "kitty-hook-bridge-tests": {
+      "confidence": 0.7,
+      "contracts": [
+        "Tests pin observable behaviour, not internals"
+      ],
+      "created_at": "2026-10-11T15:22:01.625668+00:00",
+      "description": "Tests for taskfw/kitty/hook.py, moved in from the standalone kitty-taskfw repo (task:3ddbfc92). Kitty is faked; no test touches a live window.",
+      "evidence": [
+        "tests/test_kitty_hook.py"
+      ],
+      "invariants": [
+        "No test launches a real kitty window or claude process"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "tests/test_kitty_hook.py",
+      "name": "kitty-hook-bridge-tests",
+      "related": [
+        "kitty-hook-bridge"
+      ]
+    },
     "kitty-open-tool": {
       "confidence": 0.8,
       "contracts": [
@@ -621,7 +757,7 @@
         "A set-but-unusable TASKFW_KITTY_OPEN_CMD (shlex error, or no program name such as \"''\") gives a not_opened reason naming the env var, never the PATH-miss 'not found' reason, and runs nothing (task:ca657370)"
       ],
       "created_at": "2026-10-10T13:23:34.286862+00:00",
-      "description": "Optional, fail-soft bridge from taskfw to the kitty-taskfw CLI (task:87c91a76). tasks__open_in_kitty shells out to `kitty-taskfw open --worktree <dir> <task_id>` and returns {status, window_id, socket, reason}, status opened / exists / not_opened. Nothing imports kitty-taskfw and nothing runs at import; the command (TASKFW_KITTY_OPEN_CMD shell-split, else kitty-taskfw via shutil.which) is resolved inside the call. A missing or unusable command, timeout, bad output or no known directory yield not_opened with a reason, never an exception; only an unknown task_id is an `error`. The kitty store stays in kitty-taskfw (task:dfa67756). Complements the one-way file mirror [[active-pointer-file-mirror]].",
+      "description": "Optional, fail-soft bridge from taskfw to the in-repo taskfw.kitty launcher (moved in from the standalone kitty-taskfw repo, task:3ddbfc92) (task:87c91a76). tasks__open_in_kitty shells out to `kitty-taskfw open --worktree <dir> <task_id>` and returns {status, window_id, socket, reason}, status opened / exists / not_opened. Nothing imports kitty-taskfw and nothing runs at import; the command (TASKFW_KITTY_OPEN_CMD shell-split, else kitty-taskfw via shutil.which) is resolved inside the call. A missing or unusable command, timeout, bad output or no known directory yield not_opened with a reason, never an exception; only an unknown task_id is an `error`. The kitty store stays in kitty-taskfw (task:dfa67756). Complements the one-way file mirror [[active-pointer-file-mirror]]. Default command is `sys.executable -m taskfw.kitty.launcher`; TASKFW_KITTY_OPEN_CMD still overrides.",
       "evidence": [
         "taskfw/kitty_open.py",
         "taskfw/mcp_server.py:tasks__open_in_kitty",
@@ -632,12 +768,14 @@
         "worktree defaults to scope.local_root(task.scope); when unknown the tool returns not_opened and never falls back to the workspace or server cwd",
         "The tool does not set the active pointer: the new tab's session has its own server"
       ],
-      "last_validated": "2026-10-11T14:00:08.876554+00:00",
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
       "module": "taskfw/kitty_open.py",
       "name": "kitty-open-tool",
       "related": [
-        "mcp-tool-registration-and-hooks",
-        "active-pointer-file-mirror"
+        "active-pointer-file-mirror",
+        "kitty-task-launcher",
+        "kitty-task-opener",
+        "mcp-tool-registration-and-hooks"
       ]
     },
     "kitty-open-tool-tests": {
@@ -659,6 +797,208 @@
       "name": "kitty-open-tool-tests",
       "related": [
         "kitty-open-tool"
+      ]
+    },
+    "kitty-prompt-offload": {
+      "confidence": 0.7,
+      "contracts": [
+        "is_small is a whitelist: lookup lead word (what/where/which/who/when/how many/define), single line, at most 20 words, no action verb, no file path, URL or code",
+        "The prompt is blocked only after kitty confirmed the side window; the block reason names the window id and the kill-switch file",
+        "Replies to the main session (yes/ok/continue), slash commands, ! and # prompts never offload",
+        "touch ~/.kitty-taskfw/offload_off (env KITTY_TASKFW_OFFLOAD_OFF) disables offload per prompt, no restart needed"
+      ],
+      "created_at": "2026-10-10T13:50:25.360909+00:00",
+      "description": "UserPromptSubmit hook branch that blocks a clearly-small lookup prompt in the main session and answers it with claude -p --model claude-haiku-5-5 --resume <sid> --fork-session in a kitty hsplit beside it. Runs first in hook.handle, for any session carrying the hook.",
+      "evidence": [
+        "taskfw/kitty/offload.py"
+      ],
+      "invariants": [
+        "Fails open: missing claude, missing transcript, transcript over 500000 bytes, KittyError or OSError all return None and leave the prompt to the main session",
+        "The forked child runs with KITTY_TASKFW_OFFLOAD_CHILD=1 so its own hooks never offload again",
+        "Wrongly offloading costs the user a turn, so classifier changes must keep leaning toward staying in the main session"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "taskfw/kitty/offload.py",
+      "name": "kitty-prompt-offload",
+      "related": []
+    },
+    "kitty-prompt-offload-tests": {
+      "confidence": 0.7,
+      "contracts": [
+        "Tests pin observable behaviour, not internals"
+      ],
+      "created_at": "2026-10-11T15:22:01.625668+00:00",
+      "description": "Tests for taskfw/kitty/offload.py, moved in from the standalone kitty-taskfw repo (task:3ddbfc92). Kitty is faked; no test touches a live window.",
+      "evidence": [
+        "tests/test_kitty_offload.py"
+      ],
+      "invariants": [
+        "No test launches a real kitty window or claude process"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "tests/test_kitty_offload.py",
+      "name": "kitty-prompt-offload-tests",
+      "related": [
+        "kitty-prompt-offload"
+      ]
+    },
+    "kitty-tab-store": {
+      "confidence": 0.8,
+      "contracts": [
+        "Unique (socket, window_id); index on task_id",
+        "claude_session_id null at launch, backfilled by SessionStart hook",
+        "closed_at + closed_reason mark a closed row (e.g. 'hibernated')",
+        "An `events` table (socket, window_id, task_id, kind, data, ts) is created with IF NOT EXISTS in SCHEMA, so existing store files gain it on open; it is appended to by the watcher's writer process"
+      ],
+      "created_at": "2026-10-10T10:52:15.701347+00:00",
+      "description": "kitty-taskfw's own SQLite (~/.kitty-taskfw/store.sqlite, override KITTY_TASKFW_STORE): one `tabs` row per launched tab mapping task -> window/tab -> claude_session_id, plus an append-only `events` table of watcher lifecycle events. The durable source of truth; kitty state is ephemeral.",
+      "evidence": [
+        "taskfw/kitty/store.py"
+      ],
+      "invariants": [
+        "Separate from taskfw's ~/.taskfw/tasks.db on purpose (no migration on the shared DB)",
+        "A row's task_id is immutable",
+        "Never rely on kitty state surviving a quit"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "taskfw/kitty/store.py",
+      "name": "kitty-tab-store",
+      "related": []
+    },
+    "kitty-task-launcher": {
+      "confidence": 0.8,
+      "contracts": [
+        "Env: TASKFW_TASK_ID, TASKFW_WORKTREE, TASKFW_DB, caller PATH, KITTY_TASKFW_STORE",
+        "resume uses `claude --resume <session>`; raises NoSessionToResume when session id is null",
+        "Always passes an explicit --to unix:<sock>",
+        "Installed as the `kitty-taskfw` console script ([project.scripts] -> launcher:main); `uv tool install --editable` is the supported install",
+        "start, resume, list and open fail with an install hint (exit 1; open returns not_opened) when taskfw/kitty/hooks.json is missing, instead of launching a tab with a dead --settings path",
+        "`start`/`open` run in the cwd by default and create no worktree or branch; `--isolate` runs in a git worktree of the cwd's repo at <repo>-worktrees/<task_id> on branch task/<task_id>, created or reused (worktrees.py); explicit --worktree <dir> is used as-is and wins over --isolate; --isolate outside a git repo uses the cwd; there is no --no-worktree (task:d48702dc)",
+        "`kitty-taskfw cleanup <task_id>` removes the worktree and branch and refuses a dirty tree or a branch with commits not in the main checkout's HEAD",
+        "A worktree failure under --isolate on `start` exits 1 and on `open` returns not_opened; it never falls back to a shared tree"
+      ],
+      "created_at": "2026-10-10T10:52:13.740338+00:00",
+      "description": "`start`/`resume`/`list`/`cleanup` CLI. Opens a NEW kitty tab per task (in the cwd, or a per-task git worktree with --isolate), sets identity env and user var once, runs `claude --settings <hooks>` and records the tab in the store.",
+      "evidence": [
+        "taskfw/kitty/launcher.py"
+      ],
+      "invariants": [
+        "A tab's task is fixed for its life; tabs are never re-pointed",
+        "PATH is passed explicitly because kitty from the Dock has a stripped PATH (python3 would be 3.9)",
+        "start and resume always launch a new tab",
+        "Only an editable install is supported: DEFAULT_HOOKS and DEFAULT_WATCHER resolve relative to the package source and hooks/ sits outside src/",
+        "The install check lives in main() and the opener, not Launcher.__init__ (tests build Launcher with fake hook paths); it reads DEFAULT_HOOKS at call time",
+        "Worktree path and branch are pure functions of (repo, task_id): two tasks cannot share a tree",
+        "Worktrees are never removed on hibernate or window close, only by an explicit cleanup (resume reuses the stored cwd)",
+        "Worktree creation lives in resolve_worktree (called from main, only when --isolate), not Launcher._launch; resume never calls it"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "taskfw/kitty/launcher.py",
+      "name": "kitty-task-launcher",
+      "related": []
+    },
+    "kitty-task-launcher-tests": {
+      "confidence": 0.7,
+      "contracts": [
+        "Tests pin observable behaviour, not internals"
+      ],
+      "created_at": "2026-10-11T15:22:01.625668+00:00",
+      "description": "Tests for taskfw/kitty/launcher.py, moved in from the standalone kitty-taskfw repo (task:3ddbfc92). Kitty is faked; no test touches a live window.",
+      "evidence": [
+        "tests/test_kitty_launcher.py"
+      ],
+      "invariants": [
+        "No test launches a real kitty window or claude process"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "tests/test_kitty_launcher.py",
+      "name": "kitty-task-launcher-tests",
+      "related": [
+        "kitty-task-launcher"
+      ]
+    },
+    "kitty-task-opener": {
+      "confidence": 0.8,
+      "contracts": [
+        "open_task never raises; the CLI prints one JSON object and exits 0 in every case",
+        "exists = a live window carries user var task_id; nothing launched",
+        "A task with any earlier store row and no live window is not_opened with a pointer to `resume`; open never resumes or restarts",
+        "Without a socket: $KITTY_LISTEN_ON then /tmp/kitty-*; several live kittys with no preferred one is not_opened",
+        "Does not set taskfw's active-task pointer",
+        "Reachable from PATH as `kitty-taskfw open <task_id>` after an editable install",
+        "A broken install (hooks file missing) is not_opened with an install hint, still exit 0 and never raises"
+      ],
+      "created_at": "2026-10-10T13:02:45.025376+00:00",
+      "description": "`launcher open <task_id>`: fail-soft entry for callers that may be outside kitty. Discovers the kitty socket, dedups against live task_id windows, starts a tab via Launcher.start, and always returns an OpenResult (opened|exists|not_opened).",
+      "evidence": [
+        "taskfw/kitty/opener.py"
+      ],
+      "invariants": [
+        "Every kitten call is time-bounded (adapter._run, 20 s) and a missing/unrunnable kitten is KittyUnreachable, not FileNotFoundError",
+        "Liveness comes from kitten ls, never from a store row alone",
+        "No tab is launched unless the worktree exists and claude is on PATH"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "taskfw/kitty/opener.py",
+      "name": "kitty-task-opener",
+      "related": []
+    },
+    "kitty-task-opener-tests": {
+      "confidence": 0.7,
+      "contracts": [
+        "Tests pin observable behaviour, not internals"
+      ],
+      "created_at": "2026-10-11T15:22:01.625668+00:00",
+      "description": "Tests for taskfw/kitty/opener.py, moved in from the standalone kitty-taskfw repo (task:3ddbfc92). Kitty is faked; no test touches a live window.",
+      "evidence": [
+        "tests/test_kitty_opener.py"
+      ],
+      "invariants": [
+        "No test launches a real kitty window or claude process"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "tests/test_kitty_opener.py",
+      "name": "kitty-task-opener-tests",
+      "related": [
+        "kitty-task-opener"
+      ]
+    },
+    "kitty-worktrees": {
+      "confidence": 0.7,
+      "contracts": [
+        "remove() refuses a dirty tree or unmerged commits"
+      ],
+      "created_at": "2026-10-11T15:22:01.625668+00:00",
+      "description": "Opt-in git worktree per task for the kitty launcher (--isolate): derived path <repo>-worktrees/<task_id>, branch task/<task_id>, create-or-reuse, and a safe cleanup.",
+      "evidence": [
+        "taskfw/kitty/worktrees.py"
+      ],
+      "invariants": [
+        "Worktrees are never created unless --isolate or --worktree is passed"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "taskfw/kitty/worktrees.py",
+      "name": "kitty-worktrees",
+      "related": []
+    },
+    "kitty-worktrees-tests": {
+      "confidence": 0.7,
+      "contracts": [
+        "Tests pin observable behaviour, not internals"
+      ],
+      "created_at": "2026-10-11T15:22:01.625668+00:00",
+      "description": "Tests for taskfw/kitty/worktrees.py, moved in from the standalone kitty-taskfw repo (task:3ddbfc92). Kitty is faked; no test touches a live window.",
+      "evidence": [
+        "tests/test_kitty_worktrees.py"
+      ],
+      "invariants": [
+        "No test launches a real kitty window or claude process"
+      ],
+      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "module": "tests/test_kitty_worktrees.py",
+      "name": "kitty-worktrees-tests",
+      "related": [
+        "kitty-worktrees"
       ]
     },
     "lifecycle-rules-pure-function-testing": {

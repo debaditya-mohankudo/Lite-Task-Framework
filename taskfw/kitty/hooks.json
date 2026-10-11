@@ -1,0 +1,59 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${KITTY_TASKFW_PYTHON:-python3}\" -m taskfw.kitty.hook",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

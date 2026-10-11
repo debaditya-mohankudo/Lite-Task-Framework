@@ -1131,10 +1131,10 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
 
 @_tool()
 def tasks__open_in_kitty(task_id: str, worktree: str = "") -> dict[str, Any]:
-    """Open task_id in a kitty tab by running `kitty-taskfw open`. Fail-soft and optional.
+    """Open task_id in a kitty tab by running `python -m taskfw.kitty.launcher open`. Fail-soft and optional.
 
     Returns {status, window_id, socket, reason} with status opened / exists /
-    not_opened. Anything that stops the tab opening (kitty-taskfw absent, a
+    not_opened. Anything that stops the tab opening (a broken kitty setup, a
     timeout, unparseable output, no known directory) is a not_opened result with
     a reason, never an exception; only an unknown task_id is an `error`.
 
@@ -1142,7 +1142,7 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "") -> dict[str, Any]:
     tab's working directory; omitted, it is the task scope's local root, and when
     that is unknown the tool does not guess (not_opened, pass worktree). Does not
     touch the active pointer: the new tab's session has its own server.
-    Command: TASKFW_KITTY_OPEN_CMD (shell-split), else `kitty-taskfw` on PATH.
+    Command: TASKFW_KITTY_OPEN_CMD (shell-split), else the in-repo taskfw.kitty launcher.
     """
     task = store().get(task_id)
     if task is None:
