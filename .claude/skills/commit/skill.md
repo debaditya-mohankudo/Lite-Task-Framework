@@ -1,14 +1,16 @@
 ---
 name: commit
-description: Commit changes in task-framework — the gate, the message shape, and what must be true before committing. Use when the user says /commit or asks to commit work in this repo.
+description: Commit changes with a task:<id> citation — the gate, the message shape, and what must be true before committing. Global skill; the suite, ontology and models/*.sysml steps apply only in repos that have them. Use when the user says /commit or asks to commit work.
 user-invocable: true
 updated: 2026-08-31
 doc: docs/methodology/04-implementation.md
 ---
 
-Commit procedure for this repo. Scoped here deliberately: these are
-task-framework's conventions, and a global skill would impose them on repos that
-never agreed to them.
+Commit procedure, available in every repo (symlinked into `~/.claude/skills`).
+The `task:<id>` citation, the message shape and the commit link apply wherever
+taskfw runs. The suite command, the ontology carve-out and the two-commit
+`models/*.sysml` flow are task-framework's own: in another repo, run that
+repo's full suite instead and skip any step whose files it does not have.
 
 ## Simplify first
 
@@ -31,7 +33,7 @@ this against the suite run below, not by inspection alone.
 
 ## Before anything is staged
 
-Run the suite. Not a subset, and not "the tests I think I touched" — the
+Run the repo's full suite (task-framework: `uv run pytest -q`). Not a subset, and not "the tests I think I touched" — the
 coverage tests bind modules to concepts and the model, so an unrelated-looking
 change can break them.
 
@@ -43,7 +45,7 @@ uv run pytest -q
 as a pre-existing condition without checking whether it is. A summary that
 overstates what landed is worse than no summary, because it will be believed.
 
-One carve-out: if the diff touches **only `ontology/task-domain.json`** and no
+One carve-out, task-framework only: if the diff touches **only `ontology/task-domain.json`** and no
 `.py` file, run just `uv run pytest -q tests/test_ontology.py` instead. The
 ontology JSON is inert data with no importers — the coverage tests that justify
 the full run bind to *code* modules, and the one test an ontology-only edit can
