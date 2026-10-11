@@ -244,12 +244,14 @@ rather than a fourth link in it: which of the ~35 `tasks__*` / `concept__*` /
 `ontology/task-domain.json` — a tool is the interface, not a domain noun, and
 that layer is already summarised as one module's promise in
 `concept_store/concepts.json` (`mcp-portable-interface` and its siblings).
-Unlike the three above, nothing checks it against the code — no test plays
-the role `tests/test_ontology.py` or `tests/test_concepts.py` play for their
-files — so it is a map that can drift silently, not a claim that's verified.
-Read it as a snapshot, and re-derive it from the tool docstrings and skill
-files rather than trust it once a tool is renamed or a skill's call sites
-change.
+Its tool set, per-tool `hooks` and `used_by` relations are derived by
+`mcp_tools/gen_tool_graph.py` from `taskfw/mcp_server.py` and the skill files,
+and `tests/test_tool_graph.py` fails when the file is stale — the relations were
+hand-kept and drifted, so they stopped being hand-kept rather than being
+policed. The `use` prose, `namespaces` and `skills` text are still hand-written
+and unchecked beyond being present: a map that can drift in its wording, so
+review `use` against the docstring when a tool's shape changes. A tool with no
+skill edge is fine; utility tools have none.
 
 ## Memory
 

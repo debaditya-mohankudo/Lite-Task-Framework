@@ -1627,6 +1627,31 @@
         "mcp-portable-interface"
       ]
     },
+    "tool-graph-derived-and-tested": {
+      "confidence": 0.9,
+      "contracts": [
+        "mcp_tools/gen_tool_graph.py rewrites tool-graph.json's tool set, per-tool hooks and used_by relations from taskfw/mcp_server.py @_tool decorators and .claude/skills/*/skill.md; --check exits 1 when stale",
+        "Hand-written `use`, `namespaces`, `skills` and `meta` are preserved across a rewrite"
+      ],
+      "created_at": "2026-10-11T00:00:00+00:00",
+      "description": "The map of which skill names which MCP tool is derived, not hand-kept, so the relations cannot drift; the test fails on a stale file. The prose stays hand-written and its accuracy is unchecked.",
+      "evidence": [
+        "mcp_tools/gen_tool_graph.py:build",
+        "tests/test_tool_graph.py:test_file_is_what_the_generator_writes",
+        "tests/test_tool_graph.py:test_tool_set_is_the_registered_surface"
+      ],
+      "invariants": [
+        "A new tool arrives with empty `use` and fails test_every_tool_has_use_text until prose is written",
+        "used_by means the skill names the tool, not that every pass calls it"
+      ],
+      "last_validated": "2026-10-11T00:00:00+00:00",
+      "module": "tests/test_tool_graph.py",
+      "name": "tool-graph-derived-and-tested",
+      "related": [
+        "mcp-portable-interface",
+        "skills-tool-reference-and-host-neutrality-tested"
+      ]
+    },
     "typed-task-object": {
       "confidence": 0.95,
       "contracts": [
