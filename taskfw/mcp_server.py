@@ -11,6 +11,7 @@ neither owns the rules.
 from __future__ import annotations
 
 import functools
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -1131,7 +1132,7 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
 
 @_tool()
 def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
-                         isolate: bool | None = None) -> dict[str, Any]:
+                         isolate: bool | None = None, parent: str = "") -> dict[str, Any]:
     """Open task_id in a kitty tab by running `python -m taskfw.kitty.launcher open`. Fail-soft and optional.
 
     Returns {status, window_id, socket, reason, worktree, isolated} with status opened / exists /
@@ -1152,6 +1153,11 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
     keeps the plain directory. The result's `worktree`/`isolated` (and `reason` for an
     automatic choice) say what was chosen; a failed worktree is not_opened, never a
     fall back into the shared tree.
+    parent is the caller's session name (as ListAgents prints it; the server cannot know it).
+    Given, the default prompt also tells the tab to SendMessage it once when finished: task id,
+    a one-line outcome and commit ids, never the brief. It must be a single line with no
+    control characters (it goes into a prompt), else not_opened. An explicit prompt is never
+    modified, and without parent the default prompt is unchanged.
     Command: TASKFW_KITTY_OPEN_CMD (shell-split), else the in-repo taskfw.kitty launcher.
     """
     task = store().get(task_id)
@@ -1163,8 +1169,18 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
             "status": "not_opened", "window_id": None, "socket": None,
             "reason": "no known directory for this task; pass worktree",
         }
-    prompt = prompt or (f"Task {task_id}: read its notes via tasks__get, then run /task-grooming "
-                        "and implement.")
+    if parent and (not parent.strip() or any(unicodedata.category(c) == "Cc" for c in parent)):
+        return {
+            "status": "not_opened", "window_id": None, "socket": None,
+            "reason": "parent must be a single line with no control characters",
+        }
+    if not prompt:
+        prompt = (f"Task {task_id}: read its notes via tasks__get, then run /task-grooming "
+                  "and implement.")
+        if parent:
+            prompt += (f" When finished (after introspection) call SendMessage to {parent} with the "
+                       "task id, the outcome in one line and the commit ids; never the brief. "
+                       "If SendMessage fails, say so in your final output and stop.")
     return kitty_open.open_task(task_id, worktree, prompt=prompt, isolate=isolate)
 
 

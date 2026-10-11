@@ -143,6 +143,32 @@ class TestTool:
         assert "tasks__get" in seen["prompt"] and len(seen["prompt"]) < 200
         assert m.store().get_active(m._workspace()) == before
 
+    def _prompt_for(self, monkeypatch, **kw):
+        t = m.tasks__create(title="x")
+        seen = {}
+        monkeypatch.setattr(m.kitty_open, "open_task",
+                            lambda tid, wt, prompt="", isolate=None: seen.update(prompt=prompt) or {"status": "opened"})
+        out = m.tasks__open_in_kitty(t["id"], worktree="/w", **kw)
+        return t["id"], seen, out
+
+    def test_parent_appends_report_back_to_default_prompt_only(self, monkeypatch):
+        tid, base, _ = self._prompt_for(monkeypatch)
+        _, with_parent, _ = self._prompt_for(monkeypatch, parent="sess-1")
+        assert "SendMessage" not in base["prompt"]
+        assert "SendMessage to sess-1" in with_parent["prompt"] and "never the brief" in with_parent["prompt"]
+        assert "say so in your final output and stop" in with_parent["prompt"]
+
+    def test_explicit_prompt_is_untouched_by_parent(self, monkeypatch):
+        _, seen, out = self._prompt_for(monkeypatch, prompt="do X", parent="sess-1")
+        assert seen["prompt"] == "do X" and out["status"] == "opened"
+
+    @pytest.mark.parametrize("bad", ["a\nb", "a\rb", "a\x00b", "a\x1b[0m", "   "])
+    def test_invalid_parent_is_not_opened(self, monkeypatch, bad):
+        t = m.tasks__create(title="x")
+        monkeypatch.setattr(m.kitty_open, "open_task", lambda *a, **k: pytest.fail("ran"))
+        out = m.tasks__open_in_kitty(t["id"], worktree="/w", parent=bad)
+        assert out["status"] == "not_opened" and "parent" in out["reason"]
+
     def test_task_id_is_required(self):
         with pytest.raises(TypeError):
             m.tasks__open_in_kitty()
