@@ -65,7 +65,10 @@ def open_task(
         return _not_opened(why_not)
     argv = [*cmd, "open", "--worktree", worktree, task_id]
     try:
-        proc = runner(argv, capture_output=True, text=True, timeout=timeout, env=env)
+        proc = runner(
+            argv, capture_output=True, text=True, timeout=timeout, env=env,
+            stdin=subprocess.DEVNULL,  # never share the MCP server's stdio stream
+        )
     except subprocess.TimeoutExpired:
         return _not_opened(
             f"kitty-taskfw open timed out after {timeout:g}s; the tab may still have "
