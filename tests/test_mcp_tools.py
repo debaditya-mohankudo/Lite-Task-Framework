@@ -787,6 +787,24 @@ class TestActiveTask:
         assert result["active_cleared"] is True
         assert m.tasks__active()["active"] is None
 
+    def test_checklist_auto_finish_then_introspection_deactivates(self):
+        """The full loop end to end: the last tick auto-finishes but leaves the
+        task active (task:1105f979), and the report filed afterwards is what
+        clears the pointer (task:2d24165a). A retried identical report is a
+        no-op and reports active_cleared=False."""
+        t = create(resolution=["a", "b"])
+        m.tasks__set_active(t["id"])
+        m.tasks__check_item(t["id"], 0)
+        r = m.tasks__check_item(t["id"], 1)
+        assert r["status"] == "done"
+        assert m.tasks__active()["active"] == t["id"]
+        result = m.tasks__add_introspection(t["id"], report={"date": "2026-08-31"})
+        assert result["active_cleared"] is True
+        assert m.tasks__active()["active"] is None
+        retry = m.tasks__add_introspection(t["id"], report={"date": "2026-08-31"})
+        assert retry["duplicate"] is True
+        assert retry["active_cleared"] is False
+
     def test_add_introspection_leaves_a_different_active_task_alone(self):
         """A report on a non-active task does not touch the pointer, and says
         so with active_cleared=False rather than an error."""
