@@ -107,6 +107,18 @@ def check_status(status: str) -> Ruling:
     return _allow("status", status=status)
 
 
+def check_title(title: str) -> Ruling:
+    """A task must have a title; a blank one is refused, not clearable.
+
+    Title is what every list, search and nudge shows for a task, so a blank
+    one is a task nobody can recognise. It is the one free-text field whose
+    emptiness is a bad state rather than "nothing to say".
+    """
+    if not title.strip():
+        return _deny("title", "A task needs a non-blank title.", title=title)
+    return _allow("title")
+
+
 def check_link_rel(rel: str) -> Ruling:
     """Closed vocabulary for task_edges.rel — see TASK_EDGE_RELATIONS.
 
@@ -178,6 +190,9 @@ def check_save(task: Task, *, previous: Task | None = None, parent: Task | None 
     status_check = check_status(task.status)
     if not status_check:
         return status_check
+    title_check = check_title(task.title)
+    if not title_check:
+        return title_check
     parent_check = check_parent(task.epic, parent)
     if not parent_check:
         return parent_check

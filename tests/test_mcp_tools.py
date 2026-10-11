@@ -115,6 +115,27 @@ class TestUpdate:
         got = m.tasks__get(t["id"])
         assert got["title"] == "renamed" and got["motivation"] == "keep me"
 
+    def test_empty_string_clears_motivation_and_notes(self):
+        t = create(title="keep", motivation="why", notes="n")
+        m.tasks__update(t["id"], motivation="", notes="")
+        got = m.tasks__get(t["id"])
+        assert got["motivation"] == "" and got["notes"] == "" and got["title"] == "keep"
+
+    def test_omitting_motivation_and_notes_leaves_them(self):
+        t = create(title="keep", motivation="why", notes="n")
+        m.tasks__update(t["id"], tags=["x"])
+        got = m.tasks__get(t["id"])
+        assert got["motivation"] == "why" and got["notes"] == "n"
+
+    def test_blank_title_is_refused_and_leaves_title(self):
+        t = create(title="keep")
+        for blank in ("", "   "):
+            assert m.tasks__update(t["id"], title=blank)["rule"] == "title"
+        assert m.tasks__get(t["id"])["title"] == "keep"
+
+    def test_create_refuses_a_blank_title(self):
+        assert m.tasks__create(title="")["rule"] == "title"
+
     def test_illegal_transition_is_refused_by_lifecycle(self):
         t = create()
         m.tasks__update(t["id"], status="done")

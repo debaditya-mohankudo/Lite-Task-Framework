@@ -674,7 +674,7 @@
       "invariants": [
         "check_transition, check_parent, check_status, check_link_rel, and check_save take only plain values/Task objects and a Ruling return type -- no store, connection, or session argument. (check_type was deleted in task:50183b29 when Task.type became the boolean Task.epic -- a bad value stopped being representable, so there was nothing left to check.)",
         "Same-status transitions are always allowed even from a terminal state, and this precedence (same-status beats terminal-lock) is checked ahead of the terminal rule.",
-        "check_save evaluates status before parent before transition, so the first failing rule is always the one reported.",
+        "check_save evaluates status, then title (non-blank; check_title is the one home, so tasks__create and tasks__update(title=\"\") are refused alike), then parent, then transition, so the first failing rule is always the one reported.",
         "parent_of is deliberately excluded from the closed relation set enforced by check_link_rel, since it is redundant with Task.parent."
       ],
       "last_validated": "2026-08-23T15:11:25.945430+00:00",

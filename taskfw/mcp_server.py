@@ -669,10 +669,10 @@ def _keep_ticks(current: list[ResolutionItem], texts: list[str]) -> list[Resolut
 @_tool(hook=dispatcher.combine(_finish_reminder_hook, _ungroomed_progress_hook))
 def tasks__update(
     task_id: str,
-    title: str = "",
+    title: str | None = None,
     status: str = "",
-    motivation: str = "",
-    notes: str = "",
+    motivation: str | None = None,
+    notes: str | None = None,
     resolution: list[str] | None = None,
     files: list[str] | None = None,
     tags: list[str] | None = None,
@@ -680,6 +680,13 @@ def tasks__update(
     scope: str = "",
 ) -> dict[str, Any]:
     """Update a task. Only the fields you pass are changed.
+
+    What "omitted" means, per field: for `motivation`, `notes`, `resolution`,
+    `files`, `tags` and `grooming`, omitted (None) leaves the field alone and
+    an empty value ("" or []) clears it. `title` is omitted-means-unchanged
+    too, but "" is refused rather than clearing: a task must keep a non-blank
+    title (lifecycle.check_title). `status` and `scope` treat "" as
+    unchanged and cannot be cleared.
 
     Every field is replace-not-append, and that is explicit per field rather
     than ambiguous across one blob. A single free-text `body` argument makes
@@ -711,13 +718,13 @@ def tasks__update(
     updated = Task.from_dict(current.to_dict())
     if scope:
         updated.scope = scope
-    if title:
+    if title is not None:
         updated.title = title
     if status:
         updated.status = status
-    if motivation:
+    if motivation is not None:
         updated.motivation = motivation
-    if notes:
+    if notes is not None:
         updated.notes = notes
     if resolution is not None:
         updated.resolution = _keep_ticks(current.resolution, resolution)
