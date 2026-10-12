@@ -1153,9 +1153,11 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
     automatic choice) say what was chosen; a failed worktree is not_opened, never a
     fall back into the shared tree.
     parent is the caller's session name (as ListAgents prints it; the server cannot know it).
-    Given, the default prompt also tells the tab to SendMessage it once when finished: task id,
-    a one-line outcome and commit ids, never the brief. It must be a single line with no
-    control characters (it goes into a prompt), else not_opened. An explicit prompt is never
+    Given, the default prompt also tells the tab to SendMessage it once when finished or stopping:
+    the task id and `done` (only after tasks__finish recorded a one-line outcome as its reason,
+    commits linked) or `abandoned` (stopped with the task open), never the brief; the parent reads
+    the outcome via tasks__get. It must be a single line with no control or line/paragraph
+    separator characters (it goes into a prompt), else not_opened. An explicit prompt is never
     modified, and without parent the default prompt is unchanged.
     Command: TASKFW_KITTY_OPEN_CMD (shell-split), else the in-repo taskfw.kitty launcher.
     """
