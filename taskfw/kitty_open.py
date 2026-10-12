@@ -25,8 +25,9 @@ _STATUSES = ("opened", "exists", "not_opened")
 
 
 def bad_parent(parent: str) -> str | None:
-    """Why `parent` cannot go into a prompt, or None. It must be one line with no control characters."""
-    if parent and (not parent.strip() or any(unicodedata.category(c) == "Cc" for c in parent)):
+    """Why `parent` cannot go into a prompt, or None. It must be one line with no control or line-separator
+    characters (Cc covers \\n, \\r and U+0085; Zl and Zp are U+2028 and U+2029)."""
+    if parent and (not parent.strip() or any(unicodedata.category(c) in ("Cc", "Zl", "Zp") for c in parent)):
         return "parent must be a single line with no control characters"
     return None
 

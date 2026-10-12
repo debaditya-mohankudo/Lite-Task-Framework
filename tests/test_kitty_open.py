@@ -158,14 +158,15 @@ class TestTool:
         assert "SendMessage to sess-1" in with_parent["prompt"] and "never the brief" in with_parent["prompt"]
         assert "say so in your final output and stop" in with_parent["prompt"]
         # the summary lives in the task, not in the message: the message carries the id only
-        assert "the task id only" in with_parent["prompt"] and "reason on tasks__finish" in with_parent["prompt"]
+        assert "the task id and `done` or `abandoned`" in with_parent["prompt"] and "as its reason" in with_parent["prompt"]
+        assert "`abandoned` if you stop with the task still open" in with_parent["prompt"]
         assert "commit ids" not in with_parent["prompt"]
 
     def test_explicit_prompt_is_untouched_by_parent(self, monkeypatch):
         _, seen, out = self._prompt_for(monkeypatch, prompt="do X", parent="sess-1")
         assert seen["prompt"] == "do X" and out["status"] == "opened"
 
-    @pytest.mark.parametrize("bad", ["a\nb", "a\rb", "a\x00b", "a\x1b[0m", "   "])
+    @pytest.mark.parametrize("bad", ["a\nb", "a\rb", "a\x00b", "a\x1b[0m", "   ", "a\u2028b", "a\u2029b", "a\x85b"])
     def test_invalid_parent_is_not_opened(self, monkeypatch, bad):
         t = m.tasks__create(title="x")
         monkeypatch.setattr(m.kitty_open, "open_task", lambda *a, **k: pytest.fail("ran"))
