@@ -63,11 +63,35 @@ def build_env(task_id: str, worktree: str, db: str, path: str, store: str | None
     return env
 
 
+SLIM_MCP_DEFAULT = ("taskfw", "claude-hooks")
+CLAUDE_JSON = Path("~/.claude.json")
+
+
+def slim_mcp_config(env: Mapping[str, str] = os.environ, claude_json: str | Path = CLAUDE_JSON) -> str | None:
+    """Inline `--mcp-config` JSON holding only the servers a task tab uses, copied from the user-level
+    `mcpServers` in ~/.claude.json (their commands are host paths, so nothing is checked in). Names come
+    from TASKFW_KITTY_MCP (comma list; empty or `all` = no slimming), default taskfw + claude-hooks.
+    Returns None, meaning the current launch, when the file is unreadable or any named server is absent:
+    a partial set would leave a tab without tools it was promised."""
+    raw = env.get("TASKFW_KITTY_MCP")
+    if raw is not None and raw.strip().lower() in ("", "all"):
+        return None
+    names = [n.strip() for n in raw.split(",") if n.strip()] if raw else list(SLIM_MCP_DEFAULT)
+    try:
+        servers = json.loads(Path(claude_json).expanduser().read_text())["mcpServers"]
+        return json.dumps({"mcpServers": {n: servers[n] for n in names}})
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def claude_cmd(claude: str, hooks: str | Path | None, resume_session: str | None = None,
-               prompt: str | None = None) -> list[str]:
+               prompt: str | None = None, mcp_config: str | None = None) -> list[str]:
     """argv for the tab's claude. The prompt is one trailing argv element after `--` (kitty runs
-    argv with no shell, so quotes and newlines need no escaping; `--` keeps a leading '-' a prompt)."""
+    argv with no shell, so quotes and newlines need no escaping; `--` keeps a leading '-' a prompt).
+    `mcp_config` (inline JSON) restricts the tab to exactly those MCP servers, connectors included."""
     cmd = [claude, *(["--settings", str(hooks)] if hooks else [])]
+    if mcp_config:
+        cmd += ["--strict-mcp-config", "--mcp-config", mcp_config]
     if resume_session:
         cmd += ["--resume", resume_session]
     if prompt:
@@ -97,8 +121,10 @@ def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title:
 class Launcher:
     def __init__(self, adapter: KittyAdapter, store: Store, *, hooks: str | Path = DEFAULT_HOOKS,
                  watcher: str | Path | None = DEFAULT_WATCHER,
-                 claude: str | None = None, db: str | None = None, path: str | None = None):
+                 claude: str | None = None, db: str | None = None, path: str | None = None,
+                 mcp_config: str | None = None):
         self.adapter, self.store, self.hooks = adapter, store, hooks
+        self.mcp_config = mcp_config  # None (the default, and what tests get) = every MCP server
         self.watcher = str(watcher) if watcher else None
         self.claude = claude or shutil.which("claude") or "claude"
         self.db = str(Path(db).expanduser()) if db else str(DB_PATH)
@@ -109,7 +135,7 @@ class Launcher:
         worktree = str(Path(worktree).expanduser().resolve())
         wid = self.adapter.launch(
             cwd=worktree,
-            cmd=claude_cmd(self.claude, self.hooks, resume_session, prompt),
+            cmd=claude_cmd(self.claude, self.hooks, resume_session, prompt, self.mcp_config),
             env=build_env(task_id, worktree, self.db, self.path, self.store.path),
             user_vars={"task_id": task_id},
             title=f"task:{task_id}",
@@ -120,8 +146,9 @@ class Launcher:
         tab_id = found[0].tab_id if found else None
         self.store.record_launch(task_id=task_id, window_id=wid, tab_id=tab_id,
                                  socket=self.adapter.socket, cwd=worktree)
-        log.info("kitty launch task=%s resumed_session=%s window=%s cwd=%s",
-                 task_id, resume_session or "-", wid, worktree)
+        log.info("kitty launch task=%s resumed_session=%s window=%s cwd=%s mcp=%s",
+                 task_id, resume_session or "-", wid, worktree,
+                 ",".join(json.loads(self.mcp_config)["mcpServers"]) if self.mcp_config else "all")
         return wid
 
     def start(self, task_id: str, worktree: str, prompt: str | None = None) -> int:
@@ -215,7 +242,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
         return 1
     store = Store(a.store) if a.store else Store()
     try:
-        lau = Launcher(KittyAdapter(a.socket), store)
+        lau = Launcher(KittyAdapter(a.socket), store, mcp_config=slim_mcp_config(env))
         if a.cmd == "start":
             print(lau.start(a.task_id, resolve_worktree(a.task_id, a.worktree, a.isolate), a.prompt))
         elif a.cmd == "resume":

@@ -4,7 +4,7 @@ import subprocess
 import pytest
 
 from taskfw.kitty.adapter import KittyAdapter
-from taskfw.kitty.launcher import Launcher, NoSessionToResume, plain_tab
+from taskfw.kitty.launcher import Launcher, NoSessionToResume, claude_cmd, plain_tab, slim_mcp_config
 from taskfw.kitty.store import Store
 
 
@@ -225,3 +225,50 @@ def test_plain_refuses_a_multiline_parent_before_touching_kitty(tmp_path):
     with pytest.raises(KittyError):
         plain_tab(ad, str(tmp_path), "x", parent="a\nb")
     assert f.calls == []
+
+
+def _claude_json(tmp_path, servers):
+    p = tmp_path / "claude.json"
+    p.write_text(json.dumps({"mcpServers": servers}))
+    return p
+
+
+SERVERS = {"taskfw": {"command": "/a"}, "claude-hooks": {"command": "/b"}, "local-mac": {"command": "/c"}}
+
+
+def test_slim_config_keeps_only_task_servers(tmp_path):
+    cfg = json.loads(slim_mcp_config({}, _claude_json(tmp_path, SERVERS)))
+    assert cfg == {"mcpServers": {"taskfw": {"command": "/a"}, "claude-hooks": {"command": "/b"}}}
+
+
+def test_slim_config_names_overridable_and_all_disables(tmp_path):
+    p = _claude_json(tmp_path, SERVERS)
+    assert set(json.loads(slim_mcp_config({"TASKFW_KITTY_MCP": "taskfw"}, p))["mcpServers"]) == {"taskfw"}
+    assert slim_mcp_config({"TASKFW_KITTY_MCP": "all"}, p) is None
+    assert slim_mcp_config({"TASKFW_KITTY_MCP": ""}, p) is None
+
+
+def test_slim_config_fails_open(tmp_path):
+    assert slim_mcp_config({}, tmp_path / "missing.json") is None
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    assert slim_mcp_config({}, bad) is None
+    assert slim_mcp_config({}, _claude_json(tmp_path, {"taskfw": {}})) is None  # claude-hooks absent: no partial set
+
+
+def test_claude_cmd_pins_strict_flags_before_resume_and_prompt():
+    cfg = '{"mcpServers": {}}'
+    assert claude_cmd("c", "/h", "sess", "go", cfg) == [
+        "c", "--settings", "/h", "--strict-mcp-config", "--mcp-config", cfg, "--resume", "sess", "--", "go"]
+    assert "--strict-mcp-config" not in claude_cmd("c", "/h", None, None)
+
+
+def test_launcher_passes_mcp_config_to_start_and_resume_but_plain_tab_never(tmp_path):
+    lau, st, f = make(handler, tmp_path)
+    lau.mcp_config = '{"mcpServers": {"taskfw": {}}}'
+    lau.start("abc", str(tmp_path))
+    assert "--strict-mcp-config" in argv_tail(f)
+    lau.resume("abc", fresh=True)
+    assert "--strict-mcp-config" in argv_tail(f)
+    plain_tab(lau.adapter, str(tmp_path), claude="/bin/claude")
+    assert "--strict-mcp-config" not in argv_tail(f)

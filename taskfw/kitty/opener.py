@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from .adapter import KittyAdapter, KittyError, KittyVersionMismatch, normalize_socket
-from .launcher import Launcher, check_install, log
+from .launcher import Launcher, check_install, log, slim_mcp_config
 from .store import Store
 from . import worktrees
 
@@ -121,7 +121,7 @@ def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, c
         wt, isolated, why = _choose_directory(task_id, wt, isolate, st, windows)
     except worktrees.WorktreeError as e:  # never launch into a shared tree after a failure
         return _not_opened(f"worktree: {e}")
-    lau = Launcher(live[target], st, claude=claude)
+    lau = Launcher(live[target], st, claude=claude, mcp_config=slim_mcp_config(env))
     wid = lau.start(task_id, str(wt), prompt)
     return OpenResult("opened", wid, target, why, str(wt), isolated)
 
