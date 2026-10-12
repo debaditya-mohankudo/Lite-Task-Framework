@@ -157,6 +157,9 @@ class TestTool:
         assert "SendMessage" not in base["prompt"]
         assert "SendMessage to sess-1" in with_parent["prompt"] and "never the brief" in with_parent["prompt"]
         assert "say so in your final output and stop" in with_parent["prompt"]
+        # the summary lives in the task, not in the message: the message carries the id only
+        assert "the task id only" in with_parent["prompt"] and "reason on tasks__finish" in with_parent["prompt"]
+        assert "commit ids" not in with_parent["prompt"]
 
     def test_explicit_prompt_is_untouched_by_parent(self, monkeypatch):
         _, seen, out = self._prompt_for(monkeypatch, prompt="do X", parent="sess-1")

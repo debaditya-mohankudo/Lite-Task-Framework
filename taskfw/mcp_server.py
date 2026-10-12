@@ -1175,7 +1175,9 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
                   "and implement.")
         if parent:
             prompt += " " + kitty_open.report_back(
-                parent, "the task id, the outcome in one line and the commit ids", "When finished (after introspection)")
+                parent, "the task id only; first record the outcome in one line as the reason on tasks__finish "
+                        "and link the commits, which the parent reads via tasks__get",
+                "When finished (after introspection)")
     return kitty_open.open_task(task_id, worktree, prompt=prompt, isolate=isolate)
 
 
