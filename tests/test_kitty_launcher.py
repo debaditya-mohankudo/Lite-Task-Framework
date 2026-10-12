@@ -4,7 +4,7 @@ import subprocess
 import pytest
 
 from taskfw.kitty.adapter import KittyAdapter
-from taskfw.kitty.launcher import Launcher, NoSessionToResume, claude_cmd, plain_tab, slim_mcp_config
+from taskfw.kitty.launcher import Launcher, NoSessionToResume, claude_cmd, mcp_choice, plain_tab
 from taskfw.kitty.store import Store
 
 
@@ -237,23 +237,23 @@ SERVERS = {"taskfw": {"command": "/a"}, "claude-hooks": {"command": "/b"}, "loca
 
 
 def test_slim_config_keeps_only_task_servers(tmp_path):
-    cfg = json.loads(slim_mcp_config({}, _claude_json(tmp_path, SERVERS)))
+    cfg = json.loads(mcp_choice({}, _claude_json(tmp_path, SERVERS))[0])
     assert cfg == {"mcpServers": {"taskfw": {"command": "/a"}, "claude-hooks": {"command": "/b"}}}
 
 
 def test_slim_config_names_overridable_and_all_disables(tmp_path):
     p = _claude_json(tmp_path, SERVERS)
-    assert set(json.loads(slim_mcp_config({"TASKFW_KITTY_MCP": "taskfw"}, p))["mcpServers"]) == {"taskfw"}
-    assert slim_mcp_config({"TASKFW_KITTY_MCP": "all"}, p) is None
-    assert slim_mcp_config({"TASKFW_KITTY_MCP": ""}, p) is None
+    assert set(json.loads(mcp_choice({"TASKFW_KITTY_MCP": "taskfw"}, p)[0])["mcpServers"]) == {"taskfw"}
+    assert mcp_choice({"TASKFW_KITTY_MCP": "all"}, p)[0] is None
+    assert mcp_choice({"TASKFW_KITTY_MCP": ""}, p)[0] is None
 
 
 def test_slim_config_fails_open(tmp_path):
-    assert slim_mcp_config({}, tmp_path / "missing.json") is None
+    assert mcp_choice({}, tmp_path / "missing.json")[0] is None
     bad = tmp_path / "bad.json"
     bad.write_text("{not json")
-    assert slim_mcp_config({}, bad) is None
-    assert slim_mcp_config({}, _claude_json(tmp_path, {"taskfw": {}})) is None  # claude-hooks absent: no partial set
+    assert mcp_choice({}, bad)[0] is None
+    assert mcp_choice({}, _claude_json(tmp_path, {"taskfw": {}}))[0] is None  # claude-hooks absent: no partial set
 
 
 def test_claude_cmd_pins_strict_flags_before_resume_and_prompt():
@@ -272,3 +272,49 @@ def test_launcher_passes_mcp_config_to_start_and_resume_but_plain_tab_never(tmp_
     assert "--strict-mcp-config" in argv_tail(f)
     plain_tab(lau.adapter, str(tmp_path), claude="/bin/claude")
     assert "--strict-mcp-config" not in argv_tail(f)
+
+
+def test_mcp_choice_names_why_each_config_was_or_was_not_built(tmp_path):
+    p = _claude_json(tmp_path, SERVERS)
+    assert mcp_choice({}, p)[1] == "default"
+    assert mcp_choice({"TASKFW_KITTY_MCP": "taskfw"}, p)[1] == "override"
+    assert mcp_choice({"TASKFW_KITTY_MCP": "all"}, p) == (None, "all-requested")
+    assert mcp_choice({"TASKFW_KITTY_MCP": ""}, p) == (None, "all-requested")
+    assert mcp_choice({}, tmp_path / "missing.json") == (None, "fallback:claude-json-unreadable")
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    assert mcp_choice({}, bad) == (None, "fallback:claude-json-malformed")
+    no_key = tmp_path / "nokey.json"
+    no_key.write_text("{}")
+    assert mcp_choice({}, no_key) == (None, "fallback:no-mcpServers")
+    assert mcp_choice({}, _claude_json(tmp_path, {"taskfw": {}})) == (None, "fallback:server-absent=claude-hooks")
+    assert mcp_choice({"TASKFW_KITTY_MCP": "nope"}, p) == (None, "fallback:server-absent=nope")
+
+
+def _launch_line(tmp_path, task, **kw):
+    lau, _, _ = make(handler, tmp_path)
+    for k, v in kw.items():
+        setattr(lau, k, v)
+    lau.start(task, str(tmp_path))
+    (line,) = kitty_log_lines(f"task={task} ")
+    return line
+
+
+def test_launch_line_states_the_mcp_set_and_why_for_slim_override_and_fallback(tmp_path):
+    p = _claude_json(tmp_path, SERVERS)
+    for task, env, names, source in [
+        ("mcpslim1", {}, "taskfw,claude-hooks", "default"),
+        ("mcpover1", {"TASKFW_KITTY_MCP": "taskfw"}, "taskfw", "override"),
+        ("mcpfall1", {"TASKFW_KITTY_MCP": "nope"}, "all", "fallback:server-absent=nope"),
+        ("mcpall01", {"TASKFW_KITTY_MCP": "all"}, "all", "all-requested"),
+    ]:
+        cfg, why = mcp_choice(env, p)
+        line = _launch_line(tmp_path, task, mcp_config=cfg, mcp_source=why)
+        assert f"mcp={names} mcp_source={source}" in line
+
+
+def test_bare_launcher_and_plain_tab_log_without_a_mcp_decision(tmp_path):
+    assert "mcp=all mcp_source=none" in _launch_line(tmp_path, "mcpbare1")
+    lau, _, _ = make(handler, tmp_path)
+    plain_tab(lau.adapter, str(tmp_path), claude="/bin/claude")
+    assert not any(" mcp=" in m for m in kitty_log_lines("kitty plain"))
