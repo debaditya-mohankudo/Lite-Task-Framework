@@ -273,3 +273,21 @@ def test_worktree_failure_is_not_opened_and_launches_nothing(ctx, repo, monkeypa
                         lambda *a: (_ for _ in ()).throw(worktrees.WorktreeError("boom")))
     w, r = _open(ctx, repo, [], isolate=True)
     assert r.status == "not_opened" and "boom" in r.reason and not w.launches()
+
+
+def opener_log_lines(*needles):
+    import os
+    with open(os.environ["TASKFW_LOG_JSONL"]) as f:
+        rows = [json.loads(line) for line in f if line.strip()]
+    return [r["message"] for r in rows if r["logger"] == "taskfw.kitty" and all(n in r["message"] for n in needles)]
+
+
+def test_a_refused_open_is_logged_with_its_reason_and_an_opened_one_is_not_logged_here(ctx):
+    st = Store(ctx["store"])
+    st.record_launch(task_id="optlog9", window_id=5, tab_id=1, socket="unix:/tmp/kitty-1", cwd="/x")
+    world = World(**{"unix:/tmp/kitty-1": []})
+    args = {**ctx, "adapter_factory": world.factory, "socket": "/tmp/kitty-1"}
+    open_task("optlog9", args.pop("worktree"), **args)
+    (line,) = opener_log_lines("kitty open task=optlog9", "status=not_opened")
+    assert "resume optlog9" in line
+    assert not opener_log_lines("kitty open task=optlog9", "status=opened")

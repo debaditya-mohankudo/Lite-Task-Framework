@@ -182,3 +182,28 @@ def test_plain_refuses_a_missing_directory_before_touching_kitty(tmp_path):
     with pytest.raises(KittyError):
         plain_tab(ad, str(tmp_path / "nope"))
     assert f.calls == []
+
+
+def kitty_log_lines(*needles):
+    """Messages the test-session log sink holds for the kitty logger that mention every needle."""
+    import os
+    with open(os.environ["TASKFW_LOG_JSONL"]) as f:
+        rows = [json.loads(line) for line in f if line.strip()]
+    return [r["message"] for r in rows if r["logger"] == "taskfw.kitty" and all(n in r["message"] for n in needles)]
+
+
+def test_start_and_resume_each_log_one_launch_line_naming_the_resumed_session(tmp_path):
+    lau, st, _ = make(handler, tmp_path)
+    lau.start("logtask1", str(tmp_path))
+    st.backfill_session(socket="unix:/tmp/s", window_id=_last[0], session_id="sess-1")
+    lau.resume("logtask1", str(tmp_path))
+    first, second = kitty_log_lines("task=logtask1")
+    assert "resumed_session=-" in first and "resumed_session=sess-1" in second
+    assert f"cwd={tmp_path.resolve()}" in second
+
+
+def test_plain_logs_a_line_with_no_task(tmp_path):
+    f = Fake(handler)
+    ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
+    wid = plain_tab(ad, str(tmp_path), claude="/bin/claude", path="/bin")
+    assert kitty_log_lines(f"kitty plain window={wid} ", f"cwd={tmp_path.resolve()}")

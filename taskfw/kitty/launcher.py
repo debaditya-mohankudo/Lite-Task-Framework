@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Mapping
 
 from taskfw.config import DB_PATH
+from taskfw.log import get_logger
 
 from .adapter import KittyAdapter, KittyError
 from .store import Store
@@ -25,6 +26,8 @@ from . import worktrees
 
 DEFAULT_HOOKS = Path(__file__).resolve().parent / "hooks.json"
 DEFAULT_WATCHER = Path(__file__).resolve().parent / "watcher.py"
+
+log = get_logger("kitty")
 
 
 def check_install(hooks: str | Path | None = None) -> str | None:
@@ -78,9 +81,11 @@ def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title:
     cwd = str(Path(cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
         raise KittyError(f"cwd {cwd!r} is not a directory")
-    return adapter.launch(cwd=cwd, env={"PATH": path if path is not None else os.environ.get("PATH", "")},
-                          cmd=claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt),
-                          title=title)
+    wid = adapter.launch(cwd=cwd, env={"PATH": path if path is not None else os.environ.get("PATH", "")},
+                         cmd=claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt),
+                         title=title)
+    log.info("kitty plain window=%s cwd=%s", wid, cwd)
+    return wid
 
 
 class Launcher:
@@ -109,6 +114,8 @@ class Launcher:
         tab_id = found[0].tab_id if found else None
         self.store.record_launch(task_id=task_id, window_id=wid, tab_id=tab_id,
                                  socket=self.adapter.socket, cwd=worktree)
+        log.info("kitty launch task=%s resumed_session=%s window=%s cwd=%s",
+                 task_id, resume_session or "-", wid, worktree)
         return wid
 
     def start(self, task_id: str, worktree: str, prompt: str | None = None) -> int:

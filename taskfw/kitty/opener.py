@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from .adapter import KittyAdapter, KittyError, KittyVersionMismatch, normalize_socket
-from .launcher import Launcher, check_install
+from .launcher import Launcher, check_install, log
 from .store import Store
 from . import worktrees
 
@@ -57,10 +57,13 @@ def open_task(task_id: str, worktree: str | None = None, *, socket: str | None =
               socket_glob: str = SOCKET_GLOB, claude: str | None = None,
               prompt: str | None = None, isolate: bool | None = None) -> OpenResult:
     try:
-        return _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt,
-                     isolate)
+        result = _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt,
+                       isolate)
     except Exception as e:  # the whole point: nothing escapes into the caller
-        return _not_opened(f"unexpected {type(e).__name__}: {e}")
+        result = _not_opened(f"unexpected {type(e).__name__}: {e}")
+    if result.status != "opened":  # an opened tab is logged by the launcher that launched it
+        log.info("kitty open task=%s status=%s reason=%s", task_id, result.status, result.reason)
+    return result
 
 
 def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt, isolate) -> OpenResult:
