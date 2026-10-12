@@ -70,10 +70,11 @@ def open_task(
     prompt: str = "",
     isolate: bool | None = None,
     model: str = "",
+    model_reason: str = "",
 ) -> dict[str, Any]:
-    """Run `taskfw.kitty.launcher open --worktree <worktree> <task_id> [--prompt P] [--isolate|--no-isolate] [--model M]`; never raises.
+    """Run `taskfw.kitty.launcher open --worktree <worktree> <task_id> [--prompt P] [--isolate|--no-isolate] [--model M [--model-reason R]]`; never raises.
 
-    Returns {status, window_id, socket, reason, worktree, isolated}, status one of
+    Returns {status, window_id, socket, reason, worktree, isolated, model, model_source}, status one of
     opened / exists / not_opened. `runner` is injectable so tests never fork.
     """
     env = dict(os.environ if env is None else env)
@@ -85,6 +86,8 @@ def open_task(
         argv += ["--prompt", prompt]
     if model:  # an explicit override; unset leaves the launcher to choose from the task
         argv += ["--model", model]
+        if model_reason:
+            argv += ["--model-reason", model_reason]
     if isolate is not None:  # unset leaves the launcher to decide from live sibling tabs
         argv.append("--isolate" if isolate else "--no-isolate")
     try:
@@ -114,4 +117,6 @@ def open_task(
         "reason": data.get("reason"),
         "worktree": data.get("worktree"),
         "isolated": data.get("isolated"),
+        "model": data.get("model"),
+        "model_source": data.get("model_source"),
     }

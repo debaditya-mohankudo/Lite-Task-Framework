@@ -61,7 +61,8 @@ def test_each_tier_is_reachable_for_prompts():
 def test_override_wins_and_decide_is_never_called():
     def boom():
         raise AssertionError("called")
-    assert models.pick(" claude-opus-5 ", boom) == ("claude-opus-5", "override")
+    assert models.pick(" claude-opus-5 ", boom) == ("claude-opus-5", "caller (no reason given)")
+    assert models.pick("claude-opus-5", boom, "touches the\n  schema") == ("claude-opus-5", "caller: touches the schema")
 
 
 @pytest.mark.parametrize("decide", [lambda: 1 / 0, lambda: ("claude-nope", "x")])
@@ -131,3 +132,54 @@ def test_kitty_open_forwards_model_as_a_cli_flag():
     seen.clear()
     kitty_open.open_task("abc", "/w", runner=runner, env={})
     assert "--model" not in seen["argv"]
+
+
+def test_caller_reason_is_recorded_verbatim_not_a_rule_string(tmp_path):
+    lau, st, f = make(tmp_path, model="claude-opus-5-5", model_reason="cross-module race, needs depth",
+                      task_model=lambda tid: (models.SONNET_5, "small items=1"))
+    lau.start("abc", str(tmp_path))
+    assert lau.chosen == ("claude-opus-5-5", "caller: cross-module race, needs depth")
+    assert "--model" in launched(f)
+
+
+def test_recorded_decision_carries_the_callers_reason(tmp_path):
+    from taskfw.task import Task
+    from taskfw.store import TaskStore
+    s = TaskStore(tmp_path / "t.db")
+    tid = s.save(Task(title="x")).id
+    record_model_decision(tmp_path / "t.db", tid, "claude-opus-5", "caller: needs depth")
+    assert [e["text"] for e in s.events(tid) if e["kind"] == "decision"] == [
+        "kitty tab model: claude-opus-5 (caller: needs depth)"]
+
+
+def test_omitted_model_is_flagged_as_fallback_and_never_blocks(tmp_path, monkeypatch):
+    from taskfw import mcp_server as m
+    from taskfw.store import TaskStore
+    from taskfw.task import Task
+    s = TaskStore(tmp_path / "t.db"); m.set_store(s)
+    try:
+        tid = s.save(Task(title="x")).id
+        seen = {}
+        def fake(tid, wt, prompt="", isolate=None, model="", model_reason=""):
+            seen.update(model=model, reason=model_reason)
+            return {"status": "opened", "model": "claude-sonnet-5", "model_source": "small items=0"}
+        monkeypatch.setattr(m.kitty_open, "open_task", fake)
+        out = m.tasks__open_in_kitty(tid, worktree=str(tmp_path))
+        assert out["status"] == "opened" and "fallback rules" in out["model_note"]
+        out = m.tasks__open_in_kitty(tid, worktree=str(tmp_path), model="claude-opus-5", model_reason="why")
+        assert "model_note" not in out and seen == {"model": "claude-opus-5", "reason": "why"}
+    finally:
+        m.set_store(None)
+
+
+def test_kitty_open_forwards_model_reason():
+    seen = {}
+    def runner(argv, **k):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, json.dumps({"status": "opened", "model": "m",
+                                                                 "model_source": "caller: r"}), "")
+    out = kitty_open.open_task("abc", "/w", runner=runner, env={}, model="claude-opus-5", model_reason="r")
+    assert seen["argv"][-4:] == ["--model", "claude-opus-5", "--model-reason", "r"]
+    assert out["model_source"] == "caller: r"
+    kitty_open.open_task("abc", "/w", runner=runner, env={}, model_reason="orphan")
+    assert "--model-reason" not in seen["argv"]

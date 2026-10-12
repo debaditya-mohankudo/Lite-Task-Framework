@@ -43,6 +43,8 @@ class OpenResult:
     reason: str | None = None
     worktree: str | None = None
     isolated: bool | None = None
+    model: str | None = None  # the --model the tab got; None = claude's default or nothing launched
+    model_source: str | None = None  # `caller: <reason>`, a rule reason, or `fallback:<why>`
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -57,10 +59,10 @@ def open_task(task_id: str, worktree: str | None = None, *, socket: str | None =
               adapter_factory: Callable[[str], KittyAdapter] = KittyAdapter,
               socket_glob: str = SOCKET_GLOB, claude: str | None = None,
               prompt: str | None = None, isolate: bool | None = None,
-              model: str | None = None) -> OpenResult:
+              model: str | None = None, model_reason: str | None = None) -> OpenResult:
     try:
         result = _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt,
-                       isolate, model)
+                       isolate, model, model_reason)
     except Exception as e:  # the whole point: nothing escapes into the caller
         result = _not_opened(f"unexpected {type(e).__name__}: {e}")
     if result.status != "opened":  # an opened tab is logged by the launcher that launched it
@@ -68,7 +70,8 @@ def open_task(task_id: str, worktree: str | None = None, *, socket: str | None =
     return result
 
 
-def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt, isolate, model=None) -> OpenResult:
+def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt, isolate, model=None,
+          model_reason=None) -> OpenResult:
     wt = Path(worktree or os.getcwd()).expanduser()
     if not wt.is_dir():
         return _not_opened(f"worktree {str(wt)!r} is not a directory")
@@ -125,9 +128,9 @@ def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, c
         return _not_opened(f"worktree: {e}")
     mcp, mcp_source = mcp_choice(env)
     lau = Launcher(live[target], st, claude=claude, mcp_config=mcp, mcp_source=mcp_source,
-                   model=model, task_model=task_model_reader(DB_PATH))
+                   model=model, model_reason=model_reason, task_model=task_model_reader(DB_PATH))
     wid = lau.start(task_id, str(wt), prompt)
-    return OpenResult("opened", wid, target, why, str(wt), isolated)
+    return OpenResult("opened", wid, target, why, str(wt), isolated, *lau.chosen)
 
 
 def _live_sibling(st: Store, windows: dict, repo: Path) -> str | None:

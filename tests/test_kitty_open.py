@@ -52,7 +52,7 @@ class TestOpenTask:
         r = fake(json.dumps({"status": "opened", "window_id": 7, "socket": "/s", "reason": None}))
         out = kitty_open.open_task("abc", "/repo", runner=r, env=ENV)
         assert out == {"status": "opened", "window_id": 7, "socket": "/s", "reason": None,
-                       "worktree": None, "isolated": None}
+                       "worktree": None, "isolated": None, "model": None, "model_source": None}
         argv, kw = r.calls[0]
         assert argv == ["kt-fake", "--flag", "open", "--worktree", "/repo", "abc"]
         assert kw["timeout"] == kitty_open.TIMEOUT_S
@@ -78,7 +78,7 @@ class TestOpenTask:
         t = m.tasks__create(title="x")
         seen = {}
         monkeypatch.setattr(m.kitty_open, "open_task",
-                            lambda tid, wt, prompt="", isolate=None, model="": seen.update(isolate=isolate) or {"status": "opened"})
+                            lambda tid, wt, prompt="", isolate=None, model="", model_reason="": seen.update(isolate=isolate) or {"status": "opened"})
         m.tasks__open_in_kitty(t["id"], worktree="/w", isolate=True)
         assert seen["isolate"] is True
         m.tasks__open_in_kitty(t["id"], worktree="/w")
@@ -134,7 +134,7 @@ class TestTool:
         seen = {}
         monkeypatch.setattr(
             m.kitty_open, "open_task",
-            lambda tid, wt, prompt="", isolate=None, model="": seen.update(tid=tid, wt=wt, prompt=prompt, isolate=isolate) or {"status": "opened"},
+            lambda tid, wt, prompt="", isolate=None, model="", model_reason="": seen.update(tid=tid, wt=wt, prompt=prompt, isolate=isolate) or {"status": "opened"},
         )
         before = m.store().get_active(m._workspace())
         assert m.tasks__open_in_kitty(t["id"], worktree="/w")["status"] == "opened"
@@ -147,7 +147,7 @@ class TestTool:
         t = m.tasks__create(title="x")
         seen = {}
         monkeypatch.setattr(m.kitty_open, "open_task",
-                            lambda tid, wt, prompt="", isolate=None, model="": seen.update(prompt=prompt) or {"status": "opened"})
+                            lambda tid, wt, prompt="", isolate=None, model="", model_reason="": seen.update(prompt=prompt) or {"status": "opened"})
         out = m.tasks__open_in_kitty(t["id"], worktree="/w", **kw)
         return t["id"], seen, out
 

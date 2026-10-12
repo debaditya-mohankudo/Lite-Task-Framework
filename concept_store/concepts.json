@@ -731,10 +731,12 @@
         "for_task(epic, title, motivation, resolution, tags) and for_prompt(prompt) return (model, reason); pick(override, decide) returns (model|None, source) where source is `override`, the rule reason, or `fallback:<why>`",
         "Launcher.task_model defaults to None (no choice, no --model), so only main() and the opener opt in; plain_tab always chooses from its prompt unless model= is given",
         "A chosen task-tab model is recorded as a decision event on the task and in the kitty store's tabs.model; a plain tab prints `model=<id> (<reason>)` to stderr",
-        "resume reuses the stored tabs.model (source `resumed`) unless --model is given"
+        "resume reuses the stored tabs.model (source `resumed`) unless --model is given",
+        "pick(override, decide, reason) returns (model|None, source): a caller override gives source `caller: <reason, one line>` or `caller (no reason given)` and never calls `decide`; otherwise the rule reason, or `fallback:<why>`. Precedence caller > rules > claude default lives only here",
+        "tasks__open_in_kitty tells the caller to choose model + model_reason, and when a tab opens without a caller model its result carries `model_note` saying the rules picked it; a plain tab says the same on stderr"
       ],
       "created_at": "2026-10-12T18:00:48.219763+00:00",
-      "description": "The one home for the claude model ids a kitty tab can start on (claude-sonnet-5, -sonnet-5-5, claude-opus-5, -opus-5-5, plus offload's CHEAP_MODEL) and for the deterministic rules that pick a tier from a task's fields or a plain tab's prompt.",
+      "description": "The one home for the claude model ids a kitty tab can start on (claude-sonnet-5, -sonnet-5-5, claude-opus-5, -opus-5-5, plus offload's CHEAP_MODEL) and for the precedence that picks one: the caller's model first, the deterministic task/prompt rules only as the fallback.",
       "evidence": [
         "taskfw/kitty/models.py"
       ],
@@ -742,9 +744,11 @@
         "An explicit --model/model arg always wins and `decide` is never called",
         "A decision that raises or yields an id outside TIERS launches on claude's default (no --model flag) and never blocks the launch",
         "Ids are defined only in models.py; offload imports CHEAP_MODEL from it",
-        "The rules are deterministic with no model call, so a tier choice is gradeable from its recorded reason"
+        "The rules are deterministic with no model call, so a tier choice is gradeable from its recorded reason",
+        "The rules are a fallback for a caller that passed nothing, never a gate: a missing, unknown or failing choice launches on claude's default",
+        "Never switch a running tab's model with /model: it rewrites the global default in ~/.claude/settings.json"
       ],
-      "last_validated": "2026-10-12T18:00:48.219814+00:00",
+      "last_validated": "2026-10-12T18:09:01.364005+00:00",
       "module": "taskfw/kitty/models.py",
       "name": "kitty-model-choice",
       "related": [
@@ -902,7 +906,8 @@
         "`plain --cwd <dir>` (plain_tab) opens a claude tab that belongs to no task: only PATH is passed, and it has no task env, no --settings hooks, no watcher and no store row; cwd must be an existing directory and is the directory whose .claude/skills the tab sees (task:7e2dc341)",
         "Every launch is logged to the taskfw `logs` table (logger taskfw.kitty): Launcher._launch logs each task tab with resumed_session (`-` for a fresh one), plain_tab logs window and cwd, and open_task logs only results that are not `opened` with their reason, so an opened tab is never logged twice (task:e05df5eb)",
         "`plain --parent <session>` (plain_tab parent=) appends kitty_open.report_back(parent, \"the outcome in one line\") to the prompt, the same SendMessage sentence tasks__open_in_kitty uses; a parent with a newline, any control character or a Unicode line separator (U+2028, U+2029) is refused by kitty_open.bad_parent before kitty is touched, so the sentence stays one line; the launcher cannot discover the caller's session name, so --parent is explicit (task:d6954e1c)",
-        "Task tabs (start/resume/open, not `plain`) launch with `--strict-mcp-config --mcp-config <file>` holding only taskfw + claude-hooks, copied at launch from ~/.claude.json `mcpServers` by mcp_choice (host paths, so no checked-in file); the config is written 0600 to <db dir>/mcp/mcp-<hash>.json by write_mcp_config, never inlined in argv, because server env/headers would show in `ps`, and a failed write raises KittyError rather than falling back to inline, and every write goes to a 0600 temp file renamed into place, so an interrupted write never leaves a partial file under the hash name for a later launch to reuse (task:f3c550ec); strict also drops the claude.ai connectors, project .mcp.json, projects[...].mcpServers and plugin servers. TASKFW_KITTY_MCP overrides the names (comma list; empty or `all` = every server). Measured saving is headless only: `claude -p` (12 servers/295 tools -> 2/88) went 33954 -> 28533 input tokens, but an interactive tab's first-turn context measured ~0 change (45,713 -> 45,874), so the slimming is not a token saving for interactive tabs (task:eb308ffc, second introspection). The `kitty launch` log line carries mcp=<names>|all and mcp_source=<default|override|all-requested|fallback:<reason>|none>, from mcp_choice (which slim_mcp_config became): a fallback to the full set names its cause (claude-json-unreadable, claude-json-malformed, no-mcpServers, server-absent=<name>) so it never reads like an intentional `all`; a bare Launcher logs `none` (task:1639104e). An override naming no server (`,`) falls back to the default set as `fallback:override-empty`, never an empty one; a malformed ~/.claude.json parse is retried (MCP_READ_TRIES) before it is reported, since a concurrent write looks malformed; and _launch appends `;drops=<.mcp.json paths, project:<server>, plugin:<name>>` to mcp_source when strict mode hides such servers in the tab's cwd, found best-effort by dropped_servers (task:602c1f85)"
+        "Task tabs (start/resume/open, not `plain`) launch with `--strict-mcp-config --mcp-config <file>` holding only taskfw + claude-hooks, copied at launch from ~/.claude.json `mcpServers` by mcp_choice (host paths, so no checked-in file); the config is written 0600 to <db dir>/mcp/mcp-<hash>.json by write_mcp_config, never inlined in argv, because server env/headers would show in `ps`, and a failed write raises KittyError rather than falling back to inline, and every write goes to a 0600 temp file renamed into place, so an interrupted write never leaves a partial file under the hash name for a later launch to reuse (task:f3c550ec); strict also drops the claude.ai connectors, project .mcp.json, projects[...].mcpServers and plugin servers. TASKFW_KITTY_MCP overrides the names (comma list; empty or `all` = every server). Measured saving is headless only: `claude -p` (12 servers/295 tools -> 2/88) went 33954 -> 28533 input tokens, but an interactive tab's first-turn context measured ~0 change (45,713 -> 45,874), so the slimming is not a token saving for interactive tabs (task:eb308ffc, second introspection). The `kitty launch` log line carries mcp=<names>|all and mcp_source=<default|override|all-requested|fallback:<reason>|none>, from mcp_choice (which slim_mcp_config became): a fallback to the full set names its cause (claude-json-unreadable, claude-json-malformed, no-mcpServers, server-absent=<name>) so it never reads like an intentional `all`; a bare Launcher logs `none` (task:1639104e). An override naming no server (`,`) falls back to the default set as `fallback:override-empty`, never an empty one; a malformed ~/.claude.json parse is retried (MCP_READ_TRIES) before it is reported, since a concurrent write looks malformed; and _launch appends `;drops=<.mcp.json paths, project:<server>, plugin:<name>>` to mcp_source when strict mode hides such servers in the tab's cwd, found best-effort by dropped_servers (task:602c1f85)",
+        "start/resume/open/plain accept `--model <id>` and `--model-reason <line>`: the calling session chooses the tab's model (it has read the task) and the launcher passes `claude --model`; the reason, flattened to one line, becomes the recorded source `caller: <reason>` (or `caller (no reason given)`), so the task's model decision holds the caller's judgement, not a rule string. Precedence, owned by models.pick only: caller model > models.py keyword/size rules > claude's own default. Launcher.chosen is the (model, source) of the last launch and the opener returns it as OpenResult.model/model_source. A model is never driven by `/model` in a tab, because that rewrites ~/.claude/settings.json; --model is the only route (task:d048f118)"
       ],
       "created_at": "2026-10-10T10:52:13.740338+00:00",
       "description": "`start`/`resume`/`list`/`cleanup`/`open` CLI. Opens a NEW kitty tab per task (in the cwd, or a per-task git worktree with --isolate; `open` isolates by default when another live tab shares the repo), sets identity env and user var once, runs `claude --settings <hooks>` and records the tab in the store. An optional --prompt is claude's initial argument, so the handoff is submitted at startup rather than typed in.",
@@ -921,7 +926,7 @@
         "Worktree creation for start lives in resolve_worktree (main, only when --isolate; an explicit --worktree wins); for `open` the --worktree is only a BASE directory and the opener decides isolation, so the launcher open branch just parses --isolate/--no-isolate (default None) (task:d482a160)",
         "Slimming fails open: an unreadable ~/.claude.json, or any named server absent from it, yields no flags (the current launch), never a partial set; Launcher.mcp_config defaults to None so only main() and the opener opt in, and plain_tab never slims because its project has its own MCP needs"
       ],
-      "last_validated": "2026-10-12T17:45:00.000000+00:00",
+      "last_validated": "2026-10-12T18:08:58.366141+00:00",
       "module": "taskfw/kitty/launcher.py",
       "name": "kitty-task-launcher",
       "related": []
@@ -2074,6 +2079,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-12T18:01:36.728307+00:00"
+    "updated_at": "2026-10-12T18:09:01.364133+00:00"
   }
 }

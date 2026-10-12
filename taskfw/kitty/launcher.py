@@ -197,14 +197,15 @@ def record_model_decision(db: str | Path, task_id: str, model: str, source: str)
 
 def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title: str | None = None,
               *, claude: str | None = None, path: str | None = None, parent: str | None = None,
-              model: str | None = None) -> int:
+              model: str | None = None, model_reason: str | None = None) -> int:
     """A claude tab in `cwd` that belongs to no task; returns its window id. cwd is the directory
     whose `.claude/skills` the tab will see. `parent` is the caller's session name: given, the prompt
     ends with the shared report-back sentence, so the tab messages the caller when it finishes.
     Unlike a task tab, a plain tab is never slimmed: no mcp_choice and no check_install, so it gets every
     MCP server its directory and the user config define (that project has its own MCP needs).
     The model is `model` if given, else chosen from the prompt (models.for_prompt); the choice and its
-    reason go to stderr, since stdout carries only the window id."""
+    reason go to stderr, since stdout carries only the window id. `model_reason` is the caller's one-line
+    why for `model`; it is what gets reported as the source."""
     cwd = str(Path(cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
         raise KittyError(f"cwd {cwd!r} is not a directory")
@@ -212,13 +213,14 @@ def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title:
         raise KittyError(bad)
     if parent:
         prompt = " ".join(filter(None, [prompt, report_back(parent, "the outcome in one line")]))
-    chosen, source = models.pick(model, lambda: models.for_prompt(prompt))
+    chosen, source = models.pick(model, lambda: models.for_prompt(prompt), model_reason)
     wid = adapter.launch(cwd=cwd, env={"PATH": path if path is not None else os.environ.get("PATH", "")},
                          cmd=claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt,
                                         model=chosen),
                          title=title)
     log.info("kitty plain window=%s cwd=%s model=%s model_source=%s", wid, cwd, chosen or "default", source)
-    print(f"model={chosen or 'default'} ({source})", file=sys.stderr)
+    print(f"model={chosen or 'default'} ({source})"
+          + ("" if model else "; chosen by fallback rules, not by the caller"), file=sys.stderr)
     return wid
 
 
@@ -227,12 +229,14 @@ class Launcher:
                  watcher: str | Path | None = DEFAULT_WATCHER,
                  claude: str | None = None, db: str | None = None, path: str | None = None,
                  mcp_config: str | None = None, mcp_source: str = "none",
-                 model: str | None = None,
+                 model: str | None = None, model_reason: str | None = None,
                  task_model: Callable[[str], tuple[str, str]] | None = None):
         self.adapter, self.store, self.hooks = adapter, store, hooks
         self.mcp_config = mcp_config  # None (the default, and what tests get) = every MCP server
         self.mcp_source = mcp_source  # why that choice, from mcp_choice; only the launch log reads it
-        self.model = model  # explicit override; always beats the choice
+        self.model = model  # the caller's model; always beats the choice
+        self.model_reason = model_reason  # the caller's one-line why; recorded as the decision's source
+        self.chosen: tuple[str | None, str] = (None, "not-launched")  # (model, source) of the last launch
         self.task_model = task_model  # None (the default, and what tests get) = never choose
         self.watcher = str(watcher) if watcher else None
         self.claude = claude or shutil.which("claude") or "claude"
@@ -252,12 +256,13 @@ class Launcher:
             return prior, "resumed"
         if not self.model and not self.task_model:
             return None, "not-chosen"
-        return models.pick(self.model, lambda: self.task_model(task_id))
+        return models.pick(self.model, lambda: self.task_model(task_id), self.model_reason)
 
     def _launch(self, task_id: str, worktree: str, resume_session: str | None,
                 prompt: str | None = None) -> int:
         worktree = str(Path(worktree).expanduser().resolve())
         model, model_source = self._model(task_id, resume_session)
+        self.chosen = (model, model_source)
         wid = self.adapter.launch(
             cwd=worktree,
             cmd=claude_cmd(self.claude, self.hooks, resume_session, prompt,
@@ -319,6 +324,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
         p.add_argument("--worktree", default=None, help="explicit cwd; default: the current directory")
         p.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
         p.add_argument("--model", default=None, help="claude --model for the tab; default: chosen from the task")
+        p.add_argument("--model-reason", default=None, help="one line on why --model; recorded as the model decision")
         if name == "start":
             p.add_argument("--isolate", action="store_true",
                            help="run in a git worktree of this repo derived from the task id")
@@ -330,6 +336,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     pl.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
     pl.add_argument("--title", default=None, help="tab title")
     pl.add_argument("--model", default=None, help="claude --model for the tab; default: chosen from the prompt")
+    pl.add_argument("--model-reason", default=None, help="one line on why --model")
     pl.add_argument("--parent", default=None,
                     help="caller's session name (as ListAgents prints it); the tab SendMessages it when finished")
     o = sub.add_parser("open", help="open a task in a tab if kitty allows; always prints JSON, exits 0")
@@ -337,6 +344,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     o.add_argument("--worktree", default=None)
     o.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
     o.add_argument("--model", default=None, help="claude --model for the tab; default: chosen from the task")
+    o.add_argument("--model-reason", default=None, help="one line on why --model; recorded as the model decision")
     o.add_argument("--isolate", dest="isolate", action="store_true", default=None,
                    help="run in a git worktree of the --worktree directory's repo, derived from the task id")
     o.add_argument("--no-isolate", dest="isolate", action="store_false",
@@ -359,14 +367,15 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
         from .opener import open_task
         # the directory is only a base here: the opener isolates it (or not) once it knows the live tabs
         print(json.dumps(open_task(a.task_id, a.worktree or os.getcwd(), socket=a.socket, store=a.store,
-                                   env=env, prompt=a.prompt, isolate=a.isolate, model=a.model).as_dict()))
+                                   env=env, prompt=a.prompt, isolate=a.isolate, model=a.model,
+                                   model_reason=a.model_reason).as_dict()))
         return 0
     if not a.socket:
         ap.error("no kitty socket: pass --socket or run inside kitty")
     if a.cmd == "plain":  # no hooks file, no store: check_install and Store do not apply
         try:
             print(plain_tab(KittyAdapter(a.socket), a.cwd or os.getcwd(), a.prompt, a.title, parent=a.parent,
-                             model=a.model))
+                             model=a.model, model_reason=a.model_reason))
         except KittyError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
@@ -379,7 +388,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     try:
         mcp, mcp_source = mcp_choice(env)
         lau = Launcher(KittyAdapter(a.socket), store, mcp_config=mcp, mcp_source=mcp_source,
-                       model=a.model, task_model=task_model_reader(DB_PATH))
+                       model=a.model, model_reason=a.model_reason, task_model=task_model_reader(DB_PATH))
         if a.cmd == "start":
             print(lau.start(a.task_id, resolve_worktree(a.task_id, a.worktree, a.isolate), a.prompt))
         elif a.cmd == "resume":

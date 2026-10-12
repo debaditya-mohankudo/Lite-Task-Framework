@@ -1132,7 +1132,7 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
 @_tool()
 def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
                          isolate: bool | None = None, parent: str = "",
-                         model: str = "") -> dict[str, Any]:
+                         model: str = "", model_reason: str = "") -> dict[str, Any]:
     """Open task_id in a kitty tab by running `python -m taskfw.kitty.launcher open`. Fail-soft and optional.
 
     Returns {status, window_id, socket, reason, worktree, isolated} with status opened / exists /
@@ -1160,9 +1160,14 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
     the outcome via tasks__get. It must be a single line with no control or line/paragraph
     separator characters (it goes into a prompt), else not_opened. An explicit prompt is never
     modified, and without parent the default prompt is unchanged.
-    model is claude's --model id for the tab and always wins; omitted, the launcher chooses a tier
-    (claude-sonnet-5 / -sonnet-5-5 / -opus-5 / -opus-5-5) from the task's fields and records the choice
-    and its reason on the task as a decision; if it cannot choose, the tab opens on claude's default.
+    model is claude's --model id for the tab, and YOU choose it: you have read the task, the launcher's
+    rules have not. Pass model (claude-sonnet-5 / -sonnet-5-5 / -opus-5 / -opus-5-5, cheapest to most
+    capable) with model_reason, one line on why that tier fits this task; the reason is recorded verbatim
+    on the task as its model decision, for introspection to grade. Precedence: your model, then the
+    launcher's keyword/size rules, then claude's own default. Omit model and the tab still opens on the
+    rules' pick, and the result carries a `model_note` saying so; that is a fallback, not the intended
+    route. Never switch a tab's model with /model: it rewrites the user's global default in
+    ~/.claude/settings.json. The result's `model` / `model_source` say what the tab got and why.
     Command: TASKFW_KITTY_OPEN_CMD (shell-split), else the in-repo taskfw.kitty launcher.
     """
     task = store().get(task_id)
@@ -1185,7 +1190,12 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
                         "outcome in one line as its reason with the commits linked, `abandoned` if you stop with "
                         "the task still open; the parent reads the rest via tasks__get",
                 "When finished or stopping (after introspection)")
-    return kitty_open.open_task(task_id, worktree, prompt=prompt, isolate=isolate, model=model)
+    result = kitty_open.open_task(task_id, worktree, prompt=prompt, isolate=isolate, model=model,
+                                  model_reason=model_reason)
+    if result.get("status") == "opened" and not model.strip():
+        result["model_note"] = ("model was picked by fallback rules (keywords and size), not by the caller; "
+                                "pass model and model_reason so the session that read the task chooses")
+    return result
 
 
 @_tool()
