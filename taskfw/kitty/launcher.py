@@ -15,6 +15,7 @@ import json
 import os
 import shutil
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Mapping
@@ -150,18 +151,21 @@ def claude_cmd(claude: str, hooks: str | Path | None, resume_session: str | None
 
 
 def write_mcp_config(config: str, directory: Path) -> Path:
-    """`config` saved 0600 under `directory`, named by its content hash so a relaunch reuses the file.
-    It holds the servers' env/headers, so it is a file (like ~/.claude.json) and never argv."""
+    """`config` saved 0600 under `directory`, named by its content hash so relaunches share one file.
+    It holds the servers' env/headers, so it is a file (like ~/.claude.json) and never argv. Every call
+    writes a 0600 temp file and renames it into place, so the name never holds a partial write, and a
+    truncated file from an interrupted launch is replaced rather than reused."""
     path = directory / f"mcp-{hashlib.sha256(config.encode()).hexdigest()[:16]}.json"
+    tmp = None
     try:
         directory.mkdir(parents=True, exist_ok=True)
-        if not path.exists():
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, "w") as f:
-                f.write(config)
-    except FileExistsError:
-        pass
+        fd, tmp = tempfile.mkstemp(dir=directory, prefix=".mcp-", suffix=".tmp")  # mkstemp is 0600
+        with os.fdopen(fd, "w") as f:
+            f.write(config)
+        os.replace(tmp, path)
     except OSError as e:  # never fall back to inline JSON: that leaks the secrets this exists to hide
+        if tmp:
+            Path(tmp).unlink(missing_ok=True)
         raise KittyError(f"cannot write MCP config to {path}: {e}") from e
     return path
 

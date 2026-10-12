@@ -279,6 +279,22 @@ def test_launcher_passes_mcp_config_to_start_and_resume_but_plain_tab_never(tmp_
     assert "--strict-mcp-config" not in argv_tail(f)
 
 
+def test_write_mcp_config_replaces_a_partial_file_and_an_interrupted_write_leaves_none(tmp_path, monkeypatch):
+    from taskfw.kitty import launcher
+    config = '{"mcpServers": {"taskfw": {"command": "x"}}}'
+    path = launcher.write_mcp_config(config, tmp_path)
+    path.write_text(config[:10])  # what an interrupted write used to leave behind, then reuse forever
+    assert launcher.write_mcp_config(config, tmp_path) == path and path.read_text() == config
+    path.unlink()
+
+    def boom(*a):
+        raise OSError("disk full")
+    monkeypatch.setattr(launcher.os, "replace", boom)  # interrupted after the temp write, before the rename
+    with pytest.raises(launcher.KittyError, match="disk full"):
+        launcher.write_mcp_config(config, tmp_path)
+    assert list(tmp_path.iterdir()) == []  # neither the named file nor a stray temp
+
+
 def test_mcp_choice_names_why_each_config_was_or_was_not_built(tmp_path):
     p = _claude_json(tmp_path, SERVERS)
     assert mcp_choice({}, p)[1] == "default"
