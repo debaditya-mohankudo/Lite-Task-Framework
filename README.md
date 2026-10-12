@@ -47,6 +47,34 @@ All optional; sensible defaults out of the box.
 | `TASKFW_LOG_LEVEL` | `INFO` | Logger verbosity. |
 | `TASKFW_BUSY_TIMEOUT_MS` | `5000` | How long a writer waits on a lock before giving up, if you're running multiple sessions against the same DB. |
 
+## Optional: open a task in a kitty tab and get a report back
+
+If you run [kitty](https://sw.kovidgoyal.net/kitty/) with remote control on, `tasks__open_in_kitty` starts a task in its own new tab — a separate `claude` session working that task — so you can fan work out without leaving your current session. Nothing else in the framework depends on it; without kitty the tool just returns `not_opened` with a reason.
+
+**Requirements:** kitty with remote control enabled (`allow_remote_control` / a `listen_on` socket), and `claude` on `PATH`. The socket is taken from `$KITTY_LISTEN_ON`, else discovered under `/tmp/kitty-*`; several live kittys and no way to choose is `not_opened`, never a guess.
+
+| Argument | What it does |
+|---|---|
+| `task_id` | Required, so a bare call can never launch a tab. |
+| `worktree` | The tab's working directory. Omitted, it is the task scope's local root; if that is unknown the tool does not guess. |
+| `isolate` | `True` runs the tab in its own git worktree (`<repo>-worktrees/<task_id>`, branch `task/<task_id>`); `False` never does; omitted, it isolates only when another live tab already runs in that repo. The result's `worktree` / `isolated` say what was chosen. |
+| `prompt` | Claude's initial argument in the tab. Omitted, it is a one-line pointer to read the task via `tasks__get` and run `/task-grooming` — never the brief itself (context is pulled, not pushed). An explicit prompt is never modified. |
+| `parent` | Your session name, as `ListAgents` prints it (the server cannot know it). Given, the default prompt also tells the tab to `SendMessage` you once it has finished introspection: the task id, a one-line outcome and the commit ids. |
+
+**Getting the report back:** pass `parent` and the new tab messages your session when done; the report arrives as a message, not as pushed context. If `SendMessage` fails the tab says so in its own output and stops. Without `parent` the tab simply works the task and you check on it yourself.
+
+**Result:** `{status, window_id, socket, reason, worktree, isolated}`, with `status` one of `opened`, `exists` (a live tab already carries the task; nothing launched) or `not_opened`. Failures — no kitty, no `claude`, a timeout, a failed worktree — are always `not_opened` with a `reason`, never an exception. A task that has had a tab before and has none live is also `not_opened`: it points you at `resume`, which `open` never does for you.
+
+**How it talks to kitty.** Everything goes through [`kitten @`](https://sw.kovidgoyal.net/kitty/remote-control/) against the remote-control socket, all in `taskfw/kitty/adapter.py` (pinned to kitty 0.49.2; a different major.minor is `not_opened`, and every call is time-bounded):
+
+- *Launch:* `kitten @ --to <socket> launch --type=tab --cwd=<dir> --env … --var task_id=<id> --watcher=<watcher.py> -- claude --settings <hooks.json> -- "<prompt>"`. Argv is a list, never a shell string, so the prompt needs no escaping and is submitted at startup (no send-text race).
+- *Identity:* the tab carries `TASKFW_TASK_ID`, `TASKFW_WORKTREE`, `TASKFW_DB` in its env, and a `task_id` [user var](https://sw.kovidgoyal.net/kitty/launch/) on its window. `exists` is detected by `kitten @ ls --match var:task_id=<id>`.
+- *State:* Claude Code hooks (`taskfw/kitty/hooks.json`, injected with `--settings`, merged with your own) run `python -m taskfw.kitty.hook`, which sets `state` (`running` / `waiting` / `done`) and `last_active` user vars via `kitten @ set-user-vars` and backfills the Claude session id into the store. It acts only when `TASKFW_TASK_ID` is set and never fails the session.
+- *Lifecycle:* kitty loads `watcher.py` itself and it appends window events to the store through a short-lived writer process (kitty's bundled Python has no `sqlite3`). Errors land in the log above, not in kitty.
+- *Report back:* this is not a kitty channel at all — it is the tab's own Claude `SendMessage` to `parent`. Kitty only starts the tab and shows its state.
+
+**Related:** `TASKFW_KITTY_OPEN_CMD` replaces the launcher command (shell-split); `python -m taskfw.kitty.launcher cleanup <task_id>` removes a task's worktree and branch, refusing dirty or unmerged work. Tab lifecycle events are recorded in `~/.kitty-taskfw/store.sqlite` (override with `KITTY_TASKFW_STORE`); watcher errors go to `~/.kitty-taskfw/watcher-errors.log`.
+
 ## Using it — skills, not tool calls
 
 Copy or symlink `.claude/skills/` into whichever project you're using this
