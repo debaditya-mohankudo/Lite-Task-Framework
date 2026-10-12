@@ -1,4 +1,7 @@
-"""Launcher: `start` / `resume` / `list`. Always opens a NEW tab; a tab's task is fixed.
+"""Launcher: `start` / `resume` / `list` / `plain`. Always opens a NEW tab; a tab's task is fixed.
+
+`plain` is the exception that proves the rule: a tab that belongs to no task (e.g. to run a project
+skill). It carries no task identity, no project hooks and no store row, only the caller's PATH.
 
 Env carries identity (TASKFW_TASK_ID/WORKTREE/DB) and the caller's PATH (kitty from the Dock
 has a stripped PATH, so a bare `python3` would be 3.9). The project hooks are injected with
@@ -56,16 +59,28 @@ def build_env(task_id: str, worktree: str, db: str, path: str, store: str | None
     return env
 
 
-def claude_cmd(claude: str, hooks: str | Path, resume_session: str | None = None,
+def claude_cmd(claude: str, hooks: str | Path | None, resume_session: str | None = None,
                prompt: str | None = None) -> list[str]:
     """argv for the tab's claude. The prompt is one trailing argv element after `--` (kitty runs
     argv with no shell, so quotes and newlines need no escaping; `--` keeps a leading '-' a prompt)."""
-    cmd = [claude, "--settings", str(hooks)]
+    cmd = [claude, *(["--settings", str(hooks)] if hooks else [])]
     if resume_session:
         cmd += ["--resume", resume_session]
     if prompt:
         cmd += ["--", prompt]
     return cmd
+
+
+def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title: str | None = None,
+              *, claude: str | None = None, path: str | None = None) -> int:
+    """A claude tab in `cwd` that belongs to no task; returns its window id. cwd is the directory
+    whose `.claude/skills` the tab will see."""
+    cwd = str(Path(cwd).expanduser().resolve())
+    if not Path(cwd).is_dir():
+        raise KittyError(f"cwd {cwd!r} is not a directory")
+    return adapter.launch(cwd=cwd, env={"PATH": path if path is not None else os.environ.get("PATH", "")},
+                          cmd=claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt),
+                          title=title)
 
 
 class Launcher:
@@ -138,6 +153,10 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
         if name == "resume":
             p.add_argument("--fresh", action="store_true")
     sub.add_parser("list")
+    pl = sub.add_parser("plain", help="open a claude tab that belongs to no task; prints the window id")
+    pl.add_argument("--cwd", default=None, help="directory holding the .claude/skills to use; default: the current directory")
+    pl.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
+    pl.add_argument("--title", default=None, help="tab title")
     o = sub.add_parser("open", help="open a task in a tab if kitty allows; always prints JSON, exits 0")
     o.add_argument("task_id")
     o.add_argument("--worktree", default=None)
@@ -168,6 +187,13 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
         return 0
     if not a.socket:
         ap.error("no kitty socket: pass --socket or run inside kitty")
+    if a.cmd == "plain":  # no hooks file, no store: check_install and Store do not apply
+        try:
+            print(plain_tab(KittyAdapter(a.socket), a.cwd or os.getcwd(), a.prompt, a.title))
+        except KittyError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        return 0
     bad = check_install()
     if bad:
         print(f"error: {bad}", file=sys.stderr)

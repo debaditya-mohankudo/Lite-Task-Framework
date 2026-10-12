@@ -4,7 +4,7 @@ import subprocess
 import pytest
 
 from taskfw.kitty.adapter import KittyAdapter
-from taskfw.kitty.launcher import Launcher, NoSessionToResume
+from taskfw.kitty.launcher import Launcher, NoSessionToResume, plain_tab
 from taskfw.kitty.store import Store
 
 
@@ -162,3 +162,23 @@ def test_open_and_start_refuse_a_broken_install_before_touching_kitty(monkeypatc
     rc = launcher.main(["--socket", "unix:/tmp/kitty-1", "--store", str(tmp_path / "s.sqlite"),
                         "start", "abc"], env={})
     assert rc == 1 and "hooks file" in capsys.readouterr().err
+
+
+def test_plain_launches_a_tab_with_no_task_identity_hooks_or_watcher(tmp_path):
+    f = Fake(handler)
+    ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
+    wid = plain_tab(ad, str(tmp_path), "/some-skill", "skill", claude="/bin/claude", path="/opt/bin:/usr/bin")
+    argv = next(c for c in f.calls if "launch" in c)
+    assert wid >= 7 and f"--cwd={tmp_path.resolve()}" in argv and "--tab-title=skill" in argv
+    assert argv[argv.index("--") + 1:] == ["/bin/claude", "--", "/some-skill"]
+    assert "PATH=/opt/bin:/usr/bin" in argv
+    assert not any(a.startswith(("TASKFW_", "KITTY_TASKFW", "--watcher")) for a in argv)
+
+
+def test_plain_refuses_a_missing_directory_before_touching_kitty(tmp_path):
+    from taskfw.kitty.adapter import KittyError
+    f = Fake(handler)
+    ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
+    with pytest.raises(KittyError):
+        plain_tab(ad, str(tmp_path / "nope"))
+    assert f.calls == []

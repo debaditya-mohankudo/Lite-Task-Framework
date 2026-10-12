@@ -73,6 +73,8 @@ If you run [kitty](https://sw.kovidgoyal.net/kitty/) with remote control on, `ta
 - *Lifecycle:* kitty loads `watcher.py` itself and it appends window events to the store through a short-lived writer process (kitty's bundled Python has no `sqlite3`). Errors land in the log above, not in kitty.
 - *Report back:* this is not a kitty channel at all — it is the tab's own Claude `SendMessage` to `parent`. Kitty only starts the tab and shows its state.
 
+**Not a task:** `python -m taskfw.kitty.launcher plain --cwd <dir> [--prompt P] [--title T]` opens a claude tab that belongs to no task (e.g. to run a project skill) and prints its window id. It carries only `PATH`: no task identity, project hooks or store row. `--cwd` must be the directory holding the `.claude/skills` you want, since project skills load only from there.
+
 **Related:** `TASKFW_KITTY_OPEN_CMD` replaces the launcher command (shell-split); `python -m taskfw.kitty.launcher cleanup <task_id>` removes a task's worktree and branch, refusing dirty or unmerged work. Tab lifecycle events are recorded in `~/.kitty-taskfw/store.sqlite` (override with `KITTY_TASKFW_STORE`); watcher errors go to `~/.kitty-taskfw/watcher-errors.log`.
 
 ## Using it — skills, not tool calls
