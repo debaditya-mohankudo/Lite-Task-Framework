@@ -207,3 +207,21 @@ def test_plain_logs_a_line_with_no_task(tmp_path):
     ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
     wid = plain_tab(ad, str(tmp_path), claude="/bin/claude", path="/bin")
     assert kitty_log_lines(f"kitty plain window={wid} ", f"cwd={tmp_path.resolve()}")
+
+
+def test_plain_with_parent_ends_the_prompt_with_the_shared_report_back_sentence(tmp_path):
+    f = Fake(handler)
+    ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
+    plain_tab(ad, str(tmp_path), "do X", claude="/bin/claude", path="/bin", parent="sess-9")
+    prompt = next(c for c in f.calls if "launch" in c)[-1]
+    assert prompt.startswith("do X When finished call SendMessage to sess-9 with the outcome in one line")
+    assert prompt.endswith("If SendMessage fails, say so in your final output and stop.")
+
+
+def test_plain_refuses_a_multiline_parent_before_touching_kitty(tmp_path):
+    from taskfw.kitty.adapter import KittyError
+    f = Fake(handler)
+    ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
+    with pytest.raises(KittyError):
+        plain_tab(ad, str(tmp_path), "x", parent="a\nb")
+    assert f.calls == []

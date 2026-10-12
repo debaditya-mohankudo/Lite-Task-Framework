@@ -11,7 +11,6 @@ neither owns the rules.
 from __future__ import annotations
 
 import functools
-import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -1169,18 +1168,14 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
             "status": "not_opened", "window_id": None, "socket": None,
             "reason": "no known directory for this task; pass worktree",
         }
-    if parent and (not parent.strip() or any(unicodedata.category(c) == "Cc" for c in parent)):
-        return {
-            "status": "not_opened", "window_id": None, "socket": None,
-            "reason": "parent must be a single line with no control characters",
-        }
+    if bad := kitty_open.bad_parent(parent):
+        return {"status": "not_opened", "window_id": None, "socket": None, "reason": bad}
     if not prompt:
         prompt = (f"Task {task_id}: read its notes via tasks__get, then run /task-grooming "
                   "and implement.")
         if parent:
-            prompt += (f" When finished (after introspection) call SendMessage to {parent} with the "
-                       "task id, the outcome in one line and the commit ids; never the brief. "
-                       "If SendMessage fails, say so in your final output and stop.")
+            prompt += " " + kitty_open.report_back(
+                parent, "the task id, the outcome in one line and the commit ids", "When finished (after introspection)")
     return kitty_open.open_task(task_id, worktree, prompt=prompt, isolate=isolate)
 
 

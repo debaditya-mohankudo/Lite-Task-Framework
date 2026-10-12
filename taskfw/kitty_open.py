@@ -13,6 +13,7 @@ import os
 import shlex
 import subprocess
 import sys
+import unicodedata
 from typing import Any, Callable
 
 #: Env override: a shell-split argv that replaces `python -m taskfw.kitty.launcher`.
@@ -21,6 +22,20 @@ CMD_ENV = "TASKFW_KITTY_OPEN_CMD"
 TIMEOUT_S = 60
 
 _STATUSES = ("opened", "exists", "not_opened")
+
+
+def bad_parent(parent: str) -> str | None:
+    """Why `parent` cannot go into a prompt, or None. It must be one line with no control characters."""
+    if parent and (not parent.strip() or any(unicodedata.category(c) == "Cc" for c in parent)):
+        return "parent must be a single line with no control characters"
+    return None
+
+
+def report_back(parent: str, what: str, when: str = "When finished") -> str:
+    """The one sentence that tells a new tab to report to `parent` via SendMessage: the single home for
+    this wording, shared by the task tab's default prompt and `launcher plain --parent`."""
+    return (f"{when} call SendMessage to {parent} with {what}; never the brief. "
+            "If SendMessage fails, say so in your final output and stop.")
 
 
 def _not_opened(reason: str) -> dict[str, Any]:

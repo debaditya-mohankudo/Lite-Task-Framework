@@ -853,7 +853,8 @@
         "A worktree failure under --isolate on `start` exits 1 and on `open` returns not_opened; it never falls back to a shared tree",
         "start/resume/open accept --prompt; claude_cmd appends it as ONE argv element after `--` (kitty runs argv with no shell, so quotes and newlines need no escaping; `--` keeps a leading '-' a prompt). No prompt, no extra argv: resume --fresh gets none unless given (task:eff7f915)",
         "`plain --cwd <dir>` (plain_tab) opens a claude tab that belongs to no task: only PATH is passed, and it has no task env, no --settings hooks, no watcher and no store row; cwd must be an existing directory and is the directory whose .claude/skills the tab sees (task:7e2dc341)",
-        "Every launch is logged to the taskfw `logs` table (logger taskfw.kitty): Launcher._launch logs each task tab with resumed_session (`-` for a fresh one), plain_tab logs window and cwd, and open_task logs only results that are not `opened` with their reason, so an opened tab is never logged twice (task:e05df5eb)"
+        "Every launch is logged to the taskfw `logs` table (logger taskfw.kitty): Launcher._launch logs each task tab with resumed_session (`-` for a fresh one), plain_tab logs window and cwd, and open_task logs only results that are not `opened` with their reason, so an opened tab is never logged twice (task:e05df5eb)",
+        "`plain --parent <session>` (plain_tab parent=) appends kitty_open.report_back(parent, \"the outcome in one line\") to the prompt, the same SendMessage sentence tasks__open_in_kitty uses; a multi-line parent is refused by kitty_open.bad_parent before kitty is touched; the launcher cannot discover the caller's session name, so --parent is explicit (task:d6954e1c)"
       ],
       "created_at": "2026-10-10T10:52:13.740338+00:00",
       "description": "`start`/`resume`/`list`/`cleanup`/`open` CLI. Opens a NEW kitty tab per task (in the cwd, or a per-task git worktree with --isolate; `open` isolates by default when another live tab shares the repo), sets identity env and user var once, runs `claude --settings <hooks>` and records the tab in the store. An optional --prompt is claude's initial argument, so the handoff is submitted at startup rather than typed in.",
@@ -868,7 +869,7 @@
         "The install check lives in main() and the opener, not Launcher.__init__ (tests build Launcher with fake hook paths); it reads DEFAULT_HOOKS at call time",
         "Worktree path and branch are pure functions of (repo, task_id): two tasks cannot share a tree",
         "Worktrees are never removed on hibernate or window close, only by an explicit cleanup (resume reuses the stored cwd)",
-        "The launcher never composes a prompt; it only forwards one (the default pointer is the MCP tool's)",
+        "The launcher composes no prompt text of its own; it forwards one, plus the shared kitty_open.report_back sentence when --parent is given (the default pointer is the MCP tool's)",
         "Worktree creation for start lives in resolve_worktree (main, only when --isolate; an explicit --worktree wins); for `open` the --worktree is only a BASE directory and the opener decides isolation, so the launcher open branch just parses --isolate/--no-isolate (default None) (task:d482a160)"
       ],
       "last_validated": "2026-10-11T15:45:05.032967+00:00",

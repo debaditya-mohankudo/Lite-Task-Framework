@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Mapping
 
 from taskfw.config import DB_PATH
+from taskfw.kitty_open import bad_parent, report_back
 from taskfw.log import get_logger
 
 from .adapter import KittyAdapter, KittyError
@@ -75,12 +76,17 @@ def claude_cmd(claude: str, hooks: str | Path | None, resume_session: str | None
 
 
 def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title: str | None = None,
-              *, claude: str | None = None, path: str | None = None) -> int:
+              *, claude: str | None = None, path: str | None = None, parent: str | None = None) -> int:
     """A claude tab in `cwd` that belongs to no task; returns its window id. cwd is the directory
-    whose `.claude/skills` the tab will see."""
+    whose `.claude/skills` the tab will see. `parent` is the caller's session name: given, the prompt
+    ends with the shared report-back sentence, so the tab messages the caller when it finishes."""
     cwd = str(Path(cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
         raise KittyError(f"cwd {cwd!r} is not a directory")
+    if bad := bad_parent(parent or ""):
+        raise KittyError(bad)
+    if parent:
+        prompt = " ".join(filter(None, [prompt, report_back(parent, "the outcome in one line")]))
     wid = adapter.launch(cwd=cwd, env={"PATH": path if path is not None else os.environ.get("PATH", "")},
                          cmd=claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt),
                          title=title)
@@ -164,6 +170,8 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     pl.add_argument("--cwd", default=None, help="directory holding the .claude/skills to use; default: the current directory")
     pl.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
     pl.add_argument("--title", default=None, help="tab title")
+    pl.add_argument("--parent", default=None,
+                    help="caller's session name (as ListAgents prints it); the tab SendMessages it when finished")
     o = sub.add_parser("open", help="open a task in a tab if kitty allows; always prints JSON, exits 0")
     o.add_argument("task_id")
     o.add_argument("--worktree", default=None)
@@ -196,7 +204,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
         ap.error("no kitty socket: pass --socket or run inside kitty")
     if a.cmd == "plain":  # no hooks file, no store: check_install and Store do not apply
         try:
-            print(plain_tab(KittyAdapter(a.socket), a.cwd or os.getcwd(), a.prompt, a.title))
+            print(plain_tab(KittyAdapter(a.socket), a.cwd or os.getcwd(), a.prompt, a.title, parent=a.parent))
         except KittyError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
