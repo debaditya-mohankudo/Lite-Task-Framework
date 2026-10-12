@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Mapping
 
 from .adapter import KittyAdapter, KittyError
+from .models import CHEAP_MODEL
 
-CHEAP_MODEL = "claude-haiku-5-5"
 OFFLOAD_CHILD_ENV = "KITTY_TASKFW_OFFLOAD_CHILD"
 DISABLE_FILE = Path(os.environ.get("KITTY_TASKFW_OFFLOAD_OFF", Path.home() / ".kitty-taskfw" / "offload_off"))
 # --resume re-sends the whole transcript to the cheap model; past ~500 KB it will not fit.

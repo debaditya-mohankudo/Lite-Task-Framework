@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS tabs (
   claude_session_id TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   closed_at TEXT,
-  closed_reason TEXT
+  closed_reason TEXT,
+  model TEXT
 );
 CREATE INDEX IF NOT EXISTS tabs_task ON tabs(task_id);
 CREATE UNIQUE INDEX IF NOT EXISTS tabs_window ON tabs(socket, window_id);
@@ -53,6 +54,7 @@ class TabRow:
     created_at: str
     closed_at: str | None
     closed_reason: str | None = None
+    model: str | None = None  # the --model the tab launched with; None = claude's default
 
 
 class Store:
@@ -67,12 +69,15 @@ class Store:
         if "closed_reason" not in cols:  # store file created before hibernation existed
             self.db.execute("ALTER TABLE tabs ADD COLUMN closed_reason TEXT")
             self.db.commit()
+        if "model" not in cols:  # store file created before model choice existed
+            self.db.execute("ALTER TABLE tabs ADD COLUMN model TEXT")
+            self.db.commit()
 
     def record_launch(self, *, task_id: str, window_id: int, tab_id: int | None,
-                      socket: str, cwd: str) -> int:
+                      socket: str, cwd: str, model: str | None = None) -> int:
         cur = self.db.execute(
-            "INSERT INTO tabs(task_id, window_id, tab_id, socket, cwd) VALUES (?,?,?,?,?)",
-            (task_id, window_id, tab_id, socket, cwd))
+            "INSERT INTO tabs(task_id, window_id, tab_id, socket, cwd, model) VALUES (?,?,?,?,?,?)",
+            (task_id, window_id, tab_id, socket, cwd, model))
         self.db.commit()
         return cur.lastrowid
 
@@ -104,6 +109,11 @@ class Store:
         r = self.db.execute(
             "SELECT claude_session_id FROM tabs WHERE task_id=? AND claude_session_id IS NOT NULL "
             "ORDER BY id DESC LIMIT 1", (task_id,)).fetchone()
+        return r[0] if r else None
+
+    def latest_model_for_task(self, task_id: str) -> str | None:
+        r = self.db.execute("SELECT model FROM tabs WHERE task_id=? AND model IS NOT NULL "
+                            "ORDER BY id DESC LIMIT 1", (task_id,)).fetchone()
         return r[0] if r else None
 
     def list(self, open_only: bool = False) -> list[TabRow]:

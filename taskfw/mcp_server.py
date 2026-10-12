@@ -1131,7 +1131,8 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
 
 @_tool()
 def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
-                         isolate: bool | None = None, parent: str = "") -> dict[str, Any]:
+                         isolate: bool | None = None, parent: str = "",
+                         model: str = "") -> dict[str, Any]:
     """Open task_id in a kitty tab by running `python -m taskfw.kitty.launcher open`. Fail-soft and optional.
 
     Returns {status, window_id, socket, reason, worktree, isolated} with status opened / exists /
@@ -1159,6 +1160,9 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
     the outcome via tasks__get. It must be a single line with no control or line/paragraph
     separator characters (it goes into a prompt), else not_opened. An explicit prompt is never
     modified, and without parent the default prompt is unchanged.
+    model is claude's --model id for the tab and always wins; omitted, the launcher chooses a tier
+    (claude-sonnet-5 / -sonnet-5-5 / -opus-5 / -opus-5-5) from the task's fields and records the choice
+    and its reason on the task as a decision; if it cannot choose, the tab opens on claude's default.
     Command: TASKFW_KITTY_OPEN_CMD (shell-split), else the in-repo taskfw.kitty launcher.
     """
     task = store().get(task_id)
@@ -1181,7 +1185,7 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
                         "outcome in one line as its reason with the commits linked, `abandoned` if you stop with "
                         "the task still open; the parent reads the rest via tasks__get",
                 "When finished or stopping (after introspection)")
-    return kitty_open.open_task(task_id, worktree, prompt=prompt, isolate=isolate)
+    return kitty_open.open_task(task_id, worktree, prompt=prompt, isolate=isolate, model=model)
 
 
 @_tool()

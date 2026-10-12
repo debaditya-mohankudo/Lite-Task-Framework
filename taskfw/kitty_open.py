@@ -69,8 +69,9 @@ def open_task(
     timeout: float = TIMEOUT_S,
     prompt: str = "",
     isolate: bool | None = None,
+    model: str = "",
 ) -> dict[str, Any]:
-    """Run `taskfw.kitty.launcher open --worktree <worktree> <task_id> [--prompt P] [--isolate|--no-isolate]`; never raises.
+    """Run `taskfw.kitty.launcher open --worktree <worktree> <task_id> [--prompt P] [--isolate|--no-isolate] [--model M]`; never raises.
 
     Returns {status, window_id, socket, reason, worktree, isolated}, status one of
     opened / exists / not_opened. `runner` is injectable so tests never fork.
@@ -82,6 +83,8 @@ def open_task(
     argv = [*cmd, "open", "--worktree", worktree, task_id]
     if prompt:  # one argv element: the launcher hands it to claude as its initial argument
         argv += ["--prompt", prompt]
+    if model:  # an explicit override; unset leaves the launcher to choose from the task
+        argv += ["--model", model]
     if isolate is not None:  # unset leaves the launcher to decide from live sibling tabs
         argv.append("--isolate" if isolate else "--no-isolate")
     try:

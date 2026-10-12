@@ -27,7 +27,8 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from .adapter import KittyAdapter, KittyError, KittyVersionMismatch, normalize_socket
-from .launcher import Launcher, check_install, log, mcp_choice
+from .launcher import Launcher, check_install, log, mcp_choice, task_model_reader
+from taskfw.config import DB_PATH
 from .store import Store
 from . import worktrees
 
@@ -55,10 +56,11 @@ def open_task(task_id: str, worktree: str | None = None, *, socket: str | None =
               store: str | None = None, env: Mapping[str, str] = os.environ,
               adapter_factory: Callable[[str], KittyAdapter] = KittyAdapter,
               socket_glob: str = SOCKET_GLOB, claude: str | None = None,
-              prompt: str | None = None, isolate: bool | None = None) -> OpenResult:
+              prompt: str | None = None, isolate: bool | None = None,
+              model: str | None = None) -> OpenResult:
     try:
         result = _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt,
-                       isolate)
+                       isolate, model)
     except Exception as e:  # the whole point: nothing escapes into the caller
         result = _not_opened(f"unexpected {type(e).__name__}: {e}")
     if result.status != "opened":  # an opened tab is logged by the launcher that launched it
@@ -66,7 +68,7 @@ def open_task(task_id: str, worktree: str | None = None, *, socket: str | None =
     return result
 
 
-def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt, isolate) -> OpenResult:
+def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, claude, prompt, isolate, model=None) -> OpenResult:
     wt = Path(worktree or os.getcwd()).expanduser()
     if not wt.is_dir():
         return _not_opened(f"worktree {str(wt)!r} is not a directory")
@@ -122,7 +124,8 @@ def _open(task_id, worktree, socket, store, env, adapter_factory, socket_glob, c
     except worktrees.WorktreeError as e:  # never launch into a shared tree after a failure
         return _not_opened(f"worktree: {e}")
     mcp, mcp_source = mcp_choice(env)
-    lau = Launcher(live[target], st, claude=claude, mcp_config=mcp, mcp_source=mcp_source)
+    lau = Launcher(live[target], st, claude=claude, mcp_config=mcp, mcp_source=mcp_source,
+                   model=model, task_model=task_model_reader(DB_PATH))
     wid = lau.start(task_id, str(wt), prompt)
     return OpenResult("opened", wid, target, why, str(wt), isolated)
 

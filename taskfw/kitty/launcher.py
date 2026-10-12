@@ -18,7 +18,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Mapping
+from typing import Callable, Mapping
 
 from taskfw.config import DB_PATH
 from taskfw.kitty_open import bad_parent, report_back
@@ -26,7 +26,7 @@ from taskfw.log import get_logger
 
 from .adapter import KittyAdapter, KittyError
 from .store import Store
-from . import worktrees
+from . import models, worktrees
 
 DEFAULT_HOOKS = Path(__file__).resolve().parent / "hooks.json"
 DEFAULT_WATCHER = Path(__file__).resolve().parent / "watcher.py"
@@ -135,14 +135,17 @@ def dropped_servers(cwd: str | Path, claude_json: str | Path = CLAUDE_JSON,
 
 
 def claude_cmd(claude: str, hooks: str | Path | None, resume_session: str | None = None,
-               prompt: str | None = None, mcp_config: str | None = None) -> list[str]:
+               prompt: str | None = None, mcp_config: str | None = None,
+               model: str | None = None) -> list[str]:
     """argv for the tab's claude. The prompt is one trailing argv element after `--` (kitty runs
     argv with no shell, so quotes and newlines need no escaping; `--` keeps a leading '-' a prompt).
     `mcp_config` (a path to a JSON file, never inline: server env/headers would show in `ps`) restricts the
-    tab to exactly those MCP servers, connectors included."""
+    tab to exactly those MCP servers, connectors included. `model` is `--model <id>`; None leaves claude's default."""
     cmd = [claude, *(["--settings", str(hooks)] if hooks else [])]
     if mcp_config:
         cmd += ["--strict-mcp-config", "--mcp-config", mcp_config]
+    if model:
+        cmd += ["--model", model]
     if resume_session:
         cmd += ["--resume", resume_session]
     if prompt:
@@ -170,13 +173,38 @@ def write_mcp_config(config: str, directory: Path) -> Path:
     return path
 
 
+def task_model_reader(db: str | Path) -> Callable[[str], tuple[str, str]]:
+    """task_id -> (model, reason) from the task's own fields, read from the task DB `db`. Imports lazily:
+    a launcher that never chooses a model never opens the task store."""
+    def read(task_id: str) -> tuple[str, str]:
+        from taskfw.store import TaskStore
+        task = TaskStore(db).get(task_id)
+        if task is None:
+            raise LookupError(task_id)
+        return models.for_task(epic=task.epic, title=task.title, motivation=task.motivation,
+                               resolution=[r.text for r in task.resolution], tags=task.tags)
+    return read
+
+
+def record_model_decision(db: str | Path, task_id: str, model: str, source: str) -> None:
+    """Leave the choice on the task as a decision event, for introspection to grade. Best effort."""
+    try:
+        from taskfw.store import TaskStore
+        TaskStore(db).add_event(task_id, f"kitty tab model: {model} ({source})", kind="decision")
+    except Exception as e:
+        log.warning("kitty model decision not recorded task=%s: %s", task_id, e)
+
+
 def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title: str | None = None,
-              *, claude: str | None = None, path: str | None = None, parent: str | None = None) -> int:
+              *, claude: str | None = None, path: str | None = None, parent: str | None = None,
+              model: str | None = None) -> int:
     """A claude tab in `cwd` that belongs to no task; returns its window id. cwd is the directory
     whose `.claude/skills` the tab will see. `parent` is the caller's session name: given, the prompt
     ends with the shared report-back sentence, so the tab messages the caller when it finishes.
     Unlike a task tab, a plain tab is never slimmed: no mcp_choice and no check_install, so it gets every
-    MCP server its directory and the user config define (that project has its own MCP needs)."""
+    MCP server its directory and the user config define (that project has its own MCP needs).
+    The model is `model` if given, else chosen from the prompt (models.for_prompt); the choice and its
+    reason go to stderr, since stdout carries only the window id."""
     cwd = str(Path(cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
         raise KittyError(f"cwd {cwd!r} is not a directory")
@@ -184,10 +212,13 @@ def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title:
         raise KittyError(bad)
     if parent:
         prompt = " ".join(filter(None, [prompt, report_back(parent, "the outcome in one line")]))
+    chosen, source = models.pick(model, lambda: models.for_prompt(prompt))
     wid = adapter.launch(cwd=cwd, env={"PATH": path if path is not None else os.environ.get("PATH", "")},
-                         cmd=claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt),
+                         cmd=claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt,
+                                        model=chosen),
                          title=title)
-    log.info("kitty plain window=%s cwd=%s", wid, cwd)
+    log.info("kitty plain window=%s cwd=%s model=%s model_source=%s", wid, cwd, chosen or "default", source)
+    print(f"model={chosen or 'default'} ({source})", file=sys.stderr)
     return wid
 
 
@@ -195,10 +226,14 @@ class Launcher:
     def __init__(self, adapter: KittyAdapter, store: Store, *, hooks: str | Path = DEFAULT_HOOKS,
                  watcher: str | Path | None = DEFAULT_WATCHER,
                  claude: str | None = None, db: str | None = None, path: str | None = None,
-                 mcp_config: str | None = None, mcp_source: str = "none"):
+                 mcp_config: str | None = None, mcp_source: str = "none",
+                 model: str | None = None,
+                 task_model: Callable[[str], tuple[str, str]] | None = None):
         self.adapter, self.store, self.hooks = adapter, store, hooks
         self.mcp_config = mcp_config  # None (the default, and what tests get) = every MCP server
         self.mcp_source = mcp_source  # why that choice, from mcp_choice; only the launch log reads it
+        self.model = model  # explicit override; always beats the choice
+        self.task_model = task_model  # None (the default, and what tests get) = never choose
         self.watcher = str(watcher) if watcher else None
         self.claude = claude or shutil.which("claude") or "claude"
         self.db = str(Path(db).expanduser()) if db else str(DB_PATH)
@@ -211,13 +246,23 @@ class Launcher:
         dropped = dropped_servers(cwd, self.claude_json, self.settings_json) if self.mcp_config else []
         return f";drops={','.join(dropped)}" if dropped else ""
 
+    def _model(self, task_id: str, resume_session: str | None) -> tuple[str | None, str]:
+        """(model | None, source). A resume keeps the model the session was built on, unless overridden."""
+        if not self.model and resume_session and (prior := self.store.latest_model_for_task(task_id)):
+            return prior, "resumed"
+        if not self.model and not self.task_model:
+            return None, "not-chosen"
+        return models.pick(self.model, lambda: self.task_model(task_id))
+
     def _launch(self, task_id: str, worktree: str, resume_session: str | None,
                 prompt: str | None = None) -> int:
         worktree = str(Path(worktree).expanduser().resolve())
+        model, model_source = self._model(task_id, resume_session)
         wid = self.adapter.launch(
             cwd=worktree,
             cmd=claude_cmd(self.claude, self.hooks, resume_session, prompt,
-                           str(write_mcp_config(self.mcp_config, self.mcp_dir)) if self.mcp_config else None),
+                           str(write_mcp_config(self.mcp_config, self.mcp_dir)) if self.mcp_config else None,
+                           model),
             env=build_env(task_id, worktree, self.db, self.path, self.store.path),
             user_vars={"task_id": task_id},
             title=f"task:{task_id}",
@@ -227,9 +272,12 @@ class Launcher:
         found = self.adapter.ls(match=f"id:{wid}")
         tab_id = found[0].tab_id if found else None
         self.store.record_launch(task_id=task_id, window_id=wid, tab_id=tab_id,
-                                 socket=self.adapter.socket, cwd=worktree)
-        log.info("kitty launch task=%s resumed_session=%s window=%s cwd=%s mcp=%s mcp_source=%s",
-                 task_id, resume_session or "-", wid, worktree,
+                                 socket=self.adapter.socket, cwd=worktree, model=model)
+        if model and model_source != "resumed":
+            record_model_decision(self.db, task_id, model, model_source)
+        log.info("kitty launch task=%s resumed_session=%s window=%s cwd=%s model=%s model_source=%s "
+                 "mcp=%s mcp_source=%s",
+                 task_id, resume_session or "-", wid, worktree, model or "default", model_source,
                  ",".join(json.loads(self.mcp_config)["mcpServers"]) if self.mcp_config else "all",
                  self.mcp_source + self._drops(worktree))
         return wid
@@ -270,6 +318,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
         p.add_argument("task_id")
         p.add_argument("--worktree", default=None, help="explicit cwd; default: the current directory")
         p.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
+        p.add_argument("--model", default=None, help="claude --model for the tab; default: chosen from the task")
         if name == "start":
             p.add_argument("--isolate", action="store_true",
                            help="run in a git worktree of this repo derived from the task id")
@@ -280,12 +329,14 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     pl.add_argument("--cwd", default=None, help="directory holding the .claude/skills to use; default: the current directory")
     pl.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
     pl.add_argument("--title", default=None, help="tab title")
+    pl.add_argument("--model", default=None, help="claude --model for the tab; default: chosen from the prompt")
     pl.add_argument("--parent", default=None,
                     help="caller's session name (as ListAgents prints it); the tab SendMessages it when finished")
     o = sub.add_parser("open", help="open a task in a tab if kitty allows; always prints JSON, exits 0")
     o.add_argument("task_id")
     o.add_argument("--worktree", default=None)
     o.add_argument("--prompt", default=None, help="initial prompt handed to claude as its argument")
+    o.add_argument("--model", default=None, help="claude --model for the tab; default: chosen from the task")
     o.add_argument("--isolate", dest="isolate", action="store_true", default=None,
                    help="run in a git worktree of the --worktree directory's repo, derived from the task id")
     o.add_argument("--no-isolate", dest="isolate", action="store_false",
@@ -308,13 +359,14 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
         from .opener import open_task
         # the directory is only a base here: the opener isolates it (or not) once it knows the live tabs
         print(json.dumps(open_task(a.task_id, a.worktree or os.getcwd(), socket=a.socket, store=a.store,
-                                   env=env, prompt=a.prompt, isolate=a.isolate).as_dict()))
+                                   env=env, prompt=a.prompt, isolate=a.isolate, model=a.model).as_dict()))
         return 0
     if not a.socket:
         ap.error("no kitty socket: pass --socket or run inside kitty")
     if a.cmd == "plain":  # no hooks file, no store: check_install and Store do not apply
         try:
-            print(plain_tab(KittyAdapter(a.socket), a.cwd or os.getcwd(), a.prompt, a.title, parent=a.parent))
+            print(plain_tab(KittyAdapter(a.socket), a.cwd or os.getcwd(), a.prompt, a.title, parent=a.parent,
+                             model=a.model))
         except KittyError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1
@@ -326,7 +378,8 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     store = Store(a.store) if a.store else Store()
     try:
         mcp, mcp_source = mcp_choice(env)
-        lau = Launcher(KittyAdapter(a.socket), store, mcp_config=mcp, mcp_source=mcp_source)
+        lau = Launcher(KittyAdapter(a.socket), store, mcp_config=mcp, mcp_source=mcp_source,
+                       model=a.model, task_model=task_model_reader(DB_PATH))
         if a.cmd == "start":
             print(lau.start(a.task_id, resolve_worktree(a.task_id, a.worktree, a.isolate), a.prompt))
         elif a.cmd == "resume":

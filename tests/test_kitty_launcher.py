@@ -170,7 +170,7 @@ def test_plain_launches_a_tab_with_no_task_identity_hooks_or_watcher(tmp_path):
     wid = plain_tab(ad, str(tmp_path), "/some-skill", "skill", claude="/bin/claude", path="/opt/bin:/usr/bin")
     argv = next(c for c in f.calls if "launch" in c)
     assert wid >= 7 and f"--cwd={tmp_path.resolve()}" in argv and "--tab-title=skill" in argv
-    assert argv[argv.index("--") + 1:] == ["/bin/claude", "--", "/some-skill"]
+    assert argv[argv.index("--") + 1:] == ["/bin/claude", "--model", "claude-sonnet-5", "--", "/some-skill"]
     assert "PATH=/opt/bin:/usr/bin" in argv
     assert not any(a.startswith(("TASKFW_", "KITTY_TASKFW", "--watcher")) for a in argv)
 

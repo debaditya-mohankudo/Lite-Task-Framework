@@ -725,6 +725,53 @@
         "kitty-hook-bridge"
       ]
     },
+    "kitty-model-choice": {
+      "confidence": 0.7,
+      "contracts": [
+        "for_task(epic, title, motivation, resolution, tags) and for_prompt(prompt) return (model, reason); pick(override, decide) returns (model|None, source) where source is `override`, the rule reason, or `fallback:<why>`",
+        "Launcher.task_model defaults to None (no choice, no --model), so only main() and the opener opt in; plain_tab always chooses from its prompt unless model= is given",
+        "A chosen task-tab model is recorded as a decision event on the task and in the kitty store's tabs.model; a plain tab prints `model=<id> (<reason>)` to stderr",
+        "resume reuses the stored tabs.model (source `resumed`) unless --model is given"
+      ],
+      "created_at": "2026-10-12T18:00:48.219763+00:00",
+      "description": "The one home for the claude model ids a kitty tab can start on (claude-sonnet-5, -sonnet-5-5, claude-opus-5, -opus-5-5, plus offload's CHEAP_MODEL) and for the deterministic rules that pick a tier from a task's fields or a plain tab's prompt.",
+      "evidence": [
+        "taskfw/kitty/models.py"
+      ],
+      "invariants": [
+        "An explicit --model/model arg always wins and `decide` is never called",
+        "A decision that raises or yields an id outside TIERS launches on claude's default (no --model flag) and never blocks the launch",
+        "Ids are defined only in models.py; offload imports CHEAP_MODEL from it",
+        "The rules are deterministic with no model call, so a tier choice is gradeable from its recorded reason"
+      ],
+      "last_validated": "2026-10-12T18:00:48.219814+00:00",
+      "module": "taskfw/kitty/models.py",
+      "name": "kitty-model-choice",
+      "related": [
+        "kitty-task-launcher",
+        "kitty-prompt-offload"
+      ]
+    },
+    "kitty-model-choice-tests": {
+      "confidence": 0.7,
+      "contracts": [
+        "Tests pin observable behaviour (argv, recorded model, stderr), not rule thresholds beyond one case per tier"
+      ],
+      "created_at": "2026-10-12T18:01:36.728206+00:00",
+      "description": "Tests for kitty tab model choice: every tier reachable, override wins, fallback on a failing or unknown decision, --model's argv position before the prompt, resume keeping the stored model, plain-tab stderr report.",
+      "evidence": [
+        "tests/test_kitty_models.py"
+      ],
+      "invariants": [
+        "No test opens the real task DB: Launcher.task_model is injected"
+      ],
+      "last_validated": "2026-10-12T18:01:36.728249+00:00",
+      "module": "tests/test_kitty_models.py",
+      "name": "kitty-model-choice-tests",
+      "related": [
+        "kitty-model-choice"
+      ]
+    },
     "kitty-open-tool": {
       "confidence": 0.8,
       "contracts": [
@@ -2027,6 +2074,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-11T15:55:32.007930+00:00"
+    "updated_at": "2026-10-12T18:01:36.728307+00:00"
   }
 }
