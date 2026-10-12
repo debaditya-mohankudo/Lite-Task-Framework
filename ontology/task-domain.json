@@ -317,6 +317,24 @@
         "unfalsifiable",
         "other"
       ]
+    },
+    "KittyTab": {
+      "bounded_context": "Task Tracking",
+      "form": "record",
+      "definition": "A kitty terminal tab opened for one Task, recorded as a row (task, window, tab, cwd, claude session id, closed-at) in the kitty store, which is separate from the task database. A tab's task is fixed for its life, and a Task may have had many tabs over time. A tab opened with `plain` belongs to no Task and has no row. Optional and Additive: a Task is complete without any tab.",
+      "evidence": "taskfw/kitty/store.py:TabRow, record_launch"
+    },
+    "Optional": {
+      "bounded_context": "Task Tracking",
+      "form": "attribute",
+      "definition": "A host-specific convenience may be absent. The kitty open path is a child process behind an overridable command, so a missing or broken kitty yields a `not_opened` result with a reason, never an exception in the MCP server, and nothing at import time depends on it.",
+      "evidence": "taskfw/kitty_open.py:CMD_ENV, _not_opened"
+    },
+    "Additive": {
+      "bounded_context": "Task Tracking",
+      "form": "attribute",
+      "definition": "A host-specific convenience only adds: it writes nothing a Task needs and leaves the Task record and the active pointer untouched, so removing it removes a convenience and loses no task data.",
+      "evidence": "taskfw/kitty_open.py:open_task"
     }
   },
   "relations": [
@@ -776,6 +794,24 @@
       "predicate": "references",
       "object": "WrongReason",
       "note": "Tallied as risks.wrong_because, keyed by reason plus `unstated` for a wrong grade that gave none, so the buckets always sum to the `wrong` tally and a missing reason is counted rather than hidden."
+    },
+    {
+      "subject": "KittyTab",
+      "predicate": "references",
+      "object": "Task",
+      "note": "A tab row carries the task id it was opened for; the reference is one-directional, since a Task has no field pointing at its tabs."
+    },
+    {
+      "subject": "Optional",
+      "predicate": "part-of",
+      "object": "KittyTab",
+      "note": "Labels the tab feature as absentable: kitty failing to open a tab is a soft result, so work never blocks on it."
+    },
+    {
+      "subject": "Additive",
+      "predicate": "part-of",
+      "object": "KittyTab",
+      "note": "Labels the tab feature as add-only: it records tabs beside the Task and never writes into it."
     }
   ]
 }
