@@ -10,10 +10,12 @@ has a stripped PATH, so a bare `python3` would be 3.9). The project hooks are in
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shutil
 import sys
+import time
 from pathlib import Path
 from typing import Mapping
 
@@ -65,6 +67,8 @@ def build_env(task_id: str, worktree: str, db: str, path: str, store: str | None
 
 SLIM_MCP_DEFAULT = ("taskfw", "claude-hooks")
 CLAUDE_JSON = Path("~/.claude.json")
+SETTINGS_JSON = Path("~/.claude/settings.json")
+MCP_READ_TRIES, MCP_READ_PAUSE = 3, 0.05  # a read racing a write of ~/.claude.json sees a torn file
 
 
 def mcp_choice(env: Mapping[str, str] = os.environ,
@@ -73,30 +77,68 @@ def mcp_choice(env: Mapping[str, str] = os.environ,
     the user-level `mcpServers` in ~/.claude.json (their commands are host paths, so nothing is checked
     in). Names come from TASKFW_KITTY_MCP (comma list; empty or `all` = no slimming), default taskfw +
     claude-hooks. The config is None, meaning the current launch, when the file is unreadable or any named
-    server is absent: a partial set would leave a tab without tools it was promised. `source` says why, for
-    the launch log: `default`, `override`, `all-requested`, or `fallback:<reason>`."""
+    server is absent: a partial set would leave a tab without tools it was promised. Strict means ONLY these:
+    project `.mcp.json`, `projects[...].mcpServers` and plugin servers are dropped by design; name one in
+    TASKFW_KITTY_MCP only if it is user-level, or set `all`. `source` says why, for
+    the launch log: `default`, `override`, `all-requested`, or `fallback:<reason>`; an override naming no
+    server (`,`) falls back to the default set as `fallback:override-empty`, never to an empty one. A
+    malformed parse is retried (a concurrent write looks malformed) before it is reported."""
     raw = env.get("TASKFW_KITTY_MCP")
     if raw is not None and raw.strip().lower() in ("", "all"):
         return None, "all-requested"
-    names = [n.strip() for n in raw.split(",") if n.strip()] if raw else list(SLIM_MCP_DEFAULT)
-    source = "override" if raw else "default"
-    try:
-        servers = json.loads(Path(claude_json).expanduser().read_text())["mcpServers"]
-        return json.dumps({"mcpServers": {n: servers[n] for n in names}}), source
-    except OSError:
-        why = "claude-json-unreadable"
-    except (ValueError, TypeError):
-        why = "claude-json-malformed"
-    except KeyError as e:
-        why = "no-mcpServers" if e.args == ("mcpServers",) else f"server-absent={e.args[0]}"
+    names = [n.strip() for n in raw.split(",") if n.strip()] if raw else []
+    source = "override" if names else "default"
+    if raw and not names:  # e.g. ',': an override naming nothing is not an override, and never an empty set
+        source = "fallback:override-empty"
+    names = names or list(SLIM_MCP_DEFAULT)
+    path, why = Path(claude_json).expanduser(), ""
+    for attempt in range(MCP_READ_TRIES):
+        try:
+            config = json.loads(path.read_text())
+            if "mcpServers" not in config:  # looked up apart from the names: a server may be called mcpServers
+                return None, "fallback:no-mcpServers"
+            servers = config["mcpServers"]
+            return json.dumps({"mcpServers": {n: servers[n] for n in names}}), source
+        except OSError:
+            why = "claude-json-unreadable"
+            break
+        except (ValueError, TypeError):
+            why = "claude-json-malformed"  # a write racing this read looks the same, so look again
+            if attempt + 1 < MCP_READ_TRIES:
+                time.sleep(MCP_READ_PAUSE)
+        except KeyError as e:
+            why = f"server-absent={e.args[0]}"
+            break
     return None, f"fallback:{why}"
+
+
+def dropped_servers(cwd: str | Path, claude_json: str | Path = CLAUDE_JSON,
+                    settings: str | Path = SETTINGS_JSON) -> list[str]:
+    """What `--strict-mcp-config` hides from a tab in `cwd`, for the launch log: `.mcp.json` files in cwd
+    or a parent, `projects[cwd].mcpServers` in ~/.claude.json, and enabled plugins. Best effort: an
+    unreadable or malformed file contributes nothing, because this only annotates a launch."""
+    def load(p):
+        try:
+            return json.loads(Path(p).expanduser().read_text())
+        except (OSError, ValueError):
+            return {}
+    cwd = Path(cwd)
+    out = [f"{d / '.mcp.json'}" for d in (cwd, *cwd.parents) if (d / ".mcp.json").is_file()]
+    proj = load(claude_json).get("projects")
+    if isinstance(proj, dict) and isinstance(proj.get(str(cwd)), dict):
+        out += [f"project:{n}" for n in (proj[str(cwd)].get("mcpServers") or {})]
+    plugins = load(settings).get("enabledPlugins")
+    if isinstance(plugins, dict):
+        out += [f"plugin:{n}" for n, on in plugins.items() if on]
+    return out
 
 
 def claude_cmd(claude: str, hooks: str | Path | None, resume_session: str | None = None,
                prompt: str | None = None, mcp_config: str | None = None) -> list[str]:
     """argv for the tab's claude. The prompt is one trailing argv element after `--` (kitty runs
     argv with no shell, so quotes and newlines need no escaping; `--` keeps a leading '-' a prompt).
-    `mcp_config` (inline JSON) restricts the tab to exactly those MCP servers, connectors included."""
+    `mcp_config` (a path to a JSON file, never inline: server env/headers would show in `ps`) restricts the
+    tab to exactly those MCP servers, connectors included."""
     cmd = [claude, *(["--settings", str(hooks)] if hooks else [])]
     if mcp_config:
         cmd += ["--strict-mcp-config", "--mcp-config", mcp_config]
@@ -107,11 +149,30 @@ def claude_cmd(claude: str, hooks: str | Path | None, resume_session: str | None
     return cmd
 
 
+def write_mcp_config(config: str, directory: Path) -> Path:
+    """`config` saved 0600 under `directory`, named by its content hash so a relaunch reuses the file.
+    It holds the servers' env/headers, so it is a file (like ~/.claude.json) and never argv."""
+    path = directory / f"mcp-{hashlib.sha256(config.encode()).hexdigest()[:16]}.json"
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(config)
+    except FileExistsError:
+        pass
+    except OSError as e:  # never fall back to inline JSON: that leaks the secrets this exists to hide
+        raise KittyError(f"cannot write MCP config to {path}: {e}") from e
+    return path
+
+
 def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title: str | None = None,
               *, claude: str | None = None, path: str | None = None, parent: str | None = None) -> int:
     """A claude tab in `cwd` that belongs to no task; returns its window id. cwd is the directory
     whose `.claude/skills` the tab will see. `parent` is the caller's session name: given, the prompt
-    ends with the shared report-back sentence, so the tab messages the caller when it finishes."""
+    ends with the shared report-back sentence, so the tab messages the caller when it finishes.
+    Unlike a task tab, a plain tab is never slimmed: no mcp_choice and no check_install, so it gets every
+    MCP server its directory and the user config define (that project has its own MCP needs)."""
     cwd = str(Path(cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
         raise KittyError(f"cwd {cwd!r} is not a directory")
@@ -138,13 +199,21 @@ class Launcher:
         self.claude = claude or shutil.which("claude") or "claude"
         self.db = str(Path(db).expanduser()) if db else str(DB_PATH)
         self.path = path if path is not None else os.environ.get("PATH", "")
+        self.claude_json, self.settings_json = CLAUDE_JSON, SETTINGS_JSON  # where _drops looks
+        self.mcp_dir = Path(self.db).parent / "mcp"  # where the slim MCP config file goes
+
+    def _drops(self, cwd: str) -> str:
+        """`;drops=...` naming what the slim set hides in `cwd`, so a default launch does not read as complete."""
+        dropped = dropped_servers(cwd, self.claude_json, self.settings_json) if self.mcp_config else []
+        return f";drops={','.join(dropped)}" if dropped else ""
 
     def _launch(self, task_id: str, worktree: str, resume_session: str | None,
                 prompt: str | None = None) -> int:
         worktree = str(Path(worktree).expanduser().resolve())
         wid = self.adapter.launch(
             cwd=worktree,
-            cmd=claude_cmd(self.claude, self.hooks, resume_session, prompt, self.mcp_config),
+            cmd=claude_cmd(self.claude, self.hooks, resume_session, prompt,
+                           str(write_mcp_config(self.mcp_config, self.mcp_dir)) if self.mcp_config else None),
             env=build_env(task_id, worktree, self.db, self.path, self.store.path),
             user_vars={"task_id": task_id},
             title=f"task:{task_id}",
@@ -158,7 +227,7 @@ class Launcher:
         log.info("kitty launch task=%s resumed_session=%s window=%s cwd=%s mcp=%s mcp_source=%s",
                  task_id, resume_session or "-", wid, worktree,
                  ",".join(json.loads(self.mcp_config)["mcpServers"]) if self.mcp_config else "all",
-                 self.mcp_source)
+                 self.mcp_source + self._drops(worktree))
         return wid
 
     def start(self, task_id: str, worktree: str, prompt: str | None = None) -> int:

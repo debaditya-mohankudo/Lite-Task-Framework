@@ -265,9 +265,14 @@ def test_claude_cmd_pins_strict_flags_before_resume_and_prompt():
 
 def test_launcher_passes_mcp_config_to_start_and_resume_but_plain_tab_never(tmp_path):
     lau, st, f = make(handler, tmp_path)
-    lau.mcp_config = '{"mcpServers": {"taskfw": {}}}'
+    lau.mcp_config = '{"mcpServers": {"taskfw": {"env": {"TOKEN": "s3cret"}}}}'
+    lau.mcp_dir = tmp_path / "mcp"
     lau.start("abc", str(tmp_path))
     assert "--strict-mcp-config" in argv_tail(f)
+    assert "s3cret" not in " ".join(next(c for c in reversed(f.calls) if "launch" in c))  # secrets live in the file, never in argv
+    (cfg,) = lau.mcp_dir.glob("mcp-*.json")
+    assert cfg.read_text() == lau.mcp_config and cfg.stat().st_mode & 0o777 == 0o600
+    assert str(cfg) in argv_tail(f)
     lau.resume("abc", fresh=True)
     assert "--strict-mcp-config" in argv_tail(f)
     plain_tab(lau.adapter, str(tmp_path), claude="/bin/claude")
@@ -289,10 +294,16 @@ def test_mcp_choice_names_why_each_config_was_or_was_not_built(tmp_path):
     assert mcp_choice({}, no_key) == (None, "fallback:no-mcpServers")
     assert mcp_choice({}, _claude_json(tmp_path, {"taskfw": {}})) == (None, "fallback:server-absent=claude-hooks")
     assert mcp_choice({"TASKFW_KITTY_MCP": "nope"}, p) == (None, "fallback:server-absent=nope")
+    # a requested server literally named mcpServers is absent or present, never "no-mcpServers"
+    assert mcp_choice({"TASKFW_KITTY_MCP": "mcpServers"}, p) == (None, "fallback:server-absent=mcpServers")
+    named = _claude_json(tmp_path, {"mcpServers": {"cmd": "x"}})
+    assert mcp_choice({"TASKFW_KITTY_MCP": "mcpServers"}, named)[1] == "override"
 
 
 def _launch_line(tmp_path, task, **kw):
     lau, _, _ = make(handler, tmp_path)
+    lau.mcp_dir = tmp_path / "mcp"
+    lau.claude_json = lau.settings_json = tmp_path / "absent.json"  # never probe the real home
     for k, v in kw.items():
         setattr(lau, k, v)
     lau.start(task, str(tmp_path))
@@ -318,3 +329,45 @@ def test_bare_launcher_and_plain_tab_log_without_a_mcp_decision(tmp_path):
     lau, _, _ = make(handler, tmp_path)
     plain_tab(lau.adapter, str(tmp_path), claude="/bin/claude")
     assert not any(" mcp=" in m for m in kitty_log_lines("kitty plain"))
+
+
+def test_override_naming_no_server_falls_back_to_default_and_says_so(tmp_path):
+    p = _claude_json(tmp_path, SERVERS)
+    for raw in (",", " , ,"):
+        cfg, why = mcp_choice({"TASKFW_KITTY_MCP": raw}, p)
+        assert set(json.loads(cfg)["mcpServers"]) == {"taskfw", "claude-hooks"}
+        assert why == "fallback:override-empty"
+
+
+def test_launch_line_names_servers_the_slim_set_drops(tmp_path):
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / ".mcp.json").write_text("{}")
+    cj = tmp_path / "claude.json"
+    cj.write_text(json.dumps({"mcpServers": SERVERS, "projects": {str(proj): {"mcpServers": {"local": {}}}}}))
+    st = tmp_path / "settings.json"
+    st.write_text(json.dumps({"enabledPlugins": {"p@m": True, "off@m": False}}))
+    cfg, why = mcp_choice({}, cj)
+    lau, _, _ = make(handler, tmp_path)
+    lau.mcp_dir, lau.claude_json, lau.settings_json = tmp_path / "mcp", cj, st
+    lau.mcp_config, lau.mcp_source = cfg, why
+    lau.start("dropt1", str(proj))
+    line = kitty_log_lines("task=dropt1 ")[0]
+    assert f"mcp_source=default;drops={proj / '.mcp.json'},project:local,plugin:p@m" in line
+    assert "off@m" not in line
+    lau.claude_json = lau.settings_json = tmp_path / "none.json"
+    (proj / ".mcp.json").unlink()
+    lau.start("dropt2", str(proj))
+    assert "mcp_source=default" in kitty_log_lines("task=dropt2 ")[0] and "drops" not in kitty_log_lines("task=dropt2 ")[0]
+
+
+def test_torn_claude_json_read_is_retried_not_reported_as_full_set(tmp_path, monkeypatch):
+    p = tmp_path / "claude.json"
+    p.write_text('{"mcpServers": {"taskfw"')  # mid-write
+    monkeypatch.setattr("taskfw.kitty.launcher.time.sleep",
+                        lambda _: p.write_text(json.dumps({"mcpServers": SERVERS})))
+    cfg, why = mcp_choice({}, p)
+    assert cfg is not None and why == "default"
+    p.write_text("{not json")  # never heals: still reported as malformed
+    monkeypatch.setattr("taskfw.kitty.launcher.time.sleep", lambda _: None)
+    assert mcp_choice({}, p) == (None, "fallback:claude-json-malformed")
