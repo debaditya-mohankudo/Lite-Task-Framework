@@ -167,10 +167,12 @@ def test_open_and_start_refuse_a_broken_install_before_touching_kitty(monkeypatc
 def test_plain_launches_a_tab_with_no_task_identity_hooks_or_watcher(tmp_path):
     f = Fake(handler)
     ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
-    wid = plain_tab(ad, str(tmp_path), "/some-skill", "skill", claude="/bin/claude", path="/opt/bin:/usr/bin")
+    wid = plain_tab(ad, str(tmp_path), "/some-skill", "skill", claude="/bin/claude", path="/opt/bin:/usr/bin",
+                    parent="sess-9")
     argv = next(c for c in f.calls if "launch" in c)
     assert wid >= 7 and f"--cwd={tmp_path.resolve()}" in argv and "--tab-title=skill" in argv
-    assert argv[argv.index("--") + 1:] == ["/bin/claude", "--model", "claude-sonnet-5", "--", "/some-skill"]
+    tail = argv[argv.index("--") + 1:]
+    assert tail[:4] == ["/bin/claude", "--model", "claude-sonnet-5", "--"] and tail[4].startswith("/some-skill ")
     assert "PATH=/opt/bin:/usr/bin" in argv
     assert not any(a.startswith(("TASKFW_", "KITTY_TASKFW", "--watcher")) for a in argv)
 
@@ -205,7 +207,7 @@ def test_start_and_resume_each_log_one_launch_line_naming_the_resumed_session(tm
 def test_plain_logs_a_line_with_no_task(tmp_path):
     f = Fake(handler)
     ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
-    wid = plain_tab(ad, str(tmp_path), claude="/bin/claude", path="/bin")
+    wid = plain_tab(ad, str(tmp_path), claude="/bin/claude", path="/bin", parent="sess-9")
     assert kitty_log_lines(f"kitty plain window={wid} ", f"cwd={tmp_path.resolve()}")
 
 
@@ -216,6 +218,16 @@ def test_plain_with_parent_ends_the_prompt_with_the_shared_report_back_sentence(
     prompt = next(c for c in f.calls if "launch" in c)[-1]
     assert prompt.startswith("do X When finished call SendMessage to sess-9 with the outcome in one line")
     assert prompt.endswith("If SendMessage fails, say so in your final output and stop.")
+
+
+@pytest.mark.parametrize("parent", [None, ""])
+def test_plain_refuses_a_missing_parent_before_touching_kitty(tmp_path, parent):
+    from taskfw.kitty.adapter import KittyError
+    f = Fake(handler)
+    ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
+    with pytest.raises(KittyError, match="parent is required"):
+        plain_tab(ad, str(tmp_path), "x", parent=parent)
+    assert f.calls == []
 
 
 def test_plain_refuses_a_multiline_parent_before_touching_kitty(tmp_path):
@@ -275,7 +287,7 @@ def test_launcher_passes_mcp_config_to_start_and_resume_but_plain_tab_never(tmp_
     assert str(cfg) in argv_tail(f)
     lau.resume("abc", fresh=True)
     assert "--strict-mcp-config" in argv_tail(f)
-    plain_tab(lau.adapter, str(tmp_path), claude="/bin/claude")
+    plain_tab(lau.adapter, str(tmp_path), claude="/bin/claude", parent="sess-9")
     assert "--strict-mcp-config" not in argv_tail(f)
 
 
@@ -343,7 +355,7 @@ def test_launch_line_states_the_mcp_set_and_why_for_slim_override_and_fallback(t
 def test_bare_launcher_and_plain_tab_log_without_a_mcp_decision(tmp_path):
     assert "mcp=all mcp_source=none" in _launch_line(tmp_path, "mcpbare1")
     lau, _, _ = make(handler, tmp_path)
-    plain_tab(lau.adapter, str(tmp_path), claude="/bin/claude")
+    plain_tab(lau.adapter, str(tmp_path), claude="/bin/claude", parent="sess-9")
     assert not any(" mcp=" in m for m in kitty_log_lines("kitty plain"))
 
 

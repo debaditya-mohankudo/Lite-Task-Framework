@@ -199,8 +199,9 @@ def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title:
               *, claude: str | None = None, path: str | None = None, parent: str | None = None,
               model: str | None = None, model_reason: str | None = None) -> int:
     """A claude tab in `cwd` that belongs to no task; returns its window id. cwd is the directory
-    whose `.claude/skills` the tab will see. `parent` is the caller's session name: given, the prompt
-    ends with the shared report-back sentence, so the tab messages the caller when it finishes.
+    whose `.claude/skills` the tab will see. `parent` is the caller's session name and is required: the
+    prompt ends with the shared report-back sentence, so the tab messages the caller when it finishes.
+    A plain tab has no task row to read an outcome from, so without a parent its result would be lost.
     Unlike a task tab, a plain tab is never slimmed: no mcp_choice and no check_install, so it gets every
     MCP server its directory and the user config define (that project has its own MCP needs).
     The model is `model` if given, else chosen from the prompt (models.for_prompt); the choice and its
@@ -209,11 +210,13 @@ def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title:
     cwd = str(Path(cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
         raise KittyError(f"cwd {cwd!r} is not a directory")
-    if bad := bad_parent(parent or ""):
+    if not parent:
+        raise KittyError("parent is required: pass the caller's session name (as ListAgents prints it)")
+    if bad := bad_parent(parent):
         raise KittyError(bad)
-    if parent:
-        prompt = " ".join(filter(None, [prompt, report_back(parent, "the outcome in one line")]))
+    # chosen from the caller's prompt alone: the report-back sentence would skew the keyword/length rules
     chosen, source = models.pick(model, lambda: models.for_prompt(prompt), model_reason)
+    prompt = " ".join(filter(None, [prompt, report_back(parent, "the outcome in one line")]))
     wid = adapter.launch(cwd=cwd, env={"PATH": path if path is not None else os.environ.get("PATH", "")},
                          cmd=claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt,
                                         model=chosen),
@@ -337,7 +340,7 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     pl.add_argument("--title", default=None, help="tab title")
     pl.add_argument("--model", default=None, help="claude --model for the tab; default: chosen from the prompt")
     pl.add_argument("--model-reason", default=None, help="one line on why --model")
-    pl.add_argument("--parent", default=None,
+    pl.add_argument("--parent", required=True,
                     help="caller's session name (as ListAgents prints it); the tab SendMessages it when finished")
     o = sub.add_parser("open", help="open a task in a tab if kitty allows; always prints JSON, exits 0")
     o.add_argument("task_id")

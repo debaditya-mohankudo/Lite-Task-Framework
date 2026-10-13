@@ -110,11 +110,12 @@ def test_launcher_without_a_chooser_adds_no_flag(tmp_path):
 def test_plain_tab_chooses_and_reports_on_stderr(tmp_path, capsys):
     f = Fake()
     ad = KittyAdapter("/tmp/s", kitten="/k/kitten", runner=f, check_version=False)
-    plain_tab(ad, str(tmp_path), "fix a race", claude="/bin/claude")
-    assert launched(f) == ["/bin/claude", "--model", models.OPUS_5_5, "--", "fix a race"]
+    plain_tab(ad, str(tmp_path), "fix a race", claude="/bin/claude", parent="sess-9")
+    assert launched(f)[:4] == ["/bin/claude", "--model", models.OPUS_5_5, "--"]
+    assert launched(f)[4].startswith("fix a race When finished call SendMessage to sess-9")
     assert "model=claude-opus-5-5" in capsys.readouterr().err
     f.calls.clear()
-    plain_tab(ad, str(tmp_path), "fix a race", claude="/bin/claude", model="claude-sonnet-5")
+    plain_tab(ad, str(tmp_path), "fix a race", claude="/bin/claude", model="claude-sonnet-5", parent="sess-9")
     assert launched(f)[2] == "claude-sonnet-5"
 
 
