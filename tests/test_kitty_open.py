@@ -79,9 +79,9 @@ class TestOpenTask:
         seen = {}
         monkeypatch.setattr(m.kitty_open, "open_task",
                             lambda tid, wt, prompt="", isolate=None, model="", model_reason="": seen.update(isolate=isolate) or {"status": "opened"})
-        m.tasks__open_in_kitty(t["id"], worktree="/w", isolate=True)
+        m.tasks__open_in_kitty(t["id"], "sess-1", worktree="/w", isolate=True)
         assert seen["isolate"] is True
-        m.tasks__open_in_kitty(t["id"], worktree="/w")
+        m.tasks__open_in_kitty(t["id"], "sess-1", worktree="/w")
         assert seen["isolate"] is None
 
     def test_exists_passes_through(self):
@@ -119,13 +119,13 @@ class TestOpenTask:
 
 class TestTool:
     def test_unknown_task_is_an_error(self):
-        assert "error" in m.tasks__open_in_kitty("nope", worktree="/r")
+        assert "error" in m.tasks__open_in_kitty("nope", "sess-1", worktree="/r")
 
     def test_no_known_directory_does_not_guess(self, monkeypatch):
         t = m.tasks__create(title="x")
         monkeypatch.setattr(m.kitty_open, "open_task", lambda *a, **k: pytest.fail("ran"))
         monkeypatch.setattr(m.scope_mod, "local_root", lambda scope: None)
-        out = m.tasks__open_in_kitty(t["id"])
+        out = m.tasks__open_in_kitty(t["id"], "sess-1")
         assert out["status"] == "not_opened" and "pass worktree" in out["reason"]
         assert "error" not in out
 
@@ -137,40 +137,47 @@ class TestTool:
             lambda tid, wt, prompt="", isolate=None, model="", model_reason="": seen.update(tid=tid, wt=wt, prompt=prompt, isolate=isolate) or {"status": "opened"},
         )
         before = m.store().get_active(m._workspace())
-        assert m.tasks__open_in_kitty(t["id"], worktree="/w")["status"] == "opened"
+        assert m.tasks__open_in_kitty(t["id"], "sess-1", worktree="/w")["status"] == "opened"
         assert seen["tid"] == t["id"] and seen["wt"] == "/w"
         # default prompt is a short pointer to the notes, never the brief itself
-        assert "tasks__get" in seen["prompt"] and len(seen["prompt"]) < 200
+        pointer = seen["prompt"].split(" When finished or stopping")[0]
+        assert "tasks__get" in pointer and len(pointer) < 200
         assert m.store().get_active(m._workspace()) == before
 
-    def _prompt_for(self, monkeypatch, **kw):
+    def _prompt_for(self, monkeypatch, parent="sess-1", **kw):
         t = m.tasks__create(title="x")
         seen = {}
         monkeypatch.setattr(m.kitty_open, "open_task",
                             lambda tid, wt, prompt="", isolate=None, model="", model_reason="": seen.update(prompt=prompt) or {"status": "opened"})
-        out = m.tasks__open_in_kitty(t["id"], worktree="/w", **kw)
+        out = m.tasks__open_in_kitty(t["id"], parent, worktree="/w", **kw)
         return t["id"], seen, out
 
-    def test_parent_appends_report_back_to_default_prompt_only(self, monkeypatch):
-        tid, base, _ = self._prompt_for(monkeypatch)
-        _, with_parent, _ = self._prompt_for(monkeypatch, parent="sess-1")
-        assert "SendMessage" not in base["prompt"]
-        assert "SendMessage to sess-1" in with_parent["prompt"] and "never the brief" in with_parent["prompt"]
-        assert "say so in your final output and stop" in with_parent["prompt"]
+    def test_default_prompt_ends_with_the_task_report_back(self, monkeypatch):
+        _, seen, _ = self._prompt_for(monkeypatch)
+        assert "SendMessage to sess-1" in seen["prompt"] and "never the brief" in seen["prompt"]
+        assert "say so in your final output and stop" in seen["prompt"]
         # the summary lives in the task, not in the message: the message carries the id only
-        assert "the task id and `done` or `abandoned`" in with_parent["prompt"] and "as its reason" in with_parent["prompt"]
-        assert "`abandoned` if you stop with the task still open" in with_parent["prompt"]
-        assert "commit ids" not in with_parent["prompt"]
+        assert "the task id and `done` or `abandoned`" in seen["prompt"] and "as its reason" in seen["prompt"]
+        assert "`abandoned` if you stop with the task still open" in seen["prompt"]
+        assert "commit ids" not in seen["prompt"]
 
-    def test_explicit_prompt_is_untouched_by_parent(self, monkeypatch):
-        _, seen, out = self._prompt_for(monkeypatch, prompt="do X", parent="sess-1")
-        assert seen["prompt"] == "do X" and out["status"] == "opened"
+    def test_explicit_prompt_is_kept_and_ends_with_the_report_back(self, monkeypatch):
+        tid, seen, out = self._prompt_for(monkeypatch, prompt="do X")
+        assert seen["prompt"].startswith(f"do X When finished call SendMessage to sess-1 with task {tid} and the outcome")
+        assert out["status"] == "opened"
 
-    @pytest.mark.parametrize("bad", ["a\nb", "a\rb", "a\x00b", "a\x1b[0m", "   ", "a\u2028b", "a\u2029b", "a\x85b"])
+    @pytest.mark.parametrize("parent", ["", "   "])
+    def test_missing_parent_is_not_opened(self, monkeypatch, parent):
+        t = m.tasks__create(title="x")
+        monkeypatch.setattr(m.kitty_open, "open_task", lambda *a, **k: pytest.fail("ran"))
+        out = m.tasks__open_in_kitty(t["id"], parent, worktree="/w")
+        assert out["status"] == "not_opened" and "parent is required" in out["reason"]
+
+    @pytest.mark.parametrize("bad", ["a\nb", "a\rb", "a\x00b", "a\x1b[0m", "a\u2028b", "a\u2029b", "a\x85b"])
     def test_invalid_parent_is_not_opened(self, monkeypatch, bad):
         t = m.tasks__create(title="x")
         monkeypatch.setattr(m.kitty_open, "open_task", lambda *a, **k: pytest.fail("ran"))
-        out = m.tasks__open_in_kitty(t["id"], worktree="/w", parent=bad)
+        out = m.tasks__open_in_kitty(t["id"], bad, worktree="/w")
         assert out["status"] == "not_opened" and "parent" in out["reason"]
 
     def test_task_id_is_required(self):

@@ -165,9 +165,9 @@ def test_omitted_model_is_flagged_as_fallback_and_never_blocks(tmp_path, monkeyp
             seen.update(model=model, reason=model_reason)
             return {"status": "opened", "model": "claude-sonnet-5", "model_source": "small items=0"}
         monkeypatch.setattr(m.kitty_open, "open_task", fake)
-        out = m.tasks__open_in_kitty(tid, worktree=str(tmp_path))
+        out = m.tasks__open_in_kitty(tid, "sess-1", worktree=str(tmp_path))
         assert out["status"] == "opened" and "fallback rules" in out["model_note"]
-        out = m.tasks__open_in_kitty(tid, worktree=str(tmp_path), model="claude-opus-5", model_reason="why")
+        out = m.tasks__open_in_kitty(tid, "sess-1", worktree=str(tmp_path), model="claude-opus-5", model_reason="why")
         assert "model_note" not in out and seen == {"model": "claude-opus-5", "reason": "why"}
     finally:
         m.set_store(None)

@@ -1130,8 +1130,8 @@ def tasks__set_active(task_id: str) -> dict[str, Any]:
 
 
 @_tool()
-def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
-                         isolate: bool | None = None, parent: str = "",
+def tasks__open_in_kitty(task_id: str, parent: str, worktree: str = "", prompt: str = "",
+                         isolate: bool | None = None,
                          model: str = "", model_reason: str = "") -> dict[str, Any]:
     """Open task_id in a kitty tab by running `python -m taskfw.kitty.launcher open`. Fail-soft and optional.
 
@@ -1153,13 +1153,14 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
     keeps the plain directory. The result's `worktree`/`isolated` (and `reason` for an
     automatic choice) say what was chosen; a failed worktree is not_opened, never a
     fall back into the shared tree.
-    parent is the caller's session name (as ListAgents prints it; the server cannot know it).
-    Given, the default prompt also tells the tab to SendMessage it once when finished or stopping:
-    the task id and `done` (only after tasks__finish recorded a one-line outcome as its reason,
-    commits linked) or `abandoned` (stopped with the task open), never the brief; the parent reads
-    the outcome via tasks__get. It must be a single line with no control or line/paragraph
-    separator characters (it goes into a prompt), else not_opened. An explicit prompt is never
-    modified, and without parent the default prompt is unchanged.
+    parent is required: the caller's session name (as ListAgents prints it; the server cannot know
+    it). Missing or empty is not_opened, so a tab's outcome never stays stranded in the tab. The default
+    prompt tells the tab to SendMessage it once when finished or stopping: the task id and `done` (only
+    after tasks__finish recorded a one-line outcome as its reason, commits linked) or `abandoned`
+    (stopped with the task open), never the brief; the parent reads the outcome via tasks__get. An
+    explicit prompt is kept as given and ends with the shared report-back sentence asking for the task
+    id and the outcome in one line. parent must be a single line with no control or line/paragraph
+    separator characters (it goes into a prompt), else not_opened.
     model is claude's --model id for the tab, and YOU choose it: you have read the task, the launcher's
     rules have not. Pass model (claude-sonnet-5 / -sonnet-5-5 / -opus-5 / -opus-5-5, cheapest to most
     capable) with model_reason, one line on why that tier fits this task; the reason is recorded verbatim
@@ -1179,17 +1180,20 @@ def tasks__open_in_kitty(task_id: str, worktree: str = "", prompt: str = "",
             "status": "not_opened", "window_id": None, "socket": None,
             "reason": "no known directory for this task; pass worktree",
         }
+    if not parent.strip():
+        return {"status": "not_opened", "window_id": None, "socket": None,
+                "reason": "parent is required: pass the caller's session name (as ListAgents prints it)"}
     if bad := kitty_open.bad_parent(parent):
         return {"status": "not_opened", "window_id": None, "socket": None, "reason": bad}
-    if not prompt:
+    if prompt:
+        prompt += " " + kitty_open.report_back(parent, f"task {task_id} and the outcome in one line")
+    else:
         prompt = (f"Task {task_id}: read its notes via tasks__get, then run /task-grooming "
-                  "and implement.")
-        if parent:
-            prompt += " " + kitty_open.report_back(
-                parent, "the task id and `done` or `abandoned`: `done` only after tasks__finish recorded the "
-                        "outcome in one line as its reason with the commits linked, `abandoned` if you stop with "
-                        "the task still open; the parent reads the rest via tasks__get",
-                "When finished or stopping (after introspection)")
+                  "and implement. ") + kitty_open.report_back(
+            parent, "the task id and `done` or `abandoned`: `done` only after tasks__finish recorded the "
+                    "outcome in one line as its reason with the commits linked, `abandoned` if you stop with "
+                    "the task still open; the parent reads the rest via tasks__get",
+            "When finished or stopping (after introspection)")
     result = kitty_open.open_task(task_id, worktree, prompt=prompt, isolate=isolate, model=model,
                                   model_reason=model_reason)
     if result.get("status") == "opened" and not model.strip():
