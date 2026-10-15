@@ -51,7 +51,7 @@
     "concept__delete": {"namespace": "concept", "use": "Remove a concept. Returns deleted=False when it was not there.", "hooks": []},
     "concept__uncovered": {"namespace": "concept", "use": "Which of the given modules have no concept -- the coverage check.", "hooks": []},
     "task_memory__record": {"namespace": "task_memory", "use": "Record a lesson from a finished task. kind: constraint | technique | pitfall.", "hooks": []},
-    "task_memory__recall": {"namespace": "task_memory", "use": "Search loop memories (omit query to list recent). Superseded excluded; each result carries a derived standing. Carries truncated: {limit} when more matched.", "hooks": []},
+    "task_memory__recall": {"namespace": "task_memory", "use": "Search loop memories (omit query to list recent). Superseded excluded; each result carries a derived standing. Rows are slim by default (text cut, text_truncated flag); detail=\"full\" for every field, task_memory__get(slug) for one in full. Carries truncated: {limit} when more matched.", "hooks": []},
     "task_memory__get": {"namespace": "task_memory", "use": "One memory by slug, including its standing and every task linked to it.", "hooks": []},
     "task_memory__link": {"namespace": "task_memory", "use": "Record that a task confirmed_by / contradicted_by / learned_from a memory. Idempotent. Carries stale_memory_nudge.", "hooks": ["_stale_memory_hook"]},
     "task_memory__supersede": {"namespace": "task_memory", "use": "Mark a memory obsolete, naming the memory that replaced it.", "hooks": []},

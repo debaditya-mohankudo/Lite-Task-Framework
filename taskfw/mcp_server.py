@@ -28,7 +28,7 @@ from taskfw.gitutil import head_sha
 from taskfw.grooming import Grooming
 from taskfw.introspection import IntrospectionReport, has_content
 from taskfw.log import get_logger
-from taskfw.memory import MemoryStore, Rejected
+from taskfw.memory import MemoryStore, Rejected, slim_row
 from taskfw.risk import coerce, normalise_text
 from taskfw.scope import derive as derive_scope, for_repo as scope_for_repo
 from taskfw.task import ResolutionItem, Task, new_id
@@ -1341,8 +1341,13 @@ def task_memory__record(slug: str, text: str, task_id: str, kind: str = "constra
 
 @_tool()
 def task_memory__recall(query: str = "", kind: str = "", limit: int = DEFAULT_RECALL_LIMIT,
-                        include_superseded: bool = False) -> dict[str, Any]:
+                        include_superseded: bool = False,
+                        detail: str = "slim") -> dict[str, Any]:
     """Search loop memories. Omit query to list the most recent.
+
+    Rows are slim by default (slug, kind, standing, created_at, hit_count, text
+    cut to ~160 chars with `text_truncated`); pass detail="full" for every
+    field, or call task_memory__get(slug) for one lesson in full.
 
     Superseded memories are excluded unless asked for: stale knowledge that
     keeps surfacing is worse than none, because it reads as current. Every
@@ -1351,6 +1356,8 @@ def task_memory__recall(query: str = "", kind: str = "", limit: int = DEFAULT_RE
     `truncated: {"limit": N}` appears only when more matched than the limit.
     """
     rows, truncated = memory().recall_capped(query, kind, limit, include_superseded)
+    if detail != "full":
+        rows = [slim_row(r) for r in rows]
     out: dict[str, Any] = {"memories": rows}
     if truncated:
         out["truncated"] = {"limit": max(limit, 0)}

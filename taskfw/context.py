@@ -68,7 +68,7 @@ from __future__ import annotations
 import re
 
 from taskfw.log import get_logger
-from taskfw.memory import MemoryStore
+from taskfw.memory import MemoryStore, slim_row
 from taskfw.scope import local_root
 from taskfw.task import Task
 from taskfw.store import TaskStore
@@ -446,7 +446,7 @@ def _lessons_for(store: TaskStore, task: Task,
         ])
     except Exception:
         pass  # observation only; MemoryStore reports its own logging failures
-    return _mark_cross_project(store, task, delivered)
+    return [slim_row(m) for m in _mark_cross_project(store, task, delivered)]
 
 
 def _mark_cross_project(store: TaskStore, task: Task, lessons: list[dict]) -> list[dict]:

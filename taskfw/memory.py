@@ -392,6 +392,39 @@ class MemoryStore:
         }
 
 
+SLIM_TEXT_CHARS = 160
+
+
+def slim_row(row: dict) -> dict:
+    """Projection of a recalled memory for output edges (task:0b0bb535).
+
+    Applied only where a row leaves the system (task_memory__recall, the
+    bundle's lessons) and never inside MemoryStore: the floor and
+    cross-project marking need full text and link columns first. Cut text is
+    flagged `text_truncated` and the row names task_memory__get as the way to
+    the rest, because the actionable "how to apply" tail is what a cut drops.
+    `cross_project` is carried only when true, matching _mark_cross_project.
+    """
+    text = " ".join(str(row.get("text", "")).split())
+    cut = len(text) > SLIM_TEXT_CHARS
+    if cut:
+        text = text[:SLIM_TEXT_CHARS - 1].rstrip() + "…"
+    slim = {
+        "slug": row["slug"],
+        "kind": row.get("kind"),
+        "standing": row.get("standing"),
+        "created_at": row.get("created_at"),
+        "hit_count": row.get("hit_count"),
+        "text": text,
+        "text_truncated": cut,
+    }
+    if row.get("cross_project"):
+        slim["cross_project"] = True
+    if cut:
+        slim["hint"] = f"full text: task_memory__get({row['slug']!r})"
+    return slim
+
+
 def _standing(confirmed: int, contradicted: int, superseded: bool) -> str:
     """One word for how much weight a memory currently carries.
 

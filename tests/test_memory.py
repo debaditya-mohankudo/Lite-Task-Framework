@@ -243,3 +243,16 @@ class TestUsageTracking:
         stores[1].recall()
         assert stores[1].get("one-lesson")["hit_count"] == 1
         assert stores[1].get("two-lesson")["hit_count"] == 1
+
+
+def test_slim_row_cuts_text_flags_it_and_names_the_escape_hatch():
+    from taskfw.memory import SLIM_TEXT_CHARS, slim_row
+    row = {"slug": "s", "kind": "pitfall", "standing": "confirmed", "created_at": "t",
+           "hit_count": 2, "text": "x" * 500, "learned_from": ["a"], "cross_project": True}
+    slim = slim_row(row)
+    assert len(slim["text"]) == SLIM_TEXT_CHARS and slim["text"].endswith("…")
+    assert slim["text_truncated"] is True and "task_memory__get" in slim["hint"]
+    assert slim["cross_project"] is True and "learned_from" not in slim
+    short = slim_row({**row, "text": "short", "cross_project": False})
+    assert short["text"] == "short" and not short["text_truncated"]
+    assert "hint" not in short and "cross_project" not in short
