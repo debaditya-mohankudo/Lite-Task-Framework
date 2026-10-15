@@ -180,8 +180,10 @@ package Requirements {
              * Obsolete memories are superseded, never removed — the row
              * survives and names its replacement, matching the methodology's
              * own rule that stale knowledge is flagged rather than deleted
-             * unilaterally. Nothing is injected; a memory reaches an agent
-             * only because it called task_memory__recall. */
+             * unilaterally. Nothing is injected per prompt; a memory reaches
+             * an agent either because it called task_memory__recall or
+             * because the tasks__context bundle's lessons section matched it
+             * to the task. */
     }
     satisfy requirement LoopMemoryEvidenceRequirement by system.store;
 
