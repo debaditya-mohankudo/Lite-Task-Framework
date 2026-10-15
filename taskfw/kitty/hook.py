@@ -21,7 +21,6 @@ import time
 from typing import IO, Mapping
 
 from .adapter import KittyAdapter, normalize_socket
-from .offload import maybe_offload
 from .store import Store
 
 EVENT_STATE = {
@@ -56,10 +55,6 @@ def load_context(db_path: str, task_id: str) -> str | None:
 def handle(payload: dict, env: Mapping[str, str], *, adapter: KittyAdapter | None = None,
            store: Store | None = None) -> dict | None:
     """Process one hook event. Returns the hook JSON output, or None for no output."""
-    # Offload runs for every session carrying this hook, task tab or not.
-    blocked = maybe_offload(payload, env, adapter=adapter)
-    if blocked:
-        return blocked
     task_id = env.get("TASKFW_TASK_ID")
     event = payload.get("hook_event_name")
     if not task_id or not event:

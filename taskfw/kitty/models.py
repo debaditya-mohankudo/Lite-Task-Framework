@@ -1,6 +1,6 @@
 """Which claude model a kitty tab starts on: the one home for the ids and for the choice.
 
-Ids live here and nowhere else (offload.CHEAP_MODEL is re-exported from here), so the launcher,
+Ids live here and nowhere else, so the launcher,
 opener and MCP tool cannot disagree on what a tier means. The choice is deterministic rules over what
 the job is, not a model call: free, instant, and its reason string is recorded so introspection can
 grade whether the tier was right. Choosing is a convenience: every failure ends as (None, why),
@@ -21,7 +21,6 @@ SONNET_5 = "claude-sonnet-5"
 SONNET_5_5 = "claude-sonnet-5-5"
 OPUS_5 = "claude-opus-5"
 OPUS_5_5 = "claude-opus-5-5"
-CHEAP_MODEL = "claude-haiku-5-5"  # offload's side window; not a tab tier
 TIERS = (SONNET_5, SONNET_5_5, OPUS_5, OPUS_5_5)  # cheapest to most capable
 
 _HARD = re.compile(r"\b(design|architect\w*|refactor\w*|migrat\w*|schema|security|concurren\w*|"

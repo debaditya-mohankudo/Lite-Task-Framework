@@ -695,7 +695,7 @@
         "taskfw/kitty/hook.py"
       ],
       "invariants": [
-        "State mirroring and task-context injection act only when TASKFW_TASK_ID is set; the one exception is the prompt offload (offload.maybe_offload), which runs first in handle() for any session carrying the hook (task:125d60bd)",
+        "State mirroring and task-context injection act only when TASKFW_TASK_ID is set",
         "Never fails the session: swallow all errors, exit 0",
         "Notification must not stamp last_active (it fires while idle and would reset the idle clock)",
         "Hook commands use absolute interpreter paths, not PATH"
@@ -736,14 +736,14 @@
         "tasks__open_in_kitty tells the caller to choose model + model_reason, and when a tab opens without a caller model its result carries `model_note` saying the rules picked it; a plain tab says the same on stderr"
       ],
       "created_at": "2026-10-12T18:00:48.219763+00:00",
-      "description": "The one home for the claude model ids a kitty tab can start on (claude-sonnet-5, -sonnet-5-5, claude-opus-5, -opus-5-5, plus offload's CHEAP_MODEL) and for the precedence that picks one: the caller's model first, the deterministic task/prompt rules only as the fallback.",
+      "description": "The one home for the claude model ids a kitty tab can start on (claude-sonnet-5, -sonnet-5-5, claude-opus-5, -opus-5-5) and for the precedence that picks one: the caller's model first, the deterministic task/prompt rules only as the fallback.",
       "evidence": [
         "taskfw/kitty/models.py"
       ],
       "invariants": [
         "An explicit --model/model arg always wins and `decide` is never called",
         "A decision that raises or yields an id outside TIERS launches on claude's default (no --model flag) and never blocks the launch",
-        "Ids are defined only in models.py; offload imports CHEAP_MODEL from it",
+        "Ids are defined only in models.py",
         "The rules are deterministic with no model call, so a tier choice is gradeable from its recorded reason",
         "The rules are a fallback for a caller that passed nothing, never a gate: a missing, unknown or failing choice launches on claude's default",
         "Never switch a running tab's model with /model: it rewrites the global default in ~/.claude/settings.json"
@@ -752,8 +752,7 @@
       "module": "taskfw/kitty/models.py",
       "name": "kitty-model-choice",
       "related": [
-        "kitty-task-launcher",
-        "kitty-prompt-offload"
+        "kitty-task-launcher"
       ]
     },
     "kitty-model-choice-tests": {
@@ -823,49 +822,6 @@
       "name": "kitty-open-tool-tests",
       "related": [
         "kitty-open-tool"
-      ]
-    },
-    "kitty-prompt-offload": {
-      "confidence": 0.7,
-      "contracts": [
-        "is_small is a whitelist: lookup lead word (what/where/which/who/when/how many/define), single line, at most 20 words, no action verb, no file path, URL or code",
-        "The prompt is blocked only after kitty confirmed the side window; the block reason names the window id and the kill-switch file",
-        "Replies to the main session (yes/ok/continue), slash commands, ! and # prompts never offload",
-        "touch ~/.kitty-taskfw/offload_off (env KITTY_TASKFW_OFFLOAD_OFF) disables offload per prompt, no restart needed"
-      ],
-      "created_at": "2026-10-10T13:50:25.360909+00:00",
-      "description": "UserPromptSubmit hook branch that blocks a clearly-small lookup prompt in the main session and answers it with claude -p --model claude-haiku-5-5 --resume <sid> --fork-session in a kitty hsplit beside it. Runs first in hook.handle, for any session carrying the hook.",
-      "evidence": [
-        "taskfw/kitty/offload.py"
-      ],
-      "invariants": [
-        "Fails open: missing claude, missing transcript, transcript over 500000 bytes, KittyError or OSError all return None and leave the prompt to the main session",
-        "The forked child runs with KITTY_TASKFW_OFFLOAD_CHILD=1 so its own hooks never offload again",
-        "Wrongly offloading costs the user a turn, so classifier changes must keep leaning toward staying in the main session"
-      ],
-      "last_validated": "2026-10-11T15:22:01.625668+00:00",
-      "module": "taskfw/kitty/offload.py",
-      "name": "kitty-prompt-offload",
-      "related": []
-    },
-    "kitty-prompt-offload-tests": {
-      "confidence": 0.7,
-      "contracts": [
-        "Tests pin observable behaviour, not internals"
-      ],
-      "created_at": "2026-10-11T15:22:01.625668+00:00",
-      "description": "Tests for taskfw/kitty/offload.py, moved in from the standalone kitty-taskfw repo (task:3ddbfc92). Kitty is faked; no test touches a live window.",
-      "evidence": [
-        "tests/test_kitty_offload.py"
-      ],
-      "invariants": [
-        "No test launches a real kitty window or claude process"
-      ],
-      "last_validated": "2026-10-11T15:22:01.625668+00:00",
-      "module": "tests/test_kitty_offload.py",
-      "name": "kitty-prompt-offload-tests",
-      "related": [
-        "kitty-prompt-offload"
       ]
     },
     "kitty-tab-store": {
