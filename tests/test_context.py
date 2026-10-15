@@ -366,6 +366,18 @@ class TestLessons:
         c = _build_context(store, t.id, memory=memory)
         assert [m["slug"] for m in c["lessons"]] == ["migrations-are-additive"]
 
+    def test_bundle_lessons_are_slim_rows_while_the_floor_still_saw_full_text(self, store, memory):
+        t = store.save(Task(title="Fix the sqlite migration path"))
+        # the matching words sit past the 160-char cut: only the floor, which
+        # reads full text before slimming, can have let this lesson through
+        body = "Filler words pad this opening so it passes the cut. " * 4 + "Sqlite migration steps must be additive."
+        memory.record("late-match", task_id=t.id, kind="constraint", text=body)
+        (row,) = _build_context(store, t.id, memory=memory)["lessons"]
+        assert row["slug"] == "late-match" and row["text_truncated"] is True
+        assert len(row["text"]) <= 160 and "task_memory__get" in row["hint"]
+        assert set(row) == {"slug", "kind", "standing", "created_at", "hit_count",
+                            "text", "text_truncated", "hint"}
+
     def test_no_match_returns_an_empty_section_not_a_missing_one(self, store, memory):
         t = store.save(Task(title="Fix the sqlite migration path"))
         memory.record("unrelated-lesson", task_id=t.id, kind="technique",

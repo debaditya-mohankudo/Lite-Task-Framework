@@ -626,6 +626,18 @@ class TestCappedReadsSayTheyWereCapped:
         neg = m.tasks__logs(logger=name, limit=-1)
         assert neg["logs"] == [] and neg["truncated"] == {"limit": 0}
 
+    def test_recall_is_slim_by_default_and_detail_full_returns_whole_rows(self):
+        tid = create(title="Source")["id"]
+        long_text = ("A lesson body that runs on. " * 20).strip()
+        m.task_memory__record(slug="long-lesson", task_id=tid, text=long_text)
+        slim = m.task_memory__recall(query="lesson")["memories"][0]
+        assert slim["text_truncated"] is True and slim["text"].endswith("…")
+        assert "task_memory__get" in slim["hint"]
+        assert "learned_from" not in slim and "updated_at" not in slim
+        full = m.task_memory__recall(query="lesson", detail="full")["memories"][0]
+        assert full["text"] == long_text and "learned_from" in full and "updated_at" in full
+        assert m.task_memory__get("long-lesson")["text"] == long_text
+
     def test_recall_reports_truncation_and_probe_row_is_not_counted_as_a_hit(self):
         tid = create(title="Source")["id"]
         for slug in ("lesson-a", "lesson-b", "lesson-c"):
