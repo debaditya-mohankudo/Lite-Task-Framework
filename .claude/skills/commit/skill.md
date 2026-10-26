@@ -45,6 +45,19 @@ uv run pytest -q
 as a pre-existing condition without checking whether it is. A summary that
 overstates what landed is worse than no summary, because it will be believed.
 
+Then check that the repo's concept edits are in git:
+
+```python
+concept__store_status(repo="<absolute repo path>")
+```
+
+`concept__upsert` writes `concept_store/` but nothing stages it, so a task's
+concept edits can be ticked done while living only in the working copy. If the
+result has a `warning`, show it to the user verbatim before committing, and
+stage the store with this commit when its changes belong to this task. The
+warning is advisory: it never stops the commit. No `warning` (clean, absent,
+ignored, or not a git checkout) means say nothing.
+
 One carve-out, task-framework only: if the diff touches **only `ontology/task-domain.json`** and no
 `.py` file, run just `uv run pytest -q tests/test_ontology.py` instead. The
 ontology JSON is inert data with no importers — the coverage tests that justify
@@ -109,12 +122,13 @@ prose produces a message that goes stale the moment the code moves.
 ## Write the message to a file
 
 Append the co-author trailer to the tool's returned `message`, then write the
-result to a file in the scratchpad:
+result to a file in the scratchpad. Use the attribution trailer the session
+supplies (it names the current model); do not copy a model name from here:
 
 ```
 <tool's returned message>
 
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Co-Authored-By: <the session's attribution trailer>
 ```
 
 ```bash

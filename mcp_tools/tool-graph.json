@@ -50,6 +50,7 @@
     "concept__upsert": {"namespace": "concept", "use": "Insert or merge a concept.", "hooks": []},
     "concept__delete": {"namespace": "concept", "use": "Remove a concept. Returns deleted=False when it was not there.", "hooks": []},
     "concept__uncovered": {"namespace": "concept", "use": "Which of the given modules have no concept -- the coverage check.", "hooks": []},
+    "concept__store_status": {"namespace": "concept", "use": "Git state of the repo's concept_store/ (absent | no_git | clean | ignored | untracked | modified); warning only when untracked or modified. Advisory, never blocks.", "hooks": []},
     "task_memory__record": {"namespace": "task_memory", "use": "Record a lesson from a finished task. kind: constraint | technique | pitfall.", "hooks": []},
     "task_memory__recall": {"namespace": "task_memory", "use": "Search loop memories (omit query to list recent). Superseded excluded; each result carries a derived standing. Rows are slim by default (text cut, text_truncated flag); detail=\"full\" for every field, task_memory__get(slug) for one in full. Carries truncated: {limit} when more matched.", "hooks": []},
     "task_memory__get": {"namespace": "task_memory", "use": "One memory by slug, including its standing and every task linked to it.", "hooks": []},
@@ -129,6 +130,8 @@
     {"subject": "tasks__context", "predicate": "used_by", "object": "commit"},
     {"subject": "tasks__format_commit_message", "predicate": "used_by", "object": "commit"},
     {"subject": "tasks__add_commit", "predicate": "used_by", "object": "commit"},
-    {"subject": "tasks__active", "predicate": "used_by", "object": "commit"}
+    {"subject": "tasks__active", "predicate": "used_by", "object": "commit"},
+    {"subject": "concept__upsert", "predicate": "used_by", "object": "commit"},
+    {"subject": "concept__store_status", "predicate": "used_by", "object": "commit"}
   ]
 }

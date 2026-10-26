@@ -89,6 +89,7 @@ package McpInterface {
         item concept__upsert;
         item concept__delete;
         item concept__uncovered;
+        item concept__store_status;
     }
 
     interface def ConceptInterface {

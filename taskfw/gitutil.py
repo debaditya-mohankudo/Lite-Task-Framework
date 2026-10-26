@@ -50,3 +50,24 @@ def head_sha(cwd: str) -> str | None:
     if out is None or out.returncode != 0:
         return None
     return out.stdout.strip() or None
+
+
+def path_state(cwd: str, relpath: str) -> str | None:
+    """Git's view of everything under `relpath` in the checkout at `cwd`.
+
+    "untracked" when every entry is new to git, "modified" when any tracked
+    file has a staged or unstaged change (an untracked file beside a modified
+    one still counts as modified), "ignored" when it is gitignored, "clean"
+    otherwise. None when git cannot be asked or `cwd` is not a checkout —
+    never "clean", so not knowing cannot read as nothing to commit.
+    """
+    out = run_git(["status", "--porcelain", "--untracked-files=all", "--ignored",
+                   "--", relpath], cwd=cwd)
+    if out is None or out.returncode != 0:
+        return None
+    codes = {line[:2] for line in out.stdout.splitlines() if line.strip()}
+    if not codes:
+        return "clean"
+    if codes - {"??", "!!"}:
+        return "modified"
+    return "untracked" if "??" in codes else "ignored"

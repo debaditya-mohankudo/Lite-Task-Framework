@@ -20,11 +20,11 @@ from mcp.server import MCPServer
 from taskfw import dispatcher, kitty_open, lifecycle
 from taskfw import scope as scope_mod
 from taskfw.accuracy import _task_grading, grooming_accuracy, loop_debt
-from taskfw.concepts import ConceptStore
+from taskfw.concepts import STORE_RELPATH, ConceptStore
 from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.context import TaskContext
 from taskfw.db.connect import connect
-from taskfw.gitutil import head_sha
+from taskfw.gitutil import head_sha, path_state
 from taskfw.grooming import Grooming
 from taskfw.introspection import IntrospectionReport, has_content
 from taskfw.log import get_logger
@@ -1312,6 +1312,37 @@ def concept__uncovered(repo: str, modules: list[str]) -> dict[str, Any]:
     describes while silently falling behind what exists.
     """
     return {"uncovered": ConceptStore(repo).uncovered(modules)}
+
+
+@_tool()
+def concept__store_status(repo: str) -> dict[str, Any]:
+    """Whether the repo's concept store is committed. Run by /commit before staging.
+
+    concept__upsert writes the store but nothing commits it, so concept edits
+    can live only in the working copy (task:ce6d7830). `state` is one of
+    absent (no store), no_git (not a checkout, or git failed), clean, ignored,
+    untracked or modified. `warning` is present only for untracked and
+    modified, naming the path. Advisory only: it never blocks a commit.
+
+    `repo` resolves exactly as ConceptStore's does, so this reports on the
+    file concept__upsert actually wrote. Built without loading the store, so
+    a malformed concepts.json cannot make this check fail.
+    """
+    store_dir = (Path(repo).expanduser() / STORE_RELPATH).parent
+    state = (path_state(str(store_dir.parent), store_dir.name) or "no_git"
+             if store_dir.exists() else "absent")
+    out: dict[str, Any] = {"path": str(store_dir), "state": state}
+    if problem := _STORE_PROBLEMS.get(state):
+        out["warning"] = (f"{store_dir} {problem}. Stage it with this commit "
+                          "if those concept edits belong to this task.")
+    return out
+
+
+#: The concept_store states /commit warns about, and how the warning says it.
+_STORE_PROBLEMS = {
+    "untracked": "is untracked — concept edits there are not in git",
+    "modified": "has uncommitted changes",
+}
 
 
 # ---------------------------------------------------------------------------

@@ -225,6 +225,32 @@
       "name": "concept-store-self-contained-no-external-server",
       "related": []
     },
+    "concept-store-status-tested": {
+      "confidence": 0.85,
+      "contracts": [
+        "TestWarns: an untracked concept_store/concepts.json beside a committed code file (the cli-graph case) gives state=untracked; an unstaged or staged-but-uncommitted edit to a tracked store gives state=modified; a new file beside a modified tracked one is modified; each carries a warning naming the store path. A store written by concept__upsert is reported at the same path upsert wrote.",
+        "TestSilent: a committed clean store, a repo with no store (absent), a gitignored store (ignored), a directory outside any checkout (no_git) and git missing (no_git, no raise) all carry no warning. Skipped when git is not on PATH."
+      ],
+      "created_at": "2026-10-26T09:41:07.434127+00:00",
+      "description": "Pins concept__store_status, the check /commit runs so concept edits written by concept__upsert are not left out of git (task:ce6d7830). Runs against REAL temporary git repositories, because the property that matters is how `git status --porcelain --ignored` actually reports each state. Origin: cli-graph's concept_store/ was never added to git while three tasks ticked concept edits as done.",
+      "evidence": [
+        "tests/test_store_status.py:TestWarns",
+        "tests/test_store_status.py:TestSilent",
+        "taskfw/mcp_server.py:concept__store_status",
+        "taskfw/gitutil.py:path_state"
+      ],
+      "invariants": [
+        "Not knowing (no checkout, git missing) is no_git, never clean.",
+        "warning is present exactly when state is untracked or modified."
+      ],
+      "last_validated": "2026-10-26T09:41:07.434171+00:00",
+      "module": "tests/test_store_status.py",
+      "name": "concept-store-status-tested",
+      "related": [
+        "gitutil-subprocess-shape",
+        "gitutil-head-sha-tested"
+      ]
+    },
     "connection-pragma-enforcement-and-fk-integrity-tested": {
       "confidence": 0.8,
       "contracts": [],
@@ -389,7 +415,8 @@
         "run_git(argv, cwd, timeout=30) -> CompletedProcess | None — None only for a process-level failure (OSError/SubprocessError), never for a non-zero exit. Logs the failure itself; callers add nothing for that case.",
         "Callers own returncode handling and its logging, since the same non-zero exit means different things to each: backfill.git_log logs it as 'not a git repo or bad rev' (closer to an error), scope._origin_url logs it quieter at debug ('no origin') since most directories legitimately have none.",
         "head_sha(cwd) -> str | None — `git rev-parse HEAD`; None for every way of not knowing (run_git None, non-zero exit such as not-a-checkout or an unborn branch, empty stdout), never ''. Added for task:0bcc56f1 so mcp_server reads its loaded commit here rather than growing a private git helper.",
-        "Consumed by taskfw/backfill.py:git_log, taskfw/scope.py:_origin_url and _toplevel (run_git), and taskfw/mcp_server.py:_LOADED_SHA, tasks__active (head_sha)."
+        "Consumed by taskfw/backfill.py:git_log, taskfw/scope.py:_origin_url and _toplevel (run_git), and taskfw/mcp_server.py:_LOADED_SHA, tasks__active (head_sha).",
+        "path_state(cwd, relpath) -> 'clean' | 'untracked' | 'modified' | 'ignored' | None — `git status --porcelain --untracked-files=all --ignored -- relpath`. modified when any entry is a tracked change (staged or unstaged), untracked when every entry is new, ignored when only gitignored entries show; None when run_git is None or git exits non-zero (not a checkout), never 'clean'. Added for task:ce6d7830; consumed by taskfw/mcp_server.py:concept__store_status."
       ],
       "created_at": "2026-08-29T10:00:31.678276+00:00",
       "description": "The one place a module shells out to git. Factored out of taskfw.backfill and taskfw.scope after a reuse review found the two independently re-typing the same try/except/timeout shape around subprocess.run(['git', ...]) (task:a7a4742e). Both need the same process-level failure handling (missing binary, timeout, permissions) but disagree on what a non-zero exit means for their own purpose, so run_git only normalises the former and leaves returncode inspection to the caller.",
@@ -398,12 +425,13 @@
         "taskfw/backfill.py:git_log",
         "taskfw/scope.py:_origin_url",
         "taskfw/gitutil.py:head_sha",
-        "taskfw/mcp_server.py:_LOADED_SHA, tasks__active"
+        "taskfw/mcp_server.py:_LOADED_SHA, tasks__active",
+        "taskfw/gitutil.py:path_state"
       ],
       "invariants": [
         "Never raises. A caller that wants to shell out to git and treat every failure mode as 'could not ask' gets that for free; a caller that needs to distinguish failure modes still can, via the returncode on what run_git returns."
       ],
-      "last_validated": "2026-08-29T10:00:31.678300+00:00",
+      "last_validated": "2026-10-26T09:41:11.008366+00:00",
       "module": "taskfw/gitutil.py",
       "name": "gitutil-subprocess-shape",
       "related": [
@@ -2037,6 +2065,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-12T18:09:01.364133+00:00"
+    "updated_at": "2026-10-26T09:41:11.008444+00:00"
   }
 }
