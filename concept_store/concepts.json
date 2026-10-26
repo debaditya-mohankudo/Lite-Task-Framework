@@ -469,7 +469,9 @@
         "tests/test_scope.py:TestLoopDebtIsHonestAboutWhatItCounted",
         "tests/test_scope.py:TestGroomingAccuracyIsHonestAboutWhatItCounted",
         "models/derived_values.sysml:GroomingAccuracyTally",
-        "tests/test_accuracy.py:TestWrongBecause"
+        "tests/test_accuracy.py:TestWrongBecause",
+        ".claude/skills/task-introspection/skill.md",
+        ".claude/skills/task-grooming/skill.md"
       ],
       "invariants": [
         "_task_grading(task) -> (risks, ungraded_count, any_graded) is the single per-task classification both grooming_accuracy and loop_debt call — factored out (task:07f9270c) so the two reads can never disagree about what counts as skipped or ungraded.",
@@ -484,9 +486,11 @@
         "Ungroomed surprises are never folded into the groomed count: the MISSED_SHARE ratio is missed_groomed / (graded_total + missed_groomed), and summing ungroomed surprises in would drive that percentage toward 100% for a reason its own sentence does not describe. That signal sits deliberately outside the MIN_SAMPLE gate, since an ungroomed task has no graded risks by definition.",
         "A scoped read reports the remainder it excluded, not merely the scope it counted. store.list(scope=...) is an exact match, so it drops every task written before Task.scope existed — the large majority of the corpus — and naming the scope tells a reader nothing about that unless they already know unscoped rows exist. loop_debt has done this since task:a5bb2f45; grooming_accuracy stated the exclusion only in its docstring until task:de2b48b1, closing a model/code divergence models/task_framework_system.sysml had already asserted was resolved. See [[scope-derivation]] for the filter itself.",
         "Both remainders come from _unscoped_remainder, which counts through _debt_counts — the same code that counts the scoped window. grooming_accuracy and loop_debt can differ on WHICH tasks they counted (different limits by design) but never on what neither of them saw. tests/test_scope.py::TestGroomingAccuracyIsHonestAboutWhatItCounted::test_it_cannot_disagree_with_loop_debt_about_the_remainder pins this.",
-        "An unscoped (global) call claims no remainder at all — it excluded nothing, so there is nothing to account for."
+        "An unscoped (global) call claims no remainder at all — it excluded nothing, so there is nothing to account for.",
+        "The window is the last `limit` finished tasks, with no filter by grooming date. After a change to the grooming skill, tasks groomed under the old skill stay in the window until enough new ones finish (about 3 weeks at a 50-task window in 2026-10). So the plain call cannot tell whether a skill change worked: a before/after comparison must filter an export by grooming or creation date, as task:63638782 does against task:25ab1953's baseline.",
+        "The tallies are only comparable across passes if graders apply one grading convention: the bad outcome a risk names is what gets graded, so a held safety belief is counted `wrong` (did-not-occur), never `avoided`. That convention lives in the task-introspection skill, not here; accuracy.py counts whatever grades it is given."
       ],
-      "last_validated": "2026-09-27T16:17:40.747148+00:00",
+      "last_validated": "2026-10-26T16:06:42.740148+00:00",
       "module": "taskfw/accuracy.py",
       "name": "grooming-accuracy-aggregate",
       "related": [
@@ -1528,14 +1532,17 @@
         "taskfw/accuracy.py:_RecurrenceGrouper",
         "tests/test_risk.py",
         "taskfw/risk.py:GROOMING_GRADES",
-        "taskfw/risk.py:WrongReason, WRONG_REASONS"
+        "taskfw/risk.py:WrongReason, WRONG_REASONS",
+        ".claude/skills/task-introspection/skill.md",
+        "docs/methodology/05-introspection.md"
       ],
       "invariants": [
         "coerce never manufactures an 'id' key -- the ABSENCE of 'id' on a risk is how mcp_server._merge_grooming_risks tells a brand-new prediction from a carried-forward one, so adding one would silently change that branch.",
         "coerce never returns None or drops an entry: a malformed risk still carries text, because an ungraded risk that vanished would be an omission indistinguishable from an absence -- the failure taskfw.accuracy exists to prevent.",
-        "Risk identity (id-if-present-else-normalised-text, id-less risks in their own keyspace) and the merge/group algorithms are NOT here -- _merge_grooming_risks assigns ids and text-matches, _RecurrenceGrouper keeps id-less risks apart; those are different operations that only share these primitives."
+        "Risk identity (id-if-present-else-normalised-text, id-less risks in their own keyspace) and the merge/group algorithms are NOT here -- _merge_grooming_risks assigns ids and text-matches, _RecurrenceGrouper keeps id-less risks apart; those are different operations that only share these primitives.",
+        "What each grade MEANS is a grading convention held in the task-introspection skill and docs/methodology/05-introspection.md, not in code: a risk is graded on the bad outcome it names, not on whether its sentence came true. A safety belief filed as a risk ('X will not break Y') that held is `wrong` / `did-not-occur`; `avoided` requires a change the prediction caused. task:25ab1953 chose this over adding a grade for 'predicted safe and it was safe', so GROOMING_GRADES and WrongReason stayed unchanged. Adding such a grade would break comparison with the 2026-10-26 baseline recorded on that task."
       ],
-      "last_validated": "2026-09-27T16:17:40.747148+00:00",
+      "last_validated": "2026-10-26T16:06:38.391566+00:00",
       "module": "taskfw/risk.py",
       "name": "risk-shape-primitives",
       "related": [
@@ -2065,6 +2072,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-26T09:41:11.008444+00:00"
+    "updated_at": "2026-10-26T16:06:42.740217+00:00"
   }
 }
