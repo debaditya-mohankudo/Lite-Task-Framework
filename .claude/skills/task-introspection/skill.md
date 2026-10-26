@@ -67,6 +67,8 @@ For each item in `grooming.risks`, grade what actually happened:
 - **wrong** — predicted, but irrelevant. Noise in that pass. Also set `wrong_because`: `settleable-by-grep` (one read would have settled it — it belonged in `clarifications`), `did-not-occur` (checkable, and it just didn't happen), `unfalsifiable` (could never have been graded otherwise), or `other`. Any other value is refused; `tasks__grooming_accuracy` groups `wrong` by it.
 - **missed** — a surprise no prediction anticipated. This has no risk to grade against; it goes in `missed_surprises` at Step 6.
 
+Grade the bad outcome a risk names, not whether its sentence came true. A safety belief filed as a risk ("X will not break Y") that held is `wrong` / `did-not-occur`, because its bad event did not happen. It is never `avoided`, which needs a change that the prediction caused. Keeping this consistent is what lets `tasks__grooming_accuracy` compare passes (task:25ab1953).
+
 `hidden_assumptions` is **not** graded — those are things grooming identified in the present, not predictions about the future.
 
 Write the grades back by passing just `risks` with `graded` filled in, keeping each risk's `id` (from the grooming bundle) so the grade attaches to the right risk:
@@ -123,7 +125,7 @@ tasks__log_skill_invocation(skill="task-introspection/step-5-ask", task_id=task_
 ```
 
 1. **Did the intended behaviour hold?** Compare the promised outcomes, boundaries, failure behaviour, and invariants to what callers actually experienced.
-2. **Did anything outside this task's promise change?** Walk the callers, subclasses, and tests of what the change touched. A regression here that no grooming risk predicted is a `missed` — record it in `missed_surprises` (Step 6). Repeated misses of this kind are the signal that grooming's blast-radius pass is running too shallow, and that is what `tasks__grooming_accuracy` turns into something actionable.
+2. **Did anything outside this task's promise change?** Walk the callers, subclasses, and tests of what the change touched. A regression here that no grooming risk predicted is a `missed` — record it in `missed_surprises` (Step 6). That includes one a grooming-written verification item in `resolution` caught: grooming leaned "safe" there and was wrong, and the item only made the miss visible. Repeated misses of this kind are the signal that grooming's blast-radius pass is running too shallow, and that is what `tasks__grooming_accuracy` turns into something actionable.
 3. **Where did the uncertainty come from?** Could grooming have removed it?
 4. **What decisions were never recorded?** Compare the plan to what was built. Log every gap with `tasks__add_decision` — **this is the highest-value part of the pass.**
 5. **What surprised us?** Should it become durable knowledge?

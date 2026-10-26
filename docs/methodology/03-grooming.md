@@ -77,21 +77,50 @@ The second habit, skipped for the same reason: **name what the change could
 break.** For every symbol or file the plan touches, ask what depends on it —
 callers, subclasses, serialised formats, tests pinned to the current
 behaviour — and whether the change alters what that dependent observes. A
-"possibly" is a falsifiable risk — "changing X will not affect Y" — and
-belongs in `risks`, not `hidden_assumptions`, which introspection never
-grades. A regression that no risk predicted has nowhere else to surface once
-the work is done. Size this to the task, the same way premise-checking is
-sized: a config tweak has almost no radius; a shared type or a tool signature
-has a lot.
+"possibly" never goes in `hidden_assumptions`, which introspection never
+grades, because a regression parked there has nowhere to surface. Where it
+goes depends on which way you lean:
 
-One kind of dependent is not a prediction at all: a test. Whether an existing
-test asserts the behaviour being changed can be read, so read it during
-grooming and write the answer down as a clarification, naming the tests. A
-risk that says "this will break test X" is a question someone skipped
-asking, and introspection will mostly grade it `wrong` — four of the five
-wrong risks in one real pass were exactly that. Keep risks for what a grep
-cannot settle: what a caller will observe at runtime, performance, how
-existing data migrates.
+- **You expect the break** — a risk that names the bad outcome and how it
+  happens.
+- **You believe it is safe, and a read or run shows it now** — settle it and
+  write a clarification.
+- **You believe it is safe, but only the finished change can show it** — a
+  verification item in `resolution`, which implementation ticks or fails in
+  plain sight.
+
+A safety belief filed as a risk ("changing X will not affect Y") is scored
+against you even when it is right: introspection grades the bad event a risk
+names, and a bad event that did not happen is `wrong`. In the 2026-10-26
+baseline (task:25ab1953), 12 of 34 `wrong` risks were correct safety beliefs
+filed this way. Size the blast-radius pass to the task, the same way
+premise-checking is sized: a config tweak has almost no radius; a shared type
+or a tool signature has a lot.
+
+Much of what a change touches is not a prediction at all. Whether a test
+asserts the behaviour being changed, whether a reader of a key still exists,
+whether a file or database exists, whether a regeneration is byte-identical:
+each can be read, so read it during grooming and write the answer down as a
+clarification, naming what you read. A risk whose text already contains the
+fact that settles it was never a risk. Four of the five wrong risks in
+task:c0c5ff5f were "this will break test X". The rule that followed was
+scoped to tests, and the baseline still had 13 wrong risks one read from
+settled, only 2 of them about tests. Keep risks for what only the change can
+reveal: what a caller will observe at runtime, performance, how existing data
+migrates.
+
+A guess about runtime behaviour — an import failing on this machine, a
+permission the process lacks, an eval's starting score, a library warning on
+stderr — is usually one short run from a fact. Run it. Nine of the 34 wrong
+risks were guesses of this kind, and one live `ps` check while grooming
+task:e0ce873e found a zombie-process case that reading the code had not. Run
+the existing test suite once, too, and record what already fails; four of the
+baseline's missed surprises were a suite already failing before the change,
+with no record of it. Experiments stay inside a boundary: read-only commands,
+scratch files, the existing test suite, dry-run or `--check` modes. Never
+anything that sends, writes user data, deletes, or changes system state. An
+experiment that would need one of those becomes an open question for the
+user.
 
 A deletion has a second radius, and it points the other way. Removing a
 symbol can orphan what it read — a constant it compared against, a helper
@@ -154,6 +183,13 @@ Introspection grades every risk, so a risk that cannot be graded is noise.
 
 The first can be graded `materialized`, `avoided`, or `wrong`. The second
 cannot be graded at all, and so teaches nothing.
+
+Falsifiable is necessary, but it is not enough. A useful risk also names a bad
+outcome you expect, not a belief that things will be fine. Nothing you could
+read or run now would settle it. And it concerns this task: a prediction about
+a later task, or about how someone will behave afterwards, cannot be seen by
+this task's introspection, so it defaults to `wrong`. Such predictions belong
+in `other` or in a follow-up task.
 
 ## Grooming is not starting
 

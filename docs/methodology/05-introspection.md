@@ -21,6 +21,12 @@ For every risk in `grooming.risks`, grade what actually happened:
   `grooming.risks` to grade against — it is not one of the four grades above,
   it goes in the introspection report's `missed_surprises` field instead.
 
+Grade the bad outcome a risk names, not whether its sentence came true. A
+safety belief filed as a risk ("X will not break Y") that held is `wrong` /
+`did-not-occur`, because its bad event did not happen. It is never `avoided`,
+which needs a change that the prediction caused. Consistent grading is what
+makes `tasks__grooming_accuracy` comparable across passes (task:25ab1953).
+
 Be honest about the difference between *materialized* and *unresolved*. A risk
 that said "decide X now" and was simply not decided has not materialized — it
 is still open, and grading it as inevitable launders a skipped decision into a
@@ -100,7 +106,9 @@ lessons, not a transcript of implementation details.
 2. **Did anything outside this task's promise change?** Walk the callers,
    subclasses, and tests of what the change touched. A regression here that no
    grooming risk predicted is a `missed` — it goes in `missed_surprises`.
-   Repeated misses of this kind mean grooming's blast-radius pass is running
+   That includes a regression a grooming-written verification item in
+   `resolution` caught: grooming leaned "safe" there and was wrong, and the
+   item only made the miss visible. Repeated misses of this kind mean grooming's blast-radius pass is running
    too shallow.
 3. **Where did the uncertainty come from?** Could grooming have removed it?
 4. **What decisions were never recorded?** Compare the plan to what was built.

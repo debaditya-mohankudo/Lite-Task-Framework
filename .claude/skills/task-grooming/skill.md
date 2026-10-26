@@ -2,7 +2,7 @@
 name: task-grooming
 description: Pre-implementation grooming pass. Removes uncertainty before implementation by pulling context, verifying premises, and recording falsifiable risks. Invoke with /task-grooming, /task-grooming task:<id>, or /task-grooming epic:<id>.
 user-invocable: true
-updated: 2026-09-01
+updated: 2026-10-26
 doc: docs/methodology/03-grooming.md
 repo: ~/workspace/task-framework/.claude/skills/task-grooming/skill.md
 deployed: ~/.claude/skills/task-grooming/skill.md
@@ -98,9 +98,17 @@ task_memory__link(slug="<lesson slug>", task_id=task_id, relation="confirmed_by"
 
 For every claim the task's plan rests on — "X is the authoritative file", "Y calls Z", "this is the production path", "this duplication is accidental" — **spend one concrete verification step before accepting it.** Read the file. Grep for callers. Check `git log`. Inspect the running system. This applies as much to a premise you wrote yourself an hour ago as to one you inherited — self-authored premises are exactly as unexamined and feel more trustworthy, which makes them worse.
 
-**Name the blast radius.** For every symbol or file the plan changes, ask what already depends on it — callers, subclasses, serialised formats, tests that assert the current behaviour — and whether the change could alter what that dependent observes. Where the answer is "possibly", that is a falsifiable `risk` ("changing X will not affect Y's behaviour"), **not** a `hidden_assumption`: assumptions are never graded, so a regression parked there is invisible to introspection. This is what lets the next pass grade a regression instead of never seeing it. Size the pass to the task — a one-line config change has almost no radius; a change to a shared type or a public tool signature has a lot.
+**Name the blast radius.** For every symbol or file the plan changes, ask what already depends on it — callers, subclasses, serialised formats, tests that assert the current behaviour — and whether the change could alter what that dependent observes. Where the answer is "possibly", decide which way you lean, because each lean has a different home — and none of them is `hidden_assumptions`, which is never graded, so a regression parked there is invisible:
 
-**Whether an existing test will break is a grep, not a prediction.** Before writing "this change will break test X" as a risk, read the tests that exercise what you're changing and decide it: a test that asserts the behaviour being changed will need an edit, and a test that only goes through a public path the change leaves intact will not. Record the answer in `clarifications`, naming the tests you read. A risk is for what a grep cannot settle — what a caller will observe at runtime, how something performs, how an existing database migrates. (4 of task:c0c5ff5f's 5 `wrong` risks were "an existing test will break" and each was one grep from settled.)
+- **You expect it to break** → a `risk` naming the bad outcome and its mechanism ("dropping the 'Work' default makes `mac calendar add_event` fail on machines without that calendar").
+- **You believe it is safe, and a read or run can show it now** → settle it and write the answer in `clarifications`.
+- **You believe it is safe, but only the finished change can show it** → a verification item in `resolution` ("vault_rag query output is unchanged after the lazy import"). Implementation ticks it or fails it in plain sight.
+
+Never file a safety belief ("X will not affect Y", "the suite stays green") as a risk. When it holds, introspection grades the bad event that did not occur — `wrong` — so a correct belief is scored as a miss: 12 of 34 `wrong` risks in the 2026-10-26 baseline were exactly this (task:25ab1953). Size the pass to the task — a one-line config change has almost no radius; a change to a shared type or a public tool signature has a lot.
+
+**Anything about the code or data as it stands now is a read, not a prediction.** Whether a test asserts the behaviour being changed, whether a reader of a key exists, whether a file or on-disk DB exists, whether a regeneration is byte-identical, whether a field is redacted — read it, grep it, or run it, and record the answer in `clarifications`, naming what you read. If you find yourself writing the settling fact inside a risk's text, it was never a risk. A risk is for what only the change itself can reveal — what a caller will observe at runtime, how something performs, how an existing database migrates. (task:c0c5ff5f: 4 of 5 `wrong` risks were "an existing test will break". In the task:25ab1953 baseline the rule was in force and 13 `wrong` risks were still one read from settled — only 2 of them about tests.)
+
+**Settle runtime guesses with a cheap experiment.** "The import will fail on this machine", "this needs Full Disk Access", "the eval starts below 90%", "pandas warns on stderr" — a guess about how something behaves when run is usually one short run from a fact. Run it now and record the result; 9 of 34 `wrong` risks in the baseline were such guesses, and a 5-second `ps` check in task:e0ce873e's grooming found a zombie case that reading the code did not. Run the project's test suite once, too, and record any failures that exist before the change: four missed surprises in the baseline were "the suite was already failing and nobody had a baseline". Experiments stay inside a boundary: read-only commands, files under scratch, the existing test suite, dry-run or `--check` modes. Never a verb that sends, writes user data, deletes, or changes system state — an experiment that needs one becomes an `open_question` for the user.
 
 **A deletion has a second radius, pointing the other way.** For every symbol the plan *deletes*, list what it reads — its imports, the constants it compares against, helpers only it calls — and grep each for a reader that survives, leaving out the deleted code and its own tests. A mention in `ontology/`, `concept_store/`, or `models/` describes code rather than using it, so it does not count as a reader. Anything left with no reader goes into the plan now; anything kept on purpose gets a written reason. (task:a8394f74 deleted `check_event_kind` but planned to keep `TASK_EVENT_KINDS`, its only input, which then had no reader; the dead constant surfaced only at commit time.)
 
@@ -143,6 +151,12 @@ Introspection grades every risk, so a risk that cannot be graded is noise.
 
 The first can be graded `materialized`, `avoided`, or `wrong`. The second cannot be graded at all, and so teaches nothing. `tasks__grooming_accuracy` counts the ungradeable ones against you.
 
+Falsifiable is necessary, not enough. Before writing a risk, check three things:
+
+- **It names a bad outcome you expect**, not a belief that things will be fine — see the blast-radius split above.
+- **Nothing you can run or read now would settle it.** If something would, do it and write a clarification instead.
+- **This task's introspection will see it.** A prediction about a later task, or about how a person or agent will behave afterwards, cannot be graded here and defaults to `wrong`. Put it in `other`, or in a follow-up task's motivation.
+
 ## Step 5 — Report
 
 ```python
@@ -165,6 +179,7 @@ Do not deactivate here. A task stays active from `tasks__create` through its int
 - **Grooming is not starting.** A groomed task is not necessarily one under active *implementation*. Activating it here just marks "this is the task in hand"; the pointer stays on it past the end of grooming, into implementation, and is only released when introspection is recorded (task:2d24165a) — do not leave the task half-implemented because grooming went well. There is no task *status* to reset — grooming never changed it.
 - **Revise the prior grooming; do not overwrite it blind.**
 - **Every risk must be falsifiable.**
-- **What the change could break is a risk, not a `hidden_assumption`** — the latter is never graded, so a regression left there never reaches introspection.
+- **What the change could break is never a `hidden_assumption`** — that is never graded, so a regression left there never reaches introspection. It is a risk if you expect the break, a clarification if a read or run settles it now, and a `resolution` verification item if only the finished change can show it.
+- **Settle what can be settled now.** A read, grep, or boundary-respecting experiment beats a prediction.
 - **Do not abandon a task unilaterally.** If it looks like a duplicate or orphan worth abandoning, surface it to the user first.
 - If nothing needs changing, still write the findings and say "ready as-is".
