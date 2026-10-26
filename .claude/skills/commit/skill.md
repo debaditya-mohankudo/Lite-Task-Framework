@@ -58,6 +58,21 @@ stage the store with this commit when its changes belong to this task. The
 warning is advisory: it never stops the commit. No `warning` (clean, absent,
 ignored, or not a git checkout) means say nothing.
 
+If `concept__store_status` is unavailable — not in your tool list, ToolSearch
+finds no match, or the call fails as an unknown tool — run the same check with
+git, from the repo root:
+
+```bash
+git -C <absolute repo path> status --porcelain --untracked-files=all -- concept_store/
+```
+
+Treat any output line exactly like the tool's `warning`: show it to the user
+and stage the store with this commit when those edits belong to this task. It
+is just as advisory — it never stops the commit. Empty output (clean, ignored,
+or no store) or a git error (not a checkout) means say nothing. If
+`tasks__active` reports `stale: true`, the taskfw server predates the tool;
+mention that a restart would bring it back.
+
 One carve-out, task-framework only: if the diff touches **only `ontology/task-domain.json`** and no
 `.py` file, run just `uv run pytest -q tests/test_ontology.py` instead. The
 ontology JSON is inert data with no importers — the coverage tests that justify
