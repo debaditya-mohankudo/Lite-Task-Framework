@@ -2,6 +2,7 @@
 name: task-implementation
 description: Engineering execution philosophy for active tasks. Stay in scope, log decisions as they happen, remove failure modes rather than policing them, and finish decisively. Use while working, after /task-grooming and before /task-introspection.
 user-invocable: true
+model: sonnet
 updated: 2026-08-08
 doc: docs/methodology/04-implementation.md
 repo: ~/workspace/task-framework/.claude/skills/task-implementation/skill.md
