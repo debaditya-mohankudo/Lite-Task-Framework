@@ -255,4 +255,4 @@ skill edge is fine; utility tools have none.
 
 ## Memory
 
-Cross-session memory lives in `~/.claude/MEMORY.sqlite`, shared across projects. Use the `mcp__claude-hooks__memory__*` tools to read/write it — `memory__add` / `memory__add_batch` to save, `memory__search` to recall. Tag entries with domain `task-framework` for this project.
+Cross-session memory lives in `~/.claude/MEMORY.sqlite`, shared across projects. Use the `mac memory` commands (via Bash) to read/write it — `mac memory add` / `mac memory add_batch` to save, `mac memory search` to recall. Tag entries with domain `task-framework` for this project.
