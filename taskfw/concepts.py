@@ -51,6 +51,23 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _check_remove(remove: dict | None) -> dict[str, list[str]]:
+    """Refuse a `remove` naming anything but a list field.
+
+    A misspelt field ("invariant") would otherwise remove nothing and report
+    nothing — the silent no-op retraction exists to get rid of.
+    """
+    remove = remove or {}
+    unknown = sorted(set(remove) - set(LIST_FIELDS))
+    if unknown:
+        raise ValueError(f"remove names unknown fields {unknown}; "
+                         f"only {list(LIST_FIELDS)} can be removed from")
+    for lf, items in remove.items():
+        if not isinstance(items, list):
+            raise ValueError(f"remove[{lf!r}] must be a list of exact strings")
+    return remove
+
+
 @dataclass
 class ConceptStore:
     """JSON-backed concept store for one repository."""
@@ -138,7 +155,7 @@ class ConceptStore:
 
     # -- writes -------------------------------------------------------------
 
-    def upsert(self, concept: dict) -> dict:
+    def upsert(self, concept: dict, remove: dict | None = None) -> dict:
         """Insert or MERGE a concept.
 
         Merges rather than overwrites: a caller updating one field should not
@@ -149,24 +166,32 @@ class ConceptStore:
         list still clears that field, so deletion stays possible — it just
         has to be deliberate. Every other field replaces if present, same as
         before.
+
+        `remove` retracts named entries: {field: [exact strings]}. It applies
+        to the STORED list before the payload's entries are unioned in, so
+        replacing a reworded entry is one call — remove the old string, pass
+        the new one. A string in both survives. Strings that are not stored
+        are ignored here; see unmatched_removals for reporting them.
         """
         missing = [f for f in REQUIRED if not concept.get(f)]
         if missing:
             raise ValueError(f"concept is missing required fields: {missing}")
+        remove = _check_remove(remove)
 
         name = concept["name"]
         existing = self._concepts.get(name, {})
         merged = {**existing, **concept}
         for lf in LIST_FIELDS:
+            dropped = set(remove.get(lf, []))
+            prior = [item for item in (existing.get(lf, []) or []) if item not in dropped]
             if lf in concept:
                 incoming = concept[lf] or []
                 if incoming:
-                    prior = existing.get(lf, []) or []
                     merged[lf] = prior + [item for item in incoming if item not in prior]
                 else:
                     merged[lf] = []
             else:
-                merged[lf] = existing.get(lf, [])
+                merged[lf] = prior
         if len(merged.get("related", [])) > RELATED_MAX:
             raise ValueError(
                 f"concept {name!r}: related would grow to "
@@ -181,6 +206,22 @@ class ConceptStore:
         log.info("concept %s: %s module=%s", name,
                  "updated" if existing else "created", merged.get("module"))
         return merged
+
+    def unmatched_removals(self, name: str, remove: dict | None) -> dict[str, list[str]]:
+        """Which of `remove`'s strings are not currently stored on `name`.
+
+        Read before upsert: those entries cannot be retracted because they
+        are not there — usually a wording mismatch, which the caller needs to
+        hear about rather than believe the stale entry is gone.
+        """
+        existing = self._concepts.get(name, {})
+        out = {}
+        for lf, items in _check_remove(remove).items():
+            stored = existing.get(lf, []) or []
+            gone = [item for item in items if item not in stored]
+            if gone:
+                out[lf] = gone
+        return out
 
     def delete(self, name: str) -> bool:
         if name not in self._concepts:

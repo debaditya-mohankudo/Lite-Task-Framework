@@ -103,6 +103,7 @@
     {"subject": "tasks__add_decision", "predicate": "used_by", "object": "task-introspection"},
     {"subject": "tasks__add_commit", "predicate": "used_by", "object": "task-introspection"},
     {"subject": "concept__list", "predicate": "used_by", "object": "task-introspection"},
+    {"subject": "concept__get", "predicate": "used_by", "object": "task-introspection"},
     {"subject": "concept__upsert", "predicate": "used_by", "object": "task-introspection"},
     {"subject": "concept__uncovered", "predicate": "used_by", "object": "task-introspection"},
     {"subject": "task_memory__record", "predicate": "used_by", "object": "task-introspection"},

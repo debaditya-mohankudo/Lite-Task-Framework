@@ -160,6 +160,65 @@ class TestUpsert:
             "rejected merge must not partially land"
 
 
+class TestRemove:
+    """Retracting one stale entry without restating or clearing the rest.
+
+    Before this, the only fix for a stale or reworded entry was a hand edit
+    of concepts.json (task:670ac27a).
+    """
+
+    @pytest.fixture
+    def store(self, repo):
+        s = ConceptStore(repo)
+        s.upsert(concept(invariants=["keep", "stale", "also keep"], contracts=["f() -> g"]))
+        return s
+
+    def test_removes_one_named_entry_and_keeps_the_rest(self, repo, store):
+        store.upsert(concept(), remove={"invariants": ["stale"]})
+        got = ConceptStore(repo).get("a-concept")
+        assert got["invariants"] == ["keep", "also keep"]
+        assert got["contracts"] == ["f() -> g"]
+
+    def test_replace_leaves_only_the_new_wording(self, repo, store):
+        store.upsert(concept(invariants=["fresh"]), remove={"invariants": ["stale"]})
+        assert ConceptStore(repo).get("a-concept")["invariants"] == ["keep", "also keep", "fresh"]
+
+    def test_a_string_both_removed_and_added_survives(self, repo, store):
+        """Removal applies to what was stored, then the payload merges in."""
+        store.upsert(concept(invariants=["stale"]), remove={"invariants": ["stale"]})
+        assert "stale" in ConceptStore(repo).get("a-concept")["invariants"]
+
+    def test_swapping_a_related_slug_at_the_cap_is_allowed(self, repo):
+        """The cap is checked after removal, so a full list can still change."""
+        s = ConceptStore(repo)
+        s.upsert(concept(related=["b", "c", "d"]))
+        s.upsert(concept(related=["e"]), remove={"related": ["c"]})
+        assert ConceptStore(repo).get("a-concept")["related"] == ["b", "d", "e"]
+
+    def test_unknown_field_is_refused_and_nothing_is_written(self, repo, store):
+        with pytest.raises(ValueError, match="unknown fields"):
+            store.upsert(concept(description="Should not land."),
+                         remove={"invariant": ["stale"]})
+        got = ConceptStore(repo).get("a-concept")
+        assert "stale" in got["invariants"]
+        assert got["description"] != "Should not land."
+
+    def test_tool_reports_entries_that_were_not_there(self, repo, store):
+        out = m.concept__upsert(str(repo), concept(),
+                                remove={"invariants": ["stale", "never existed"]})
+        assert out["ok"]
+        assert out["not_found"] == {"invariants": ["never existed"]}
+        assert ConceptStore(repo).get("a-concept")["invariants"] == ["keep", "also keep"]
+
+    def test_tool_omits_not_found_when_everything_matched(self, repo, store):
+        out = m.concept__upsert(str(repo), concept(), remove={"invariants": ["stale"]})
+        assert out == {"ok": True, "name": "a-concept", "module": "taskfw/store.py"}
+
+    def test_tool_returns_unknown_field_as_error(self, repo, store):
+        out = m.concept__upsert(str(repo), concept(), remove={"bogus": ["x"]})
+        assert "error" in out
+
+
 class TestQueries:
     @pytest.fixture
     def populated(self, repo):

@@ -214,6 +214,17 @@ concept__upsert(repo="<abs repo path>", concept={
 
 `upsert` merges, so updating one field cannot silently drop invariants you did not mention. An explicit empty list still clears a field — deletion stays possible, it just has to be deliberate.
 
+**Retracting a stale or reworded entry.** Because list fields union by exact string, sending a corrected sentence keeps the old one beside it. Retract the old one in the same call with `remove` — copy its exact text from `concept__get`:
+
+```python
+concept__upsert(repo="<abs repo path>",
+    concept={"name": "<slug>", "module": "<file>", "description": "...",
+             "invariants": ["<new wording>"]},
+    remove={"invariants": ["<old wording, exact>"]})
+```
+
+`remove` works on `contracts`, `invariants`, `evidence` and `related`, and runs before the payload merges in. If the response has `not_found`, those strings were not stored — the stale entry is still there under different wording; fix the text and retry. Do not hand-edit `concepts.json`.
+
 Skip where the change was test-only or doc-only with no new behaviour to capture. Skip silently if the repo has no store.
 
 **Sanctity check — evidence citations for files this task touched or deleted.** If the repo has a `symbol_resolver.py` (task:85e6001f / task:ba5d5aed's `file:symbol` convention), a task that deletes or renames a symbol can silently leave another concept's evidence pointing at code that no longer exists — that concept was not necessarily this task's own, so it will not surface via `concept__uncovered`. For every file this task deleted, moved, or renamed a top-level symbol in, grep `concepts.json` for citations into that file and re-resolve them:
@@ -223,7 +234,7 @@ Skip where the change was test-only or doc-only with no new behaviour to capture
 # a bare file citation only needs Path(file).exists()
 ```
 
-A citation that no longer resolves means either the citation is stale (fix or drop it via `concept__upsert`) or the whole concept describes code that's gone (flag it to the user — **never delete a concept unilaterally**, per the rule above). This is cheap only because it's scoped to files the task actually touched; a full-repo sweep belongs to a dedicated task, not every introspection pass.
+A citation that no longer resolves means either the citation is stale (fix or drop it via `concept__upsert` with `remove={"evidence": [...]}`) or the whole concept describes code that's gone (flag it to the user — **never delete a concept unilaterally**, per the rule above). This is cheap only because it's scoped to files the task actually touched; a full-repo sweep belongs to a dedicated task, not every introspection pass.
 
 ## Step 9 — Output
 

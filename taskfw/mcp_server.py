@@ -1282,19 +1282,32 @@ def concept__search(repo: str, query: str) -> dict[str, Any]:
 
 
 @_tool()
-def concept__upsert(repo: str, concept: dict) -> dict[str, Any]:
+def concept__upsert(repo: str, concept: dict, remove: dict | None = None) -> dict[str, Any]:
     """Insert or merge a concept.
 
     Merges rather than overwrites, so updating one field cannot silently drop
     invariants the caller did not mention. Requires name, module, description.
     `related` (other concept slugs) is capped at 3 entries — a merge that
     would overflow it is rejected rather than silently truncated.
+
+    To retract a stale entry, pass `remove={field: [exact strings]}` for
+    contracts, invariants, evidence or related — no need to restate or clear
+    the rest of the list. To reword an entry, remove the old string and pass
+    the new one in `concept` in the same call. Removal happens before the
+    payload is merged in. Strings that were not stored are listed under
+    `not_found` and the rest of the call still applies; copy the exact text
+    from concept__get. An unknown field in `remove` is an error.
     """
+    store_ = ConceptStore(repo)
     try:
-        merged = ConceptStore(repo).upsert(concept)
+        not_found = store_.unmatched_removals(concept.get("name", ""), remove)
+        merged = store_.upsert(concept, remove=remove)
     except ValueError as exc:
         return {"error": str(exc)}
-    return {"ok": True, "name": merged["name"], "module": merged["module"]}
+    out: dict[str, Any] = {"ok": True, "name": merged["name"], "module": merged["module"]}
+    if not_found:
+        out["not_found"] = not_found
+    return out
 
 
 @_tool()
