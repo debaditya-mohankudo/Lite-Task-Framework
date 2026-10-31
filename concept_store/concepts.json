@@ -863,7 +863,8 @@
         "parent (the caller's session name) is required and the prompt ends with the shared report-back sentence",
         "max_life_minutes must be a whole number >= 1; the MCP tool caps it at 60 and defaults to 60",
         "No perl on PATH means KittyError and no tab, never a tab without its limit",
-        "Without max_life_minutes the launched argv is unchanged"
+        "Without max_life_minutes the launched argv is unchanged",
+        "plain_tab_result returns (window id, model, model source) and tasks__open_plain_tab reports model and model_source; plain_tab stays the window id only, which the CLI prints"
       ],
       "created_at": "2026-10-31T03:18:29.893943+00:00",
       "description": "plain_tab opens a claude tab that belongs to no task. With max_life_minutes it runs claude under `perl -e 'alarm shift; exec @ARGV'`, so SIGALRM ends claude itself after the limit and kitty closes the window. Exposed to sessions as tasks__open_plain_tab (60-minute cap) via kitty_open.open_plain_tab and `launcher open-plain`.",
@@ -877,7 +878,7 @@
       "invariants": [
         "The limit runs inside the window's own process, so it can never close a different window (a window id reused after a kitty restart)"
       ],
-      "last_validated": "2026-10-31T03:18:29.893965+00:00",
+      "last_validated": "2026-10-31T03:30:18.362000+00:00",
       "module": "taskfw/kitty/launcher.py",
       "name": "kitty-plain-tab-max-life",
       "related": [
@@ -2120,6 +2121,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-31T03:18:29.894022+00:00"
+    "updated_at": "2026-10-31T03:30:18.362069+00:00"
   }
 }
