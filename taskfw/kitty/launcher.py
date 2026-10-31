@@ -197,7 +197,8 @@ def record_model_decision(db: str | Path, task_id: str, model: str, source: str)
 
 def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title: str | None = None,
               *, claude: str | None = None, path: str | None = None, parent: str | None = None,
-              model: str | None = None, model_reason: str | None = None) -> int:
+              model: str | None = None, model_reason: str | None = None,
+              max_life_minutes: int | None = None) -> int:
     """A claude tab in `cwd` that belongs to no task; returns its window id. cwd is the directory
     whose `.claude/skills` the tab will see. `parent` is the caller's session name and is required: the
     prompt ends with the shared report-back sentence, so the tab messages the caller when it finishes.
@@ -206,7 +207,11 @@ def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title:
     MCP server its directory and the user config define (that project has its own MCP needs).
     The model is `model` if given, else chosen from the prompt (models.for_prompt); the choice and its
     reason go to stderr, since stdout carries only the window id. `model_reason` is the caller's one-line
-    why for `model`; it is what gets reported as the source."""
+    why for `model`; it is what gets reported as the source.
+    `max_life_minutes` ends the tab that many minutes after launch: claude runs under `perl -e 'alarm ...; exec'`,
+    so SIGALRM kills claude itself and kitty closes the window. The limit lives inside the window's own process,
+    so it can never close a different window (a window id reused after a kitty restart), and perl ships with
+    macOS. No perl means no tab, never a tab without its limit."""
     cwd = str(Path(cwd).expanduser().resolve())
     if not Path(cwd).is_dir():
         raise KittyError(f"cwd {cwd!r} is not a directory")
@@ -217,10 +222,16 @@ def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title:
     # chosen from the caller's prompt alone: the report-back sentence would skew the keyword/length rules
     chosen, source = models.pick(model, lambda: models.for_prompt(prompt), model_reason)
     prompt = " ".join(filter(None, [prompt, report_back(parent, "the outcome in one line")]))
+    cmd = claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt, model=chosen)
+    if max_life_minutes is not None:
+        if not isinstance(max_life_minutes, int) or max_life_minutes < 1:
+            raise KittyError("max_life_minutes must be a whole number of minutes, at least 1")
+        perl = shutil.which("perl")
+        if not perl:
+            raise KittyError("perl not found: a tab with a max life cannot be limited without it")
+        cmd = [perl, "-e", "alarm shift; exec @ARGV", str(max_life_minutes * 60), *cmd]
     wid = adapter.launch(cwd=cwd, env={"PATH": path if path is not None else os.environ.get("PATH", "")},
-                         cmd=claude_cmd(claude or shutil.which("claude") or "claude", None, None, prompt,
-                                        model=chosen),
-                         title=title)
+                         cmd=cmd, title=title)
     log.info("kitty plain window=%s cwd=%s model=%s model_source=%s", wid, cwd, chosen or "default", source)
     print(f"model={chosen or 'default'} ({source})"
           + ("" if model else "; chosen by fallback rules, not by the caller"), file=sys.stderr)
@@ -340,6 +351,8 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     pl.add_argument("--title", default=None, help="tab title")
     pl.add_argument("--model", default=None, help="claude --model for the tab; default: chosen from the prompt")
     pl.add_argument("--model-reason", default=None, help="one line on why --model")
+    pl.add_argument("--max-life-minutes", type=int, default=None,
+                    help="end the tab this many minutes after launch; default: no limit")
     pl.add_argument("--parent", required=True,
                     help="caller's session name (as ListAgents prints it); the tab SendMessages it when finished")
     o = sub.add_parser("open", help="open a task in a tab if kitty allows; always prints JSON, exits 0")
@@ -352,6 +365,14 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
                    help="run in a git worktree of the --worktree directory's repo, derived from the task id")
     o.add_argument("--no-isolate", dest="isolate", action="store_false",
                    help="never isolate; default: isolate only when another live tab shares the repo")
+    op = sub.add_parser("open-plain", help="open a task-less tab if kitty allows; always prints JSON, exits 0")
+    op.add_argument("--cwd", default=None)
+    op.add_argument("--prompt", default=None)
+    op.add_argument("--title", default=None)
+    op.add_argument("--model", default=None)
+    op.add_argument("--model-reason", default=None)
+    op.add_argument("--max-life-minutes", type=int, default=None)
+    op.add_argument("--parent", required=True)
     c = sub.add_parser("cleanup", help="remove a task's worktree and branch; refuses dirty or unmerged work")
     c.add_argument("task_id")
     a = ap.parse_args(argv)
@@ -366,6 +387,12 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
             print(f"error: {e}", file=sys.stderr)
             return 1
         return 0
+    if a.cmd == "open-plain":  # socket optional here too; nothing below may fail the caller
+        from .opener import open_plain
+        print(json.dumps(open_plain(a.cwd or os.getcwd(), socket=a.socket, env=env, prompt=a.prompt,
+                                    title=a.title, parent=a.parent, model=a.model, model_reason=a.model_reason,
+                                    max_life_minutes=a.max_life_minutes).as_dict()))
+        return 0
     if a.cmd == "open":  # socket optional here and nothing below may fail the caller
         from .opener import open_task
         # the directory is only a base here: the opener isolates it (or not) once it knows the live tabs
@@ -378,7 +405,8 @@ def main(argv: list[str] | None = None, *, env: Mapping[str, str] = os.environ) 
     if a.cmd == "plain":  # no hooks file, no store: check_install and Store do not apply
         try:
             print(plain_tab(KittyAdapter(a.socket), a.cwd or os.getcwd(), a.prompt, a.title, parent=a.parent,
-                             model=a.model, model_reason=a.model_reason))
+                             model=a.model, model_reason=a.model_reason,
+                             max_life_minutes=a.max_life_minutes))
         except KittyError as e:
             print(f"error: {e}", file=sys.stderr)
             return 1

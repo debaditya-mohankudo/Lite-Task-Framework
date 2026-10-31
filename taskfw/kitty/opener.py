@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from .adapter import KittyAdapter, KittyError, KittyVersionMismatch, normalize_socket
-from .launcher import Launcher, check_install, log, mcp_choice, task_model_reader
+from .launcher import Launcher, check_install, log, mcp_choice, plain_tab, task_model_reader
 from taskfw.config import DB_PATH
 from .store import Store
 from . import worktrees
@@ -158,3 +158,44 @@ def _choose_directory(task_id, wt, isolate, st, windows) -> tuple[Path, bool, st
     why = (f"isolated: task {sibling} has a live tab in {repo}" if sibling
            else "isolated: requested")
     return worktrees.ensure(repo, task_id), True, why
+
+
+def open_plain(cwd: str | None = None, *, socket: str | None = None, env: Mapping[str, str] = os.environ,
+               adapter_factory: Callable[[str], KittyAdapter] = KittyAdapter, socket_glob: str = SOCKET_GLOB,
+               claude: str | None = None, prompt: str | None = None, title: str | None = None,
+               parent: str | None = None, model: str | None = None, model_reason: str | None = None,
+               max_life_minutes: int | None = None) -> OpenResult:
+    """A task-less tab (launcher.plain_tab) found the way `open_task` finds its kitty: given socket, else
+    $KITTY_LISTEN_ON, else /tmp/kitty-*. No task row, so no store, no hooks check and no `exists` case.
+    Never raises: anything that stops the tab is a not_opened result with a reason."""
+    try:
+        candidates = [socket] if socket else ([env["KITTY_LISTEN_ON"]] if env.get("KITTY_LISTEN_ON") else [])
+        if not socket:
+            candidates += sorted(glob.glob(socket_glob))
+        live: dict[str, KittyAdapter] = {}
+        problem = None
+        for c in dict.fromkeys(normalize_socket(c) for c in candidates):
+            try:
+                ad = adapter_factory(c)
+                ad.ls()
+                live[c] = ad
+            except KittyVersionMismatch as e:
+                problem = f"unsupported kitty: {e}"
+            except KittyError as e:
+                problem = problem or f"{c}: {e}"
+        if not live:
+            return _not_opened("no kitty socket: not inside kitty and no /tmp/kitty-* found" if not candidates
+                               else (problem or "kitty is not running"))
+        preferred = normalize_socket(socket or env["KITTY_LISTEN_ON"]) if (socket or env.get("KITTY_LISTEN_ON")) else None
+        if preferred in live:
+            target = preferred
+        elif len(live) == 1:
+            target = next(iter(live))
+        else:
+            return _not_opened(f"{len(live)} kitty instances are running and none was chosen; pass --socket")
+        wid = plain_tab(live[target], cwd or os.getcwd(), prompt, title, claude=claude, parent=parent,
+                        model=model, model_reason=model_reason, max_life_minutes=max_life_minutes)
+        return OpenResult("opened", wid, target, None, str(Path(cwd or os.getcwd()).expanduser().resolve()))
+    except Exception as e:  # the whole point: nothing escapes into the caller
+        log.info("kitty open-plain status=not_opened reason=%s", e)
+        return _not_opened(f"{type(e).__name__}: {e}")

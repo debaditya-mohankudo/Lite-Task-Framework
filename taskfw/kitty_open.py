@@ -61,6 +61,33 @@ def _command(env: dict[str, str]) -> tuple[list[str] | None, str]:
     return [sys.executable, "-m", "taskfw.kitty.launcher"], ""
 
 
+def _run_launcher(argv: list[str], runner: Callable[..., Any], env: dict[str, str], timeout: float,
+                  sub: str, retry_hint: str = "") -> dict[str, Any]:
+    """Run the launcher child and return its parsed JSON; when it cannot run or its output is unusable,
+    a not_opened dict carrying `_failed: True` so the caller returns it as is. Never raises."""
+    def failed(reason: str) -> dict[str, Any]:
+        return {**_not_opened(reason), "_failed": True}
+    try:
+        proc = runner(
+            argv, capture_output=True, text=True, timeout=timeout, env=env,
+            stdin=subprocess.DEVNULL,  # never share the MCP server's stdio stream
+        )
+    except subprocess.TimeoutExpired:
+        return failed(f"kitty launcher {sub} timed out after {timeout:g}s; the tab may still have launched"
+                      + retry_hint)
+    except Exception as e:  # missing executable, permission, anything else
+        return failed(f"could not run the kitty launcher: {type(e).__name__}: {e}")
+    try:
+        data = json.loads(proc.stdout)
+    except (TypeError, ValueError):
+        err = (proc.stderr or "").strip().splitlines()
+        tail = f": {err[-1]}" if err else ""
+        return failed(f"unparseable kitty launcher output (exit {proc.returncode}){tail}")
+    if not isinstance(data, dict) or data.get("status") not in _STATUSES:
+        return failed("unexpected kitty launcher output: no recognised status")
+    return data
+
+
 def open_task(
     task_id: str,
     worktree: str,
@@ -90,26 +117,9 @@ def open_task(
             argv += ["--model-reason", model_reason]
     if isolate is not None:  # unset leaves the launcher to decide from live sibling tabs
         argv.append("--isolate" if isolate else "--no-isolate")
-    try:
-        proc = runner(
-            argv, capture_output=True, text=True, timeout=timeout, env=env,
-            stdin=subprocess.DEVNULL,  # never share the MCP server's stdio stream
-        )
-    except subprocess.TimeoutExpired:
-        return _not_opened(
-            f"kitty launcher open timed out after {timeout:g}s; the tab may still have "
-            "launched, retry reports `exists` if so"
-        )
-    except Exception as e:  # missing executable, permission, anything else
-        return _not_opened(f"could not run the kitty launcher: {type(e).__name__}: {e}")
-    try:
-        data = json.loads(proc.stdout)
-    except (TypeError, ValueError):
-        err = (proc.stderr or "").strip().splitlines()
-        tail = f": {err[-1]}" if err else ""
-        return _not_opened(f"unparseable kitty launcher output (exit {proc.returncode}){tail}")
-    if not isinstance(data, dict) or data.get("status") not in _STATUSES:
-        return _not_opened("unexpected kitty launcher output: no recognised status")
+    data = _run_launcher(argv, runner, env, timeout, "open", "; retry reports `exists` if so")
+    if data.pop("_failed", False):
+        return data
     return {
         "status": data["status"],
         "window_id": data.get("window_id"),
@@ -120,3 +130,41 @@ def open_task(
         "model": data.get("model"),
         "model_source": data.get("model_source"),
     }
+
+
+def open_plain_tab(
+    cwd: str,
+    parent: str,
+    prompt: str = "",
+    title: str = "",
+    model: str = "",
+    model_reason: str = "",
+    max_life_minutes: int | None = None,
+    runner: Callable[..., Any] = subprocess.run,
+    env: dict[str, str] | None = None,
+    timeout: float = TIMEOUT_S,
+) -> dict[str, Any]:
+    """Run `taskfw.kitty.launcher open-plain --cwd C --parent P [...]`; never raises.
+
+    A task-less tab: no task row is created, so there is nothing to purge or exclude from readers.
+    Returns {status, window_id, socket, reason, model, model_source}; status is opened or not_opened.
+    """
+    env = dict(os.environ if env is None else env)
+    cmd, why_not = _command(env)
+    if cmd is None:
+        return _not_opened(why_not)
+    argv = [*cmd, "open-plain", "--cwd", cwd, "--parent", parent]
+    if prompt:
+        argv += ["--prompt", prompt]
+    if title:
+        argv += ["--title", title]
+    if model:
+        argv += ["--model", model]
+        if model_reason:
+            argv += ["--model-reason", model_reason]
+    if max_life_minutes is not None:
+        argv += ["--max-life-minutes", str(max_life_minutes)]
+    data = _run_launcher(argv, runner, env, timeout, "open-plain")
+    if data.pop("_failed", False):
+        return data
+    return {key: data.get(key) for key in ("status", "window_id", "socket", "reason", "model", "model_source")}

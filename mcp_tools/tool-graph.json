@@ -42,6 +42,7 @@
     "tasks__add_commit": {"namespace": "tasks", "use": "Record that a commit implemented a task. Idempotent.", "hooks": []},
     "tasks__set_active": {"namespace": "tasks", "use": "Set the in-memory active-task pointer, replacing any previous one; not persisted. Carries loop_debt_nudge / task_debt_nudge and ungroomed_start_nudge when the task was never groomed.", "hooks": ["_loop_debt_hook", "_ungroomed_start_hook"]},
     "tasks__open_in_kitty": {"namespace": "tasks", "use": "Open a task in a kitty tab via `kitty-taskfw open`; fail-soft, returns opened / exists / not_opened with a reason.", "hooks": []},
+    "tasks__open_plain_tab": {"namespace": "tasks", "use": "Open a throwaway claude tab in kitty that belongs to no task (no row, nothing to purge); requires the caller's session name as parent and ends after max_life_minutes (1-60, default 60). Fail-soft.", "hooks": []},
     "tasks__active": {"namespace": "tasks", "use": "The active task for this workspace, if any, plus server.stale (loaded vs current git sha). In-memory only.", "hooks": []},
     "concept__list": {"namespace": "concept", "use": "Architectural concepts for a repo, optionally filtered to one module.", "hooks": []},
     "concept__get": {"namespace": "concept", "use": "One concept by slug.", "hooks": []},

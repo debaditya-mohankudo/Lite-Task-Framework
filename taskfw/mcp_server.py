@@ -252,6 +252,8 @@ def _stale_memory_hook(result: dict[str, Any]) -> None:
 #: (tasks__set_active, tasks__create) are hit far more often per session
 #: (task:07f9270c's grooming).
 _LOOP_DEBT_LIMIT = 10
+#: Longest life of a task-less kitty tab (tasks__open_plain_tab): a throwaway run, gone within the hour.
+MAX_PLAIN_TAB_LIFE_MINUTES = 60
 
 
 def _loop_debt_hook(result: dict[str, Any]) -> None:
@@ -1199,6 +1201,48 @@ def tasks__open_in_kitty(task_id: str, parent: str, worktree: str = "", prompt: 
     if result.get("status") == "opened" and not model.strip():
         result["model_note"] = ("model was picked by fallback rules (keywords and size), not by the caller; "
                                 "pass model and model_reason so the session that read the task chooses")
+    return result
+
+
+@_tool()
+def tasks__open_plain_tab(parent: str, prompt: str, cwd: str = "", title: str = "scratch",
+                          model: str = "", model_reason: str = "",
+                          max_life_minutes: int = 60) -> dict[str, Any]:
+    """Open a throwaway claude tab in kitty that belongs to no task. Fail-soft and optional.
+
+    For a run you want to watch and discard (an experiment, a read-only check): no task row is created,
+    so nothing persists, nothing needs purging, and list/search/grooming never see it. Does not touch
+    the active pointer. Returns {status, window_id, socket, reason, model, model_source, closes_in_minutes};
+    status is opened or not_opened (a broken kitty setup, a bad argument), never an exception.
+
+    parent is required: the caller's session name (as ListAgents prints it; the server cannot know it).
+    The prompt ends with the shared report-back sentence, so the tab SendMessages the parent the outcome
+    in one line when finished; a tab with no parent would strand its result. One line, no control characters.
+    prompt is claude's initial argument (the brief; submitted at startup). cwd is the directory whose
+    .claude/skills the tab sees; omitted, it is this workspace. title is the kitty tab title.
+    max_life_minutes (1-60, default 60) ends the tab that long after launch: the limit runs inside the
+    window's own process, so it cannot close a different window. Over 60 is not_opened.
+    model / model_reason: as tasks__open_in_kitty, you choose and give one line why; omitted, the launcher's
+    rules pick and the result's `model_note` says so. Use a task (tasks__create + tasks__open_in_kitty)
+    instead when the work edits files or must leave a trail.
+    """
+    def refuse(reason: str) -> dict[str, Any]:
+        return {"status": "not_opened", "window_id": None, "socket": None, "reason": reason}
+    if not parent.strip():
+        return refuse("parent is required: pass the caller's session name (as ListAgents prints it)")
+    if bad := kitty_open.bad_parent(parent):
+        return refuse(bad)
+    if not prompt.strip():
+        return refuse("prompt is required: a throwaway tab with no brief has nothing to do")
+    if not 1 <= max_life_minutes <= MAX_PLAIN_TAB_LIFE_MINUTES:
+        return refuse(f"max_life_minutes must be between 1 and {MAX_PLAIN_TAB_LIFE_MINUTES}")
+    result = kitty_open.open_plain_tab(cwd or _workspace(), parent, prompt, title, model, model_reason,
+                                       max_life_minutes)
+    if result.get("status") == "opened":
+        result["closes_in_minutes"] = max_life_minutes
+        if not model.strip():
+            result["model_note"] = ("model was picked by fallback rules (keywords and size), not by the caller; "
+                                    "pass model and model_reason so the session that read the brief chooses")
     return result
 
 

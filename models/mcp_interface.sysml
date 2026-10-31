@@ -71,6 +71,7 @@ package McpInterface {
         item tasks__add_commit;
         item tasks__set_active;
         item tasks__open_in_kitty;
+        item tasks__open_plain_tab;
         item tasks__active;
     }
 
