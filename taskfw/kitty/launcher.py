@@ -195,11 +195,12 @@ def record_model_decision(db: str | Path, task_id: str, model: str, source: str)
         log.warning("kitty model decision not recorded task=%s: %s", task_id, e)
 
 
-def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title: str | None = None,
+def plain_tab_result(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title: str | None = None,
               *, claude: str | None = None, path: str | None = None, parent: str | None = None,
               model: str | None = None, model_reason: str | None = None,
-              max_life_minutes: int | None = None) -> int:
-    """A claude tab in `cwd` that belongs to no task; returns its window id. cwd is the directory
+              max_life_minutes: int | None = None) -> tuple[int, str | None, str]:
+    """A claude tab in `cwd` that belongs to no task; returns (window id, model, model source), model
+    None when claude's own default applies. `plain_tab` is this with only the window id. cwd is the directory
     whose `.claude/skills` the tab will see. `parent` is the caller's session name and is required: the
     prompt ends with the shared report-back sentence, so the tab messages the caller when it finishes.
     A plain tab has no task row to read an outcome from, so without a parent its result would be lost.
@@ -235,8 +236,13 @@ def plain_tab(adapter: KittyAdapter, cwd: str, prompt: str | None = None, title:
     log.info("kitty plain window=%s cwd=%s model=%s model_source=%s", wid, cwd, chosen or "default", source)
     print(f"model={chosen or 'default'} ({source})"
           + ("" if model else "; chosen by fallback rules, not by the caller"), file=sys.stderr)
-    return wid
+    return wid, chosen, source
 
+
+
+def plain_tab(*args, **kwargs) -> int:
+    """The window id of `plain_tab_result`: what the CLI prints and most callers need."""
+    return plain_tab_result(*args, **kwargs)[0]
 
 class Launcher:
     def __init__(self, adapter: KittyAdapter, store: Store, *, hooks: str | Path = DEFAULT_HOOKS,

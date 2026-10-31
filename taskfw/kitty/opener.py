@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from .adapter import KittyAdapter, KittyError, KittyVersionMismatch, normalize_socket
-from .launcher import Launcher, check_install, log, mcp_choice, plain_tab, task_model_reader
+from .launcher import Launcher, check_install, log, mcp_choice, plain_tab_result, task_model_reader
 from taskfw.config import DB_PATH
 from .store import Store
 from . import worktrees
@@ -193,9 +193,11 @@ def open_plain(cwd: str | None = None, *, socket: str | None = None, env: Mappin
             target = next(iter(live))
         else:
             return _not_opened(f"{len(live)} kitty instances are running and none was chosen; pass --socket")
-        wid = plain_tab(live[target], cwd or os.getcwd(), prompt, title, claude=claude, parent=parent,
-                        model=model, model_reason=model_reason, max_life_minutes=max_life_minutes)
-        return OpenResult("opened", wid, target, None, str(Path(cwd or os.getcwd()).expanduser().resolve()))
+        wid, chosen, source = plain_tab_result(
+            live[target], cwd or os.getcwd(), prompt, title, claude=claude, parent=parent,
+            model=model, model_reason=model_reason, max_life_minutes=max_life_minutes)
+        return OpenResult("opened", wid, target, None, str(Path(cwd or os.getcwd()).expanduser().resolve()),
+                          None, chosen, source)
     except Exception as e:  # the whole point: nothing escapes into the caller
         log.info("kitty open-plain status=not_opened reason=%s", e)
         return _not_opened(f"{type(e).__name__}: {e}")

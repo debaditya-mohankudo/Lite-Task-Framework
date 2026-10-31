@@ -152,10 +152,12 @@ def test_open_plain_launches_on_the_one_live_socket(tmp_path, monkeypatch):
             return []
 
     seen = {}
-    monkeypatch.setattr(opener, "plain_tab", lambda ad, cwd, prompt, title, **kw: seen.update(kw) or 9)
+    monkeypatch.setattr(opener, "plain_tab_result",
+                        lambda ad, cwd, prompt, title, **kw: seen.update(kw) or (9, "claude-sonnet-5", "caller: cheap"))
     r = opener.open_plain(str(tmp_path), socket="/tmp/k-1", env={}, adapter_factory=Ad, parent="sess-1",
                           max_life_minutes=7)
     assert r.status == "opened" and r.window_id == 9 and seen["max_life_minutes"] == 7
+    assert (r.model, r.model_source) == ("claude-sonnet-5", "caller: cheap")
 
 
 def test_open_plain_never_raises(tmp_path, monkeypatch):
@@ -166,6 +168,16 @@ def test_open_plain_never_raises(tmp_path, monkeypatch):
         def ls(self):
             return []
 
-    monkeypatch.setattr(opener, "plain_tab", lambda *a, **k: (_ for _ in ()).throw(KittyError("parent is required")))
+    monkeypatch.setattr(opener, "plain_tab_result",
+                        lambda *a, **k: (_ for _ in ()).throw(KittyError("parent is required")))
     r = opener.open_plain(str(tmp_path), socket="/tmp/k-1", env={}, adapter_factory=Ad, parent="")
     assert r.status == "not_opened" and "parent is required" in r.reason
+
+
+def test_plain_tab_result_names_the_model_and_why_and_plain_tab_is_its_window_id(tmp_path):
+    from taskfw.kitty.launcher import plain_tab_result
+    ad = FakeAdapter()
+    wid, model, source = plain_tab_result(ad, str(tmp_path), "x", claude="/bin/claude", parent="sess-1",
+                                          model="claude-sonnet-5", model_reason="cheap check")
+    assert (wid, model) == (11, "claude-sonnet-5") and source == "caller: cheap check"
+    assert plain_tab(ad, str(tmp_path), "x", claude="/bin/claude", parent="sess-1") == 11
