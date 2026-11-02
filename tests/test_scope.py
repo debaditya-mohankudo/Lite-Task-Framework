@@ -150,6 +150,67 @@ class TestLocalRoot:
         assert scope_mod.local_root("git:github.com/someone/else") is None
 
 
+class TestCreateScope:
+    """A new task belongs to the repo its work is in, not the one the session began in.
+
+    The bug (task:ff8e0dfa): the server derived every new task's scope from
+    its own launch directory. A session started in repo A that created a task
+    for repo B stamped the task with A. Nothing failed, and every scoped read
+    of that task was silently wrong afterwards. These tests use two real git
+    repos, because what is being tested is exactly which repo git reports.
+    """
+
+    @pytest.fixture
+    def two_repos(self, tmp_path, monkeypatch, store):
+        m.set_store(store)
+        monkeypatch.delenv("TASKFW_SCOPE", raising=False)
+        a = git_repo(tmp_path / "a", "git@github.com:Org/Alpha.git")
+        b = git_repo(tmp_path / "b", "git@github.com:Org/Beta.git")
+        monkeypatch.chdir(a)          # the session started in A
+        yield a, b
+        m.set_store(None)
+
+    def created(self, **kw):
+        r = m.tasks__create(title="t", **kw)
+        assert r.get("ok"), r
+        return r
+
+    def test_absolute_files_in_another_repo_win_over_the_launch_dir(self, two_repos):
+        _, b = two_repos
+        r = self.created(files=[str(b / "pkg" / "mod.py")])
+        assert (r["scope"], r["scope_source"]) == ("git:github.com/org/beta", "files")
+        assert m.store().get(r["id"]).scope == "git:github.com/org/beta"
+
+    def test_explicit_repo_beats_files(self, two_repos):
+        a, b = two_repos
+        r = self.created(repo=str(b), files=[str(a / "x.py")])
+        assert (r["scope"], r["scope_source"]) == ("git:github.com/org/beta", "explicit")
+
+    def test_explicit_scope_value_passes_through(self, two_repos):
+        r = self.created(repo="git:github.com/org/gamma")
+        assert (r["scope"], r["scope_source"]) == ("git:github.com/org/gamma", "explicit")
+
+    def test_a_file_not_created_yet_resolves_from_its_nearest_ancestor(self, two_repos):
+        _, b = two_repos
+        r = self.created(files=[str(b / "new" / "deeper" / "file.py")])
+        assert r["scope"] == "git:github.com/org/beta"
+
+    def test_relative_files_fall_back_to_the_launch_dir_and_say_so(self, two_repos):
+        r = self.created(files=["pkg/mod.py"])
+        assert (r["scope"], r["scope_source"]) == ("git:github.com/org/alpha", "server_cwd")
+
+    def test_files_spanning_two_repos_pick_neither(self, two_repos):
+        a, b = two_repos
+        r = self.created(files=[str(a / "x.py"), str(b / "y.py")])
+        assert r["scope_source"] == "server_cwd"
+
+    def test_files_outside_any_git_repo_do_not_name_a_project(self, two_repos, tmp_path):
+        plain = tmp_path / "plain"
+        plain.mkdir()
+        r = self.created(files=[str(plain / "notes.md")])
+        assert r["scope_source"] == "server_cwd"
+
+
 class TestTaskField:
     def test_scope_round_trips(self, store):
         store.save(Task(title="t", scope="git:github.com/org/repo"))

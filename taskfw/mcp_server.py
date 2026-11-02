@@ -30,7 +30,7 @@ from taskfw.introspection import IntrospectionReport, has_content
 from taskfw.log import get_logger
 from taskfw.memory import MemoryStore, Rejected, slim_row
 from taskfw.risk import coerce, normalise_text
-from taskfw.scope import derive as derive_scope, for_repo as scope_for_repo
+from taskfw.scope import derive as derive_scope, for_create as scope_for_create, for_repo as scope_for_repo
 from taskfw.task import ResolutionItem, Task, new_id
 from taskfw.store import TaskStore
 
@@ -491,8 +491,16 @@ def tasks__create(
     files: list[str] | None = None,
     tags: list[str] | None = None,
     notes: str = "",
+    repo: str = "",
 ) -> dict[str, Any]:
     """Create a task or epic.
+
+    `repo` names the project the task belongs to: a repo path or a scope
+    value. Omitted, the scope comes from the task's absolute `files` when
+    they all sit in one git repo, and only then from the directory this
+    server was launched in. The response carries `scope` and `scope_source`
+    (explicit / files / server_cwd), so a fallback to the launch directory is
+    visible rather than silent (task:ff8e0dfa).
 
     epic=True groups other tasks and cannot have a parent; epic=False (the
     default) does work. resolution is a list of checklist item texts — there
@@ -517,14 +525,15 @@ def tasks__create(
     creating the next one still surfaces loop_debt_nudge, which would
     otherwise be lost now that the trailing tasks__set_active is discouraged.
     """
+    scope, scope_source = scope_for_create(repo, files)
     task = Task(
         title=title, epic=epic, parent=parent or None, motivation=motivation,
         resolution=[ResolutionItem(t) for t in (resolution or [])],
         files=files or [], tags=tags or [], notes=notes,
-        # Recorded at creation, when the workspace is a fact in hand, and
-        # never derived again afterwards — a task does not change project
-        # because someone later read it from somewhere else.
-        scope=derive_scope(),
+        # Recorded at creation and never derived again afterwards: a task
+        # does not change project because someone later read it from
+        # somewhere else.
+        scope=scope,
     )
     parent_task = store().get(task.parent) if task.parent else None
     if task.parent and parent_task is None:
@@ -535,7 +544,8 @@ def tasks__create(
     store().save(task)
     workspace = _workspace()
     store().set_active(task.id, workspace)
-    result: dict[str, Any] = {"ok": True, "id": task.id, "epic": task.epic, "status": task.status}
+    result: dict[str, Any] = {"ok": True, "id": task.id, "epic": task.epic, "status": task.status,
+                              "scope": task.scope, "scope_source": scope_source}
     candidates = TaskContext(store()).related(task)
     if candidates:
         result["related_candidates"] = candidates

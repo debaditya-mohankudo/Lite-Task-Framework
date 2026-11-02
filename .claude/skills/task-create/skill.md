@@ -41,6 +41,7 @@ tasks__create(
     files=["path/one.py", "path/two.py"],
     tags=["area", "kind"],
     notes="Anything the schema did not anticipate.",
+    repo="<abs repo path>",           # optional; the project this task belongs to — see Scope
 )
 ```
 
@@ -87,14 +88,20 @@ whether the original implementation sketch was followed exactly.
 
 Where `scope` comes from, what does *not* influence it, and how to fix it
 when it's wrong — see [docs/scope-graph.json](../../../docs/scope-graph.json)
-(nodes/edges, not prose). One-line summary: it's set once at `tasks__create`
-time from the directory the taskfw MCP server was **launched** in for this
-session — not wherever an agent's shell has since `cd`'d to, and not the
-harness's currently-reported working directory. Cross-repo work in one
-session needs a manual check: compare the returned `scope` against the real
-repo of `files`, and correct with `tasks__update(task_id,
-scope="git:<host>/<path>")` using that repo's actual git remote. See
-[[taskfw-scope-pins-to-server-process-cwd]] in loop memory.
+(nodes/edges, not prose). Summary: the scope is set once at `tasks__create`, from the
+first source that applies:
+
+1. `repo=` — a repo path or scope value you pass. **Pass it whenever the task's repo is
+   not the one the session started in.**
+2. `files` — when every absolute path in it sits in one git repo. Relative paths don't
+   count.
+3. The directory the taskfw server was **launched** in. This is the fallback, and it is
+   wherever the session began, not where you have since `cd`'d.
+
+The response carries `scope` and `scope_source` (`explicit` / `files` / `server_cwd`).
+If it says `server_cwd` and that is not the task's repo, fix it with
+`tasks__update(task_id, scope="git:<host>/<path>")` using that repo's actual git remote
+(see loop memory `taskfw-scope-pins-to-server-process-cwd`).
 
 ## Checklist items
 

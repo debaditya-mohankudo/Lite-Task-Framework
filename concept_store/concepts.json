@@ -1630,17 +1630,19 @@
       "confidence": 0.92,
       "contracts": [
         "normalise_remote(url) -> 'git:host/path' | None — pure, git-free, so the rule that decides whether two clones agree is testable without a repository. SSH and HTTPS spellings of one remote must produce the identical string.",
-        "workspace() -> str — TASKFW_SCOPE, else os.getcwd(); the one home of that lookup (task:b0f9f8de). derive()'s default and mcp_server._workspace (the active-pointer key) both call it, so a new task's Scope and its activation can never start from different directories. Read per call, never memoised.",
         "derive(cwd=None) -> str — never raises, never returns empty. Prefers the git origin, falls back to `path:<resolved abs>`. TASKFW_SCOPE selects the directory asked about, not the answer.",
         "for_repo(repo='') -> str — the sole writer of task_commits.repo. Empty derives cwd; an already-prefixed scope (git:/path:/hint:) is returned unchanged, so for_repo is idempotent; a real directory derives that directory; anything else is kept verbatim under `hint:`. Also the narrowing path for tasks__grooming_accuracy(scope=...), so a caller can pass the Scope a task carries (task:2a7eacc8).",
-        "Consumed by Task.scope (set once at tasks__create), TaskStore.add_commit, context._same_project, and accuracy.loop_debt/grooming_accuracy.",
         "local_root(scope) -> str | None — the local directory a scope's relative paths resolve against. path:<abs> returns that dir when it still exists; git:<id> returns the git toplevel of cwd ONLY when derive() == that same scope (a git scope names a repo, not a checkout, and the only checkout this process can point at is its own); hint: and '' return None. Never raises, never guesses — a foreign git scope returns None rather than the current repo's root.",
         "_toplevel(cwd) -> str | None — `git rev-parse --show-toplevel`, memoised per resolved directory (task:de2b48b1). Split out of local_root so the memoisation has the same shape, key and lifetime as derive()'s. Reached only from inside local_root's derive()==scope guard.",
         "reset_cache() — clears BOTH _cache (origins) and _toplevel_cache (toplevels); for tests that build repos mid-process.",
-        "_resolve_key(cwd) -> str — the shared cache-key resolution both derive() and _toplevel() use: the resolved absolute path, or `cwd` itself if resolve() raises. Extracted (task:de2b48b1 simplify pass) because the two callers had each written this same three-line try/except independently — the same duplication gitutil.run_git already exists to prevent one layer down, for the subprocess calls themselves."
+        "_resolve_key(cwd) -> str — the shared cache-key resolution both derive() and _toplevel() use: the resolved absolute path, or `cwd` itself if resolve() raises. Extracted (task:de2b48b1 simplify pass) because the two callers had each written this same three-line try/except independently — the same duplication gitutil.run_git already exists to prevent one layer down, for the subprocess calls themselves.",
+        "workspace() -> str — TASKFW_SCOPE, else os.getcwd(); the one home of that lookup (task:b0f9f8de). derive()'s default and mcp_server._workspace (the active-pointer key) both call it. Read per call, never memoised. Since task:ff8e0dfa, a new task's Scope is no longer always derive(workspace()): it may come from an explicit repo or from the task's files, while the active pointer stays keyed by the workspace directory. The two can now differ on purpose.",
+        "for_create(repo='', files=None) -> (scope, source) — a new task's scope and which source set it (task:ff8e0dfa). Precedence: explicit (non-empty repo, via for_repo), then files (for_files), then server_cwd (derive()). tasks__create returns both as `scope` and `scope_source`, so a fallback to the launch directory is visible.",
+        "for_files(files) -> str | None — the one `git:` scope every absolute (or ~) path in files lives in. Relative paths are ignored, and a non-existent path resolves from its nearest existing ancestor. Returns None when no absolute path is given, when the paths span more than one scope, or when any path has no `.git` ancestor (a path: scope names a directory, not a project). Checkout roots are found by a filesystem walk for `.git` (directory or worktree file), then derive() runs once per root: 12 files in 12 directories cost ~20 ms cold, not ~200.",
+        "Consumed by Task.scope (set once at tasks__create via for_create), TaskStore.add_commit, context._same_project, and accuracy.loop_debt/grooming_accuracy."
       ],
       "created_at": "2026-08-29T09:45:25.483284+00:00",
-      "description": "The single derivation of which project a record belongs to, and the only writer of that vocabulary. Produces a scheme-prefixed string from a working directory: git:<host>/<path> from the git origin, path:<abs> when there is no origin, hint:<raw> when a caller supplied a repo string that could not be resolved to a directory. Also turns a stored scope back into a local directory (local_root) for resolving a task's relative files. Both subprocess-backed answers are memoised per resolved directory. Exists because project identity was already being answered by hand, inconsistently.",
+      "description": "The single derivation of which project a record belongs to, and the only writer of that vocabulary. Produces a scheme-prefixed string from a working directory: git:<host>/<path> from the git origin, path:<abs> when there is no origin, hint:<raw> when a caller supplied a repo string that could not be resolved.",
       "evidence": [
         "taskfw/scope.py:normalise_remote",
         "taskfw/scope.py:derive",
@@ -1653,7 +1655,10 @@
         "taskfw/scope.py:reset_cache",
         "tests/test_scope.py:TestLocalRoot",
         "tests/test_scope.py:TestLocalRootMemoisation",
-        "taskfw/scope.py:_resolve_key"
+        "taskfw/scope.py:_resolve_key",
+        "taskfw/scope.py:for_create",
+        "taskfw/scope.py:for_files",
+        "tests/test_scope.py:TestCreateScope"
       ],
       "invariants": [
         "The scheme prefix is load-bearing, not decoration: a fallback value must never be comparable to a derived one, so `path:` and `hint:` can never equal a `git:` scope. This is the local form of the project rule that an omission must not look like an absence.",
@@ -1672,7 +1677,7 @@
         "Derivation-once is a property of the CODE, and as of task:e62cefe8 no longer a property of the DATA. 105 pre-scope rows were stamped by hand from this repo's own commit trailers; no function does this and none should. A row carries no marker distinguishing a hydrated scope from a derived one, so task:e62cefe8's record is the only provenance for those 105. The ontology's Scope term denied this outright ('never backfilled') until task:de2b48b1 corrected it; models/requirements.sysml had recorded it correctly all along.",
         "Scope filtering is SUPPLY-side, not demand-side. context._same_project(a, b) returns True whenever EITHER side is empty, so scoping a task changes which OTHER stores' bundles can exclude it; it does not change what that task's own bundle draws in."
       ],
-      "last_validated": "2026-09-07T16:05:35.969203+00:00",
+      "last_validated": "2026-11-02T11:59:59.104407+00:00",
       "module": "taskfw/scope.py",
       "name": "scope-derivation",
       "related": [
@@ -2121,6 +2126,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-10-31T03:30:18.362069+00:00"
+    "updated_at": "2026-11-02T11:59:59.104815+00:00"
   }
 }

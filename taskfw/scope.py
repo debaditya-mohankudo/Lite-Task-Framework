@@ -229,6 +229,79 @@ def for_repo(repo: str = "") -> str:
     return f"{HINT}{repo}"
 
 
+def for_files(files: list[str] | None) -> str | None:
+    """The one git scope every absolute path in `files` lives in, else None.
+
+    A task's `files` say where its work is, which the server's launch
+    directory does not. Only absolute (or `~`) paths count. A relative path
+    has no root of its own, and reading it against the server's cwd would
+    just restate the answer this exists to replace. A path that does not
+    exist yet, such as a file the task will create, is resolved from its
+    nearest existing ancestor.
+
+    The answer is all-or-nothing. If the paths span two repos, or any of them
+    sits outside a git checkout (a `path:` scope names a directory, not a
+    project), there is no single project to name, so this returns None and
+    the caller falls back rather than picking one.
+    """
+    roots: set[Path] = set()
+    for f in files or []:
+        p = Path(f).expanduser()
+        if not p.is_absolute():
+            continue
+        root = _checkout_root(p)
+        if root is None:
+            return None
+        roots.add(root)
+    # git runs once per checkout, not once per directory: twelve files in
+    # twelve directories of one repo cost one subprocess, not twelve (~17 ms
+    # each, measured on task:ff8e0dfa).
+    scopes = {derive(str(r)) for r in roots}
+    if len(scopes) != 1:
+        return None
+    (only,) = scopes
+    return only if only.startswith(GIT) else None
+
+
+def _checkout_root(path: Path) -> Path | None:
+    """The nearest directory at or above `path` holding a `.git` entry, else None.
+
+    A filesystem walk, not a git call. `.git` is a directory in a normal
+    clone and a file in a worktree, and `exists()` covers both.
+    """
+    d = path if path.is_dir() else path.parent
+    while True:
+        if (d / ".git").exists():
+            return d
+        if d == d.parent:
+            return None
+        d = d.parent
+
+
+def for_create(repo: str = "", files: list[str] | None = None) -> tuple[str, str]:
+    """A new task's scope and which source set it: (scope, source).
+
+    In order of precedence:
+
+      explicit    -- the caller named the repo; routed through for_repo, so a
+                     path or an existing scope value both work
+      files       -- the task's absolute `files` all sit in one git repo
+      server_cwd  -- neither, so the directory the server runs in, as before
+
+    The server's cwd comes last because it is the directory where a session
+    began, not where the work is. One session can create tasks for several
+    repos, and that fallback stamped them all with the first repo
+    (task:ff8e0dfa). The source is returned so that a fallback is visible
+    instead of looking like a decision.
+    """
+    if (repo or "").strip():
+        return for_repo(repo), "explicit"
+    from_files = for_files(files)
+    if from_files:
+        return from_files, "files"
+    return derive(), "server_cwd"
+
+
 def reset_cache() -> None:
     """Forget every derived scope and toplevel. For tests, which build repos
     mid-process.

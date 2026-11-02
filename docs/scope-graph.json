@@ -1,36 +1,46 @@
 {
   "meta": {
     "title": "Scope — where a task's `scope` field comes from",
-    "frame": "The task-create skill's '## Scope' section, as a graph instead of prose. Answers: where does scope come from, what does NOT influence it, what goes wrong, and what to do about it. Not an implementation trace of taskfw/scope.py -- see that file's docstring for the actual code path."
+    "frame": "The task-create skill's '## Scope' section, as a graph instead of prose. Answers: where does scope come from, in what order, what does NOT influence it, what goes wrong, and what to do about it. Not an implementation trace of taskfw/scope.py -- see for_create's docstring for the actual code path (task:ff8e0dfa)."
   },
   "relation_types": {
-    "determines": "the left node is what actually decides the right node's value",
+    "determines": "the left node decides the right node's value when every higher-precedence node is absent",
     "does_not_affect": "a plausible-looking influence that turns out to do nothing here",
     "causes": "left node's behavior produces right node as a consequence",
-    "fixes": "left node is the corrective action for the right node's problem"
+    "fixes": "left node is the corrective action for the right node's problem",
+    "reports": "left node is returned alongside right node so its source is visible"
   },
   "nodes": [
-    { "id": "server_launch_dir", "label": "Directory the taskfw MCP server was launched in", "kind": "fact",
-      "definition": "Fixed once, at session start. This is the actual source of scope -- long-lived, not touched again for the rest of the session." },
+    { "id": "explicit_repo", "label": "tasks__create(repo=...)", "kind": "fact", "precedence": 1,
+      "definition": "A repo path or a scope value the caller names. Wins over everything else. scope_source = explicit." },
+    { "id": "absolute_files", "label": "Absolute `files` that all sit in one git checkout", "kind": "fact", "precedence": 2,
+      "definition": "Used only if every absolute path has a .git ancestor and they all resolve to the same git: scope. Relative paths are ignored. Files spanning two repos, or outside any git checkout, give no answer. scope_source = files." },
+    { "id": "server_launch_dir", "label": "Directory the taskfw MCP server was launched in", "kind": "fact", "precedence": 3,
+      "definition": "The fallback, used only when neither of the above applies. Fixed once, at session start, so it is wherever the session began, not where the work is. scope_source = server_cwd." },
     { "id": "agent_cd", "label": "Agent running `cd` in a shell tool", "kind": "non_factor" },
     { "id": "harness_reported_cwd", "label": "Harness's reported \"current working directory\"", "kind": "non_factor",
       "definition": "Can change mid-conversation (e.g. after a shell cd). Looks like it should matter. Doesn't." },
     { "id": "task_scope", "label": "task.scope (git:<host>/<path> / path:<abs> / hint:<text>)", "kind": "outcome",
-      "definition": "Set once at tasks__create time from server_launch_dir's git remote (or its path, if no remote)." },
-    { "id": "cross_repo_session", "label": "Session touches a different repo than it started in", "kind": "situation" },
+      "definition": "Set once at tasks__create, from the highest-precedence source present. Never re-derived afterwards." },
+    { "id": "scope_source", "label": "scope_source in the tasks__create response", "kind": "fact",
+      "definition": "explicit / files / server_cwd. server_cwd is the one to look at twice." },
+    { "id": "cross_repo_session", "label": "Session creates a task for a different repo than it started in, with no repo= and no absolute files", "kind": "situation" },
     { "id": "mis_scoped_task", "label": "Task filed under the wrong project", "kind": "problem",
-      "definition": "Nothing errors. The task just sits under a scope that doesn't match `files`, until a listing looks off." },
-    { "id": "manual_check", "label": "Compare returned `scope` against the real repo of `files`", "kind": "action" },
+      "definition": "Nothing errors. The task just sits under a scope that doesn't match its work, and every scoped read miscounts it." },
+    { "id": "pass_repo", "label": "Pass repo=<abs repo path> to tasks__create", "kind": "action",
+      "definition": "The fix before the fact: when the session's start directory is not the task's repo." },
     { "id": "tasks_update_scope", "label": "tasks__update(task_id, scope=\"git:<host>/<path>\")", "kind": "action",
-      "definition": "Use the target repo's actual git remote, not a guessed name." }
+      "definition": "The fix after the fact. Use the target repo's actual git remote, not a guessed name." }
   ],
   "edges": [
+    { "from": "explicit_repo", "to": "task_scope", "relation": "determines" },
+    { "from": "absolute_files", "to": "task_scope", "relation": "determines" },
     { "from": "server_launch_dir", "to": "task_scope", "relation": "determines" },
+    { "from": "scope_source", "to": "task_scope", "relation": "reports" },
     { "from": "agent_cd", "to": "task_scope", "relation": "does_not_affect" },
     { "from": "harness_reported_cwd", "to": "task_scope", "relation": "does_not_affect" },
     { "from": "cross_repo_session", "to": "mis_scoped_task", "relation": "causes" },
-    { "from": "task_scope", "to": "mis_scoped_task", "relation": "causes" },
-    { "from": "manual_check", "to": "mis_scoped_task", "relation": "fixes" },
+    { "from": "pass_repo", "to": "mis_scoped_task", "relation": "fixes" },
     { "from": "tasks_update_scope", "to": "mis_scoped_task", "relation": "fixes" }
   ]
 }

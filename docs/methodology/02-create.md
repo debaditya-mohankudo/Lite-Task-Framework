@@ -74,14 +74,18 @@ a field, it goes here rather than being lost.
 
 ## Scope
 
-A task records which project it belongs to, and cross-task reads such as
+A task records which one project it belongs to, and cross-task reads such as
 `tasks__grooming_accuracy` filter on it. The scope is captured once, at
-creation, from where the server process runs — not from where the agent
-happens to be working. One server serving work in several repositories will
-therefore stamp the wrong project on some tasks. Compare the returned `scope`
-with the repository the task's `files` live in, and correct a mismatch with
-`tasks__update(task_id, scope=...)`. A wrong scope is silent: the task still
-works, but every scoped tally afterwards miscounts it.
+creation, from the best evidence available: the repository the caller names
+(`repo`), else the one repository the task's absolute `files` all sit in,
+else the directory the server process was launched in. That last source is
+where the session began, not where the work is, so one server serving work in
+several repositories would stamp the wrong project on some tasks. That is why
+it comes last, and why the response says which source was used
+(`scope_source`). A wrong scope is silent: the task still works, but every
+scoped tally afterwards miscounts it. When the source is the server's
+directory and that is not the task's repository, correct it with
+`tasks__update(task_id, scope=...)`.
 
 ## Concept lookup
 
