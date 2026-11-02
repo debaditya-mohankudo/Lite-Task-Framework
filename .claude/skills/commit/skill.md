@@ -169,12 +169,17 @@ is not lost: `python -m taskfw.backfill` re-derives every link from git
 history regardless of whether this step ever ran. Prefer calling it anyway;
 backfill is the recovery path, not a substitute for doing this.
 
-## Two commits when the diff touches `models/*.sysml`
+## Two commits when the diff touches modelled code
 
 Do not predict the commit hash and do not amend. Commit in two passes, using
 the real hash of the first as the input to the second.
 
-If the diff has **no** `models/*.sysml` change, skip this — it is one commit.
+A stamp goes stale when a commit touches any path in a package's
+`modelledPaths`, whether or not a `.sysml` file changed. Don't work out the
+overlap by hand: `tests/test_model_provenance.py` compares each stamp against
+the last *commit* that touched the paths, not the working tree, so it passes
+before the commit and fails only after it. Run it after commit 1. Its failures
+show which packages need commit 2.
 
 ### Commit 1 — everything except `models/*.sysml`
 
@@ -183,10 +188,15 @@ git add -A
 git restore --staged models/        # hold every .sysml change back for commit 2
 git commit -F <path>                # message built + task-cited as above
 git rev-parse HEAD                   # → SHA, the input to commit 2
+uv run pytest -q tests/test_model_provenance.py
 ```
 
 This is the commit that actually touches the modelled code, so it is the one
 every `@ModelProvenance` stamp must point at.
+
+If the provenance test passes and nothing under `models/` is left unstaged,
+stop here: it is one commit. Otherwise every package it names as stale goes
+into commit 2, along with any `.sysml` edits held back above.
 
 ### Commit 2 — the models
 
