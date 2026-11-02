@@ -2,7 +2,6 @@
 name: commit
 description: Commit changes with a task:<id> citation — the gate, the message shape, and what must be true before committing. Global skill; the suite, ontology and models/*.sysml steps apply only in repos that have them. Use when the user says /commit or asks to commit work.
 user-invocable: true
-updated: 2026-08-31
 doc: docs/methodology/04-implementation.md
 ---
 

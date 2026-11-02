@@ -72,6 +72,24 @@ type system deliberately does not carry them.
 a task template becomes something people work around. If a thought does not fit
 a field, it goes here rather than being lost.
 
+## Scope
+
+A task records which project it belongs to, and cross-task reads such as
+`tasks__grooming_accuracy` filter on it. The scope is captured once, at
+creation, from where the server process runs — not from where the agent
+happens to be working. One server serving work in several repositories will
+therefore stamp the wrong project on some tasks. Compare the returned `scope`
+with the repository the task's `files` live in, and correct a mismatch with
+`tasks__update(task_id, scope=...)`. A wrong scope is silent: the task still
+works, but every scoped tally afterwards miscounts it.
+
+## Concept lookup
+
+Where the repository keeps a concept store, check which concepts already cover
+the files the task will touch, and note their names on the task. Grooming and
+introspection then start from the module's documented contracts instead of
+re-deriving them — the reason the store exists at all.
+
 ## Checklist items
 
 ```python

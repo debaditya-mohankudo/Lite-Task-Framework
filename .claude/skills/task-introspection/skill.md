@@ -2,7 +2,6 @@
 name: task-introspection
 description: Post-task retrospective that improves the engineering system. Grades grooming's predictions, captures unlogged decisions, and evolves concepts and skills so the next execution is cheaper. Use when the user says /task-introspection or "retrospect on task:<id>".
 user-invocable: true
-updated: 2026-09-01
 doc: docs/methodology/05-introspection.md
 repo: ~/workspace/task-framework/.claude/skills/task-introspection/skill.md
 deployed: ~/.claude/skills/task-introspection/skill.md
@@ -91,8 +90,10 @@ Be honest about *materialized* versus *unresolved*. A risk that said "decide X n
 
 ```python
 tasks__log_skill_invocation(skill="task-introspection/step-4-grade-the-grader", task_id=task_id)
-tasks__grooming_accuracy(limit=25)
+tasks__grooming_accuracy(limit=25, scope="<scope from the bundle>")
 ```
+
+Pass the task's own `scope`, as grooming does. Omitted, the tally is global across every repo sharing `tasks.db`, so another repo's pattern reads as this one's. Don't pass `"."` either: it resolves against the directory the taskfw server was launched in, which may be a different repo.
 
 Run this every few tasks, not every time — a pattern needs a series. It is the only tool that reads across tasks, and it is what turns "repeated `wrong` grades" from an observation into something actionable.
 
@@ -227,7 +228,7 @@ concept__upsert(repo="<abs repo path>",
 
 Skip where the change was test-only or doc-only with no new behaviour to capture. Skip silently if the repo has no store.
 
-**Sanctity check — evidence citations for files this task touched or deleted.** If the repo has a `symbol_resolver.py` (task:85e6001f / task:ba5d5aed's `file:symbol` convention), a task that deletes or renames a symbol can silently leave another concept's evidence pointing at code that no longer exists — that concept was not necessarily this task's own, so it will not surface via `concept__uncovered`. For every file this task deleted, moved, or renamed a top-level symbol in, grep `concepts.json` for citations into that file and re-resolve them:
+**Sanctity check — evidence citations for files this task touched or deleted.** Only in a repo that has a `symbol_resolver.py` (task:85e6001f / task:ba5d5aed's `file:symbol` convention). task-framework itself has none, so in this repo skip to Step 9. Where it exists, a task that deletes or renames a symbol can silently leave another concept's evidence pointing at code that no longer exists — that concept was not necessarily this task's own, so it will not surface via `concept__uncovered`. For every file this task deleted, moved, or renamed a top-level symbol in, grep `concepts.json` for citations into that file and re-resolve them:
 
 ```python
 # for citations, parse_citation() the string, then resolve_symbol(repo_root, file, symbol)

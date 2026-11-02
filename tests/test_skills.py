@@ -41,7 +41,11 @@ EXPECTED = {"commit", "task-create", "task-framework",
 #: Frontmatter every skill carries. `doc` is this repo's own convention: it
 #: names the methodology document that owns the skill's reasoning, which is
 #: what keeps the split between "doc owns why, skill owns how" auditable.
-FRONTMATTER_FIELDS = ("name", "description", "user-invocable", "updated", "doc")
+#:
+#: There is no `updated` date. It was hand-kept, nothing read it, and by the
+#: 2026-11-02 audit five of seven were older than the file's last commit
+#: (task:c2ba07ec). `git log -1 -- <skill>` is the date and cannot drift.
+FRONTMATTER_FIELDS = ("name", "description", "user-invocable", "doc")
 
 #: The audit skill is exempt from the banned-pattern checks, and only it.
 #:

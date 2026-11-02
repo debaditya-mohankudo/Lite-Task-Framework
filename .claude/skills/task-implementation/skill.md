@@ -3,7 +3,6 @@ name: task-implementation
 description: Engineering execution philosophy for active tasks. Stay in scope, log decisions as they happen, remove failure modes rather than policing them, and finish decisively. Use while working, after /task-grooming and before /task-introspection.
 user-invocable: true
 model: sonnet
-updated: 2026-08-08
 doc: docs/methodology/04-implementation.md
 repo: ~/workspace/task-framework/.claude/skills/task-implementation/skill.md
 deployed: ~/.claude/skills/task-implementation/skill.md
@@ -116,36 +115,24 @@ tasks__log_skill_invocation(skill="task-implementation/check-logs", task_id=task
 tasks__logs(limit=100)   # then scan the messages — see the level trap below
 ```
 
+Why this step exists is in [04-implementation.md](../../../docs/methodology/04-implementation.md#read-the-logs-before-you-close). What to look for:
+
+- **`tool=<name> ERROR <Type>: <msg>`** — a call raised; you may have carried on from a result that never existed.
+- **`DENY` / `REFUSE`** — a rule refused something; check it wasn't read as a no-op.
+- **`check_item … waited=<n>s`** — the gap between a decision and the item it answered being ticked. Nothing reads it automatically.
+
 **Do not reach for `tasks__logs(level="ERROR")` to find failed tool calls.** It
-will come back nearly empty and read as a clean run. The chassis logs a failure
-as `tool=<name> ERROR <Type>: <msg>` at level **INFO** (chassis.py:105) — ERROR
-is text inside the message, not the row's level. The same holds for `REFUSE`
-lines. Pull the recent rows and scan them; filter by `logger` when you want one
+will come back nearly empty and read as a clean run. `tool_called.__exit__` in
+`taskfw/dispatcher/chassis.py` logs a failure at level **INFO** — ERROR is text
+inside the message, not the row's level. The same holds for `REFUSE` lines.
+Pull the recent rows and scan them; filter by `logger` when you want one
 subsystem.
 
-The last thing to check is the one dimension a green suite cannot show you: what
-the tools actually did while you worked, as opposed to what they returned. A
-result is the tool's own account of itself. The log is the second witness.
-
-Read for three things. A chassis `ERROR` line means a call raised and you may
-have carried on from a result that never existed. A `DENY`/`REFUSE` means a rule
-refused something and the refusal may have been read as a no-op. And
-`check_item` carries `waited=<n>s` — the gap between a decision being recorded
-and the item it answered being ticked — which is an observable with no automatic
-reader, so it teaches nothing unless someone looks.
-
-This step exists because of a call that returned `{"ok": true}` and did nothing
-(task:1f400ecf). A parameter was silently dropped before it reached the code —
-the running server was advertising an older schema — so the tool truthfully
-reported success at doing what it had actually been asked, which was less than
-the caller asked. Nothing failed, nothing logged an error, and only the store's
-unchanged state disagreed. Trusting a success result is how that goes unnoticed;
-the logs are where it shows.
-
-Introspection reads the logs too, for the same reason. Reading them here is not
-duplication — it is reading them while you can still act on what they say.
-
 ## Finish
+
+Commit first, with [/commit](../commit/skill.md): it cites `task:<id>` and then calls `tasks__add_commit(task_id, sha, repo)`. There is no hook that does this automatically, so the link only exists if that call is made. `python -m taskfw.backfill` re-derives it from git history if the call is missed; that is the recovery path, not a substitute.
+
+Then close the task on what actually landed:
 
 ```python
 tasks__log_skill_invocation(skill="task-implementation/finish", task_id=task_id)
@@ -153,8 +140,6 @@ tasks__finish(task_id, reason="what actually shipped")
 ```
 
 The checklist should already be checked off by now (see above) — this call closes the task, it does not reconcile it.
-
-Commit with `task:<id>` in the message, then call `tasks__add_commit(task_id, sha, repo)` yourself — there is no hook that does this automatically, so the link only exists if you make the call. `python -m taskfw.backfill` re-derives it from git history if the call is missed; that is the recovery path, not a substitute for making it.
 
 State outcomes plainly. If tests fail, say so. If a step was skipped, say that. A `reason` that overstates what landed is worse than none, because it will be believed.
 

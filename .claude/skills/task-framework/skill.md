@@ -2,7 +2,6 @@
 name: task-framework
 description: Start or resume a task using taskfw. Creates a task, activates it for the workspace, and explains the lifecycle. Use when the user runs /task-framework or asks to work on a task with tracking.
 user-invocable: true
-updated: 2026-08-01
 doc: docs/methodology/01-framework.md
 repo: ~/workspace/task-framework/.claude/skills/task-framework/skill.md
 deployed: ~/.claude/skills/task-framework/skill.md
@@ -14,9 +13,7 @@ The entry point for work that will take more than one step.
 
 ## The one thing that differs from most task systems
 
-**Nothing is injected.** Activating a task does not make its context appear. You must call `tasks__context` explicitly — that call *is* the context mechanism, and there is no per-turn block that fills in behind it.
-
-Where hooks are installed, a one-line pointer names the active task. That is a reminder to pull, not the pull.
+**Nothing is injected.** Activating a task does not make its context appear. You must call `tasks__context` explicitly — that call *is* the context mechanism, and there is no per-turn block that fills in behind it, and no hook that re-announces the active task. `tasks__set_active` names it once; after that, ask `tasks__active()`.
 
 ## Lifecycle
 
@@ -97,7 +94,7 @@ Find code with Read, Grep, and Glob. The framework deliberately ships no code se
 tasks__log_skill_invocation(skill="task-framework/step-6-commit", task_id=task_id)
 ```
 
-Put `task:<id>` in the commit message. Where the PostToolUse hook is installed the link is recorded automatically; where it is not, `python -m taskfw.backfill` recovers it from git history afterwards.
+Commit with [/commit](../commit/skill.md). It puts `task:<id>` in the message and then calls `tasks__add_commit` — **no hook records the commit→task link**, so a raw `git commit` leaves the task's `commits` empty. `python -m taskfw.backfill` recovers missed links from git history; it is the recovery path, not a substitute.
 
 ### 7. Finish, then introspect
 
@@ -113,8 +110,11 @@ Then run [/task-introspection](../task-introspection/skill.md). It is the step t
 ```python
 tasks__log_skill_invocation(skill="task-framework/resuming")
 tasks__active()      # what was I on?
+tasks__phase(task_id)  # where it stands: grooming, implementation, or introspection
 tasks__context()     # the whole bundle for it
 ```
+
+Resuming an older task that was not created this session? `tasks__set_active(task_id)` first.
 
 ## Invoked with no task description
 

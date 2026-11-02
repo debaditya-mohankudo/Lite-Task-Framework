@@ -5,8 +5,10 @@ Grooming removed the uncertainty. This document is about not reintroducing it.
 ## Start
 
 Use the supplied `task_id`. If none was given, read the active task instead
-of guessing. Switching away from a different active task is refused unless
-confirmed — surface that rather than retrying blind.
+of guessing. The active pointer is a single value, not a stack: setting it
+replaces whatever was active, with no confirmation, and nothing restores the
+displaced task later. If you are stepping away from another task, that is the
+moment to note where you left it.
 
 ```python
 tasks__set_active(task_id)
@@ -109,14 +111,49 @@ expresses the intended behaviour, then fix the other — and if the design was
 right, add a test that pins the interaction explicitly so the next person does
 not have the same argument.
 
+## Read the logs before you close
+
+A tool result is the tool's own account of itself. The operational log is a
+second witness, and the one dimension a green suite cannot show: what the
+tools actually did while you worked.
+
+Read it for three things. A failed call you may have carried on from, as if
+its result existed. A refusal by a rule that was read as a no-op. And any
+measured gap nobody reads automatically — an observable with no reader
+teaches nothing unless someone looks.
+
+This exists because of a call that returned success and did nothing
+(task:1f400ecf). The running server advertised an older schema, so a
+parameter was silently dropped before it reached the code. The tool
+truthfully reported success at what it had been asked, which was less than
+the caller asked. Nothing failed and nothing logged an error; only the store's
+unchanged state disagreed. Introspection reads the logs too, but reading them
+here is reading them while you can still act on what they say.
+
+## Commit, and link the commit
+
+Every commit cites `task:<id>`: the commit→task edge is how `tasks__context`
+reassembles what happened later, and an uncited commit is invisible to the loop
+that is supposed to learn from it. Never cite a task the work does not belong
+to — a false edge is worse than a missing one, because a missing one is
+visible as missing.
+
+Citing is not linking. Nothing watches git and records the edge; after the
+commit, call `tasks__add_commit` yourself. A pre-commit gate would make this a
+rule, and it deliberately is not one — so it only exists if you make it.
+Missed links can be rebuilt from git history (`python -m taskfw.backfill`),
+which keeps the record recoverable, but that is the recovery path, not a
+substitute.
+
 ## Finish
 
 ```python
 tasks__finish(task_id, reason="what actually shipped")
 ```
 
-The checklist should already be checked off by now (see above) — this call
-closes the task, it does not reconcile it.
+Finish after the work is committed and linked, so the task closes on what
+actually landed. The checklist should already be checked off by now (see
+above) — this call closes the task, it does not reconcile it.
 
 State outcomes plainly. If tests fail, say so. If a step was skipped, say that.
 A `reason` that overstates what landed is worse than none, because it will be

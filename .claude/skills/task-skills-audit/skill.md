@@ -2,7 +2,6 @@
 name: task-skills-audit
 description: Audit the task-* skills for drift — against each other, against the methodology docs, and against the live MCP tool surface. Use when the user runs /task-skills-audit or asks whether the task skills are still consistent.
 user-invocable: true
-updated: 2026-08-01
 doc: docs/methodology/README.md
 ---
 
@@ -13,6 +12,8 @@ The lifecycle is a chain of five skills, each edited independently:
 ```
 task-create → task-framework → task-grooming → task-implementation → task-introspection
 ```
+
+Audit [/commit](../commit/skill.md) with them. It is not a lifecycle stage, but it is where the commit→task link is actually made, and its rules are the ones the lifecycle skills restate (and have contradicted: in the 2026-11-02 audit, task-framework claimed a hook recorded that link while /commit said none did). That is six skills to audit, plus this one.
 
 They reference each other constantly, and they sit on top of two things that move underneath them: [docs/methodology/](../../../docs/methodology/), which owns the reasoning, and `taskfw/mcp_server.py`, which owns the tool surface. Nothing keeps prose in sync with either.
 
@@ -82,14 +83,12 @@ The question that finds real gaps: **does a tool exist that a skill should menti
 `tasks__list()` cannot answer this — it lists tasks, not registered tool names, and in a shared `tasks.db` it returns rows from every repo using that database, not just this one. Enumerate the tool surface from source instead:
 
 ```bash
-grep -oE '^def (tasks__[a-z_]+|concept__[a-z_]+)' taskfw/mcp_server.py | sed 's/^def //' | sort
+grep -oE '^def (tasks__[a-z_]+|concept__[a-z_]+|task_memory__[a-z_]+)' taskfw/mcp_server.py \
+  | sed 's/^def //' | sort \
+  | while read t; do echo "$(grep -lw "$t" .claude/skills/*/skill.md | wc -l | tr -d ' ') $t"; done
 ```
 
-Then, for each name, check whether any skill mentions it:
-
-```bash
-grep -rl '\btasks__the_name\b' .claude/skills/*/skill.md   # repeat per tool
-```
+A `0` is a tool no skill mentions. All three namespaces matter: `task_memory__*` is the loop-memory half of grooming and introspection, and leaving it out of this grep is how an unreferenced memory tool would go unnoticed.
 
 Compare the registered tools against what the skills reference. A tool nobody is told to call is a tool nobody calls — this is how `tasks__grooming_accuracy` would have gone unused after being built, and how `tasks__logs` went unreferenced until task:c814d55a caught it. Absence from the skills is a finding, not an oversight to fix silently.
 

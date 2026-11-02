@@ -2,7 +2,6 @@
 name: task-create
 description: Reference for creating tasks and epics in taskfw — the epic flag, what each field is for, and how linking works. Use before calling tasks__create or when the user says /task-create.
 user-invocable: true
-updated: 2026-08-08
 doc: docs/methodology/02-create.md
 repo: ~/workspace/task-framework/.claude/skills/task-create/skill.md
 deployed: ~/.claude/skills/task-create/skill.md
@@ -46,6 +45,8 @@ tasks__create(
 ```
 
 Every argument except `title` is optional. Nothing is auto-filled with `(pending)` or `TBD`, because nothing is required.
+
+**Read `related_candidates` in the response.** It lists existing tasks whose titles overlap this one. It is advisory, and nothing links automatically. For each candidate, either `tasks__link` it (`duplicates` or `relates_to`), fold the new task into the existing one, or consciously carry on. Don't let it pass unread. Candidates can come from other repos that share the store, and those are usually unrelated.
 
 The log call above has no `task_id` yet — there isn't one until `tasks__create` returns. Once the id comes back, subsequent calls in this skill carry it (see below).
 

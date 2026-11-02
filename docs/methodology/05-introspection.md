@@ -7,6 +7,21 @@ This is the step that closes the loop, and the easiest one to skip — the work
 is done, the tests pass, and moving on feels like progress. Skipping it is what
 makes grooming decorative, because ungraded predictions teach nothing.
 
+## Gather what the bundle does not hold
+
+`tasks__context` holds what was decided and recorded. It does not hold the
+diffs, and its `commits` section holds only links someone made with
+`tasks__add_commit` — nothing records them automatically, so a raw
+`git commit` leaves the section empty even when a correctly tagged commit
+exists. Compare it against `git log --grep "task:<id>"` and link any sha the
+bundle lacks. An empty section otherwise reads as "nothing shipped", and the
+grading that follows is done against the wrong evidence.
+
+The bundle also carries no operational trace. `tasks__logs` is the second
+witness: what the tools actually did while the task was active, as opposed to
+what they returned. A failed call or a refused rule that was read as a no-op
+shows up there and nowhere else.
+
 ## Grade the grooming
 
 For every risk in `grooming.risks`, grade what actually happened:
@@ -64,8 +79,12 @@ change grooming itself, not just to note the miss.
 ## See the series, not just this task
 
 ```python
-tasks__grooming_accuracy(limit=25)
+tasks__grooming_accuracy(limit=25, scope="<the task's scope>")
 ```
+
+Scope it to the task's own project, as grooming does. A store may be shared by
+several repositories, and an unscoped tally reads another project's pattern as
+this one's — which is worse than no tally, because it is believed.
 
 "Repeated" is a claim about several tasks, and one task cannot show it. This is
 the only tool that reads across tasks: it aggregates the grades on recent
@@ -126,6 +145,7 @@ tasks__add_introspection(task_id, report={
     "grooming_accuracy": {"predicted": N, "materialized": M, "avoided": K, "wrong": J},
     "missed_surprises": ["..."],
     "new_knowledge": ["..."],
+    "stale_knowledge_flagged": ["..."],
     "highest_leverage": "The single most valuable improvement.",
     "overall_assessment": "One honest paragraph.",
 })
@@ -183,6 +203,22 @@ The row survives and names its replacement, and drops out of recall. That is
 the same standard as flagging stale knowledge rather than removing it
 unilaterally. `task_memory__forget` exists for a lesson that was simply
 **wrong** — a different thing from one that stopped being true.
+
+## Leave the concept store better than you found it
+
+Architectural facts — what a module promises, its contracts and invariants —
+belong in the concept store, not in loop memory or a decision. A task leaves
+either a **change** (a concept turned out wrong or incomplete) or **growth**
+(a module no concept covered, now understood well enough to describe). Skip it
+when the change was test- or doc-only.
+
+Concept list fields merge by exact string, so a reworded entry sits beside the
+one it replaces until the old text is retracted explicitly. A concept is
+flagged, never deleted unilaterally — the same standard as stale memories.
+
+Where a task deleted or renamed a symbol, another concept's evidence may still
+cite it. That concept was not this task's, so nothing else surfaces it; check
+the citations into files this task touched, and no wider.
 
 ## Write decisions down properly
 

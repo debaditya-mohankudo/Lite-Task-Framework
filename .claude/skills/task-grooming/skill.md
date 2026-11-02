@@ -2,7 +2,6 @@
 name: task-grooming
 description: Pre-implementation grooming pass. Removes uncertainty before implementation by pulling context, verifying premises, and recording falsifiable risks. Invoke with /task-grooming, /task-grooming task:<id>, or /task-grooming epic:<id>.
 user-invocable: true
-updated: 2026-10-26
 doc: docs/methodology/03-grooming.md
 repo: ~/workspace/task-framework/.claude/skills/task-grooming/skill.md
 deployed: ~/.claude/skills/task-grooming/skill.md
@@ -114,7 +113,7 @@ Never file a safety belief ("X will not affect Y", "the suite stays green") as a
 
 When a claim is contested enough that a future reader would need to trust it without re-checking, say plainly how well-supported it is: `fact` (read and confirmed), `inference` (implied but not stated), `assumption` (believed, unverified), or `unknown` (flagged, not yet checked). Most claims don't need the label spelled out — only the ones where the distinction changes what happens next.
 
-Consult the task graph rather than search hits alone when judging whether this is a duplicate, an orphan, or blocked on something else. If another task owns the same work, consolidate to one owner and link the rest with `tasks__link(..., rel="duplicates")` — but don't abandon a task unilaterally; surface it to the user first.
+Consult the task graph rather than search hits alone when judging whether this is a duplicate, an orphan, or blocked on something else. If the bundle's `related` section was truncated or looks thin, search directly before calling a task unique: `tasks__search(query="<module or symptom>")`. This is the same fallback `task_memory__recall` provides for `lessons`. If another task owns the same work, consolidate to one owner and link the rest with `tasks__link(..., rel="duplicates")` — but don't abandon a task unilaterally; surface it to the user first.
 
 ## Step 4 — Write findings
 
