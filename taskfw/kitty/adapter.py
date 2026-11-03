@@ -1,8 +1,12 @@
-"""Thin adapter over `kitten @`. Every kitty remote-control call lives here.
+"""taskfw's kitty adapter: drive kitty tabs through kitty remote control (`kitten @`).
 
-Pinned to kitty 0.49.2. The socket is an explicit input to every call: there is no
-ambient default, so this works from a daemon or a non-kitty shell. Argv is always a
-list (never a shell string), so cwd/env/var values with spaces, '=' or quotes are safe.
+Every kitty call lives here. Same shape as cli-graph's `mac kitty` (`_kitten`, `_ls`, small
+private helpers, windows addressed by numeric `id:`), but independent: taskfw is its own MCP
+server and imports nothing from `mac`.
+
+Pinned to kitty 0.49.2. The socket is an explicit input to every call: there is no ambient
+default, so this works from a daemon or a non-kitty shell. Argv is always a list (never a
+shell string), so cwd/env/var values with spaces, '=' or quotes are safe.
 """
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Mapping, Sequence
 
 PINNED_VERSION = "0.49.2"
+KITTEN_TIMEOUT_S = 20
 
 Runner = Callable[[Sequence[str]], "subprocess.CompletedProcess[str]"]
 
@@ -40,9 +45,6 @@ class Window:
     env: Mapping[str, str] = field(default_factory=dict)
     user_vars: Mapping[str, str] = field(default_factory=dict)
     is_self: bool = False
-
-
-KITTEN_TIMEOUT_S = 20
 
 
 def _run(argv: Sequence[str]) -> "subprocess.CompletedProcess[str]":
@@ -96,8 +98,8 @@ class KittyAdapter:
         if check_version:
             self.check_version()
 
-    # -- plumbing -------------------------------------------------------------
-    def _at(self, *args: str) -> "subprocess.CompletedProcess[str]":
+    def _kitten(self, *args: str) -> "subprocess.CompletedProcess[str]":
+        """Run `kitten @ --to <socket> ...`; a missing or wedged kitten is a KittyUnreachable."""
         return self._runner([self.kitten, "@", "--to", self.socket, *args])
 
     def _raise(self, p: "subprocess.CompletedProcess[str]") -> None:
@@ -116,11 +118,10 @@ class KittyAdapter:
             raise KittyVersionMismatch(f"kitten {version!r} != pinned {PINNED_VERSION}")
         return version
 
-    # -- operations -----------------------------------------------------------
     def ls(self, match: str | None = None) -> list[Window]:
         """All windows, or those matching a kitty match expression. An empty match is
         []; an unreachable socket raises KittyUnreachable."""
-        p = self._at("ls", *(["--match", match] if match else []))
+        p = self._kitten("ls", *(["--match", match] if match else []))
         if p.returncode != 0:
             if "No matching windows" in (p.stderr or ""):
                 return []
@@ -154,7 +155,7 @@ class KittyAdapter:
             args.append("--hold")
         if cmd:
             args += ["--", *cmd]
-        p = self._at(*args)
+        p = self._kitten(*args)
         if p.returncode != 0:
             self._raise(p)
         try:
@@ -165,7 +166,7 @@ class KittyAdapter:
     def set_user_vars(self, window_id: int, user_vars: Mapping[str, str]) -> None:
         if not user_vars:
             return
-        p = self._at("set-user-vars", "--match", f"id:{window_id}",
+        p = self._kitten("set-user-vars", "--match", f"id:{window_id}",
                      *[f"{k}={v}" for k, v in user_vars.items()])
         if p.returncode != 0:
             self._raise(p)
