@@ -3,6 +3,9 @@ import json
 import sqlite3
 import subprocess
 
+import pytest
+
+from taskfw.kitty import hook
 from taskfw.kitty.adapter import KittyAdapter
 from taskfw.kitty.hook import handle, load_context, main
 from taskfw.kitty.store import Store
@@ -27,6 +30,11 @@ def make_db(path):
     con.execute("INSERT INTO tasks VALUES ('abc','open','Do it',?)", (json.dumps(data),))
     con.commit()
     con.close()
+
+
+@pytest.fixture(autouse=True)
+def _no_real_notifications(monkeypatch):
+    monkeypatch.setattr(hook, "desktop_notify", lambda *a, **k: False)
 
 
 def test_noop_without_task_id():
@@ -83,3 +91,34 @@ def test_main_fails_open_on_bad_input_and_missing_db(capsys):
     assert main(io.StringIO("not json"), {}) == 0
     ad_env = {"TASKFW_TASK_ID": "abc", "TASKFW_DB": "/nonexistent/x.db"}  # no kitty vars
     assert main(io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit"})), ad_env) == 0
+
+
+def test_notification_sends_desktop_notify(monkeypatch):
+    sent = []
+    monkeypatch.setattr(hook, "desktop_notify", lambda tid, msg, **k: sent.append((tid, msg)))
+    hook.handle({"hook_event_name": "Notification", "message": "needs permission"}, {"TASKFW_TASK_ID": "abc"})
+    assert sent == [("abc", "needs permission")]
+
+
+def test_notify_opt_out(monkeypatch):
+    sent = []
+    monkeypatch.setattr(hook, "desktop_notify", lambda *a, **k: sent.append(a))
+    hook.handle({"hook_event_name": "Notification"}, {"TASKFW_TASK_ID": "abc", "TASKFW_NOTIFY": "0"})
+    assert sent == []
+
+
+def test_desktop_notify_writes_escape_code_to_tty(tmp_path, monkeypatch):
+    monkeypatch.undo()
+    tty = tmp_path / "tty"
+    tty.touch()
+    assert hook.desktop_notify("abc", "hi", tty=str(tty))
+    assert tty.read_text().startswith("\x1b]99;")
+
+
+def test_desktop_notify_only_when_unfocused(tmp_path, monkeypatch):
+    monkeypatch.undo()
+    tty = tmp_path / "tty"
+    tty.touch()
+    hook.desktop_notify("abc", "hi", tty=str(tty))
+    chunks = tty.read_text().split("\x1b]99;")[1:]
+    assert chunks and all(c.startswith("o=unfocused:") for c in chunks)
