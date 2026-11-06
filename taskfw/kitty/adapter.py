@@ -4,7 +4,7 @@ Every kitty call lives here. Same shape as cli-graph's `mac kitty` (`_kitten`, `
 private helpers, windows addressed by numeric `id:`), but independent: taskfw is its own MCP
 server and imports nothing from `mac`.
 
-Pinned to kitty 0.49.2. The socket is an explicit input to every call: there is no ambient
+Pinned to kitty 0.50.0. The socket is an explicit input to every call: there is no ambient
 default, so this works from a daemon or a non-kitty shell. Argv is always a list (never a
 shell string), so cwd/env/var values with spaces, '=' or quotes are safe.
 """
@@ -16,7 +16,7 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import Callable, Mapping, Sequence
 
-PINNED_VERSION = "0.49.2"
+PINNED_VERSION = "0.50.0"
 KITTEN_TIMEOUT_S = 20
 
 Runner = Callable[[Sequence[str]], "subprocess.CompletedProcess[str]"]

@@ -66,7 +66,7 @@ If you run [kitty](https://sw.kovidgoyal.net/kitty/) with remote control on, `ta
 
 **Result:** `{status, window_id, socket, reason, worktree, isolated, model, model_source}` (plus `model_note` when the tab opened without a caller-chosen model), with `status` one of `opened`, `exists` (a live tab already carries the task; nothing launched) or `not_opened`. Failures — no kitty, no `claude`, a timeout, a failed worktree — are always `not_opened` with a `reason`, never an exception. A task that has had a tab before and has none live is also `not_opened`: it points you at `resume`, which `open` never does for you.
 
-**How it talks to kitty.** Everything goes through [`kitten @`](https://sw.kovidgoyal.net/kitty/remote-control/) against the remote-control socket, all in `taskfw/kitty/adapter.py` (pinned to kitty 0.49.2; a different major.minor is `not_opened`, and every call is time-bounded):
+**How it talks to kitty.** Everything goes through [`kitten @`](https://sw.kovidgoyal.net/kitty/remote-control/) against the remote-control socket, all in `taskfw/kitty/adapter.py` (pinned to kitty 0.50.0; a different major.minor is `not_opened`, and every call is time-bounded):
 
 - *Launch:* `kitten @ --to <socket> launch --type=tab --cwd=<dir> --env … --var task_id=<id> --watcher=<watcher.py> -- claude --settings <hooks.json> -- "<prompt>"`. Argv is a list, never a shell string, so the prompt needs no escaping and is submitted at startup (no send-text race).
 - *Identity:* the tab carries `TASKFW_TASK_ID`, `TASKFW_WORKTREE`, `TASKFW_DB` in its env, and a `task_id` [user var](https://sw.kovidgoyal.net/kitty/launch/) on its window. `exists` is detected by `kitten @ ls --match var:task_id=<id>`.

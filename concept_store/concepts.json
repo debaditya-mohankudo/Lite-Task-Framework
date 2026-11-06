@@ -635,7 +635,7 @@
         "taskfw/kitty/adapter.py"
       ],
       "invariants": [
-        "Pinned to kitty 0.49.2 (major.minor checked); re-run the spike before upgrading",
+        "Pinned to kitty 0.50.0 (major.minor checked); re-run the spike before upgrading",
         "No other module calls kitten directly",
         "Kitty socket path carries a PID suffix, so callers must not hardcode it"
       ],

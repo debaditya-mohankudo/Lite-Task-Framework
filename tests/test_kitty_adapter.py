@@ -87,7 +87,7 @@ def test_set_user_vars_targets_window_id():
 
 
 def test_version_check():
-    f = Fake(cp(0, "kitten 0.49.2 created by Kovid Goyal\n"), cp(0, "kitten 0.50.0 x\n"))
+    f = Fake(cp(0, "kitten 0.50.0 created by Kovid Goyal\n"), cp(0, "kitten 0.51.0 x\n"))
     KittyAdapter("/tmp/s", kitten="/k", runner=f)
     with pytest.raises(KittyVersionMismatch):
         KittyAdapter("/tmp/s", kitten="/k", runner=f)
