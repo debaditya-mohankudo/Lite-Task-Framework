@@ -116,6 +116,20 @@ tasks__context()     # the whole bundle for it
 
 Resuming an older task that was not created this session? `tasks__set_active(task_id)` first.
 
+### Cold start only: read what actually ran
+
+Do this **only when the context window is clean** — a new session, or right after `/clear` — and the task had work in an earlier session. If this conversation already holds the task's history, skip it; the log would repeat what you know.
+
+```python
+tasks__log_skill_invocation(skill="task-framework/cold-start-event-log", task_id=task_id)
+```
+
+```bash
+mac hooks server_memory --n-events 300
+```
+
+`tasks__context` holds decisions and commits, not what ran. The hook server's event log has the user's prompts and tool calls with their results (no assistant turns). Filter it for the task id and the commands in question. That shows where the last session stopped, what was already tried, and evidence to use when grading instead of recall. This applies to any phase you resume into: grooming, implementation or introspection. The output is large, so save it and filter it with Python, not one long grep regex.
+
 ## Invoked with no task description
 
 ```python
