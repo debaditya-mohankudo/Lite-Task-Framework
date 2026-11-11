@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Iterator
 
 from taskfw import config
+from taskfw.db.encrypted import open_any
 from taskfw.db.schema import backfill_epic_scalar, migrate
 
 _migrated: set[str] = set()
@@ -25,7 +26,7 @@ def connect(path: Path | str | None = None, *, migrate_once: bool = True) -> sql
     if path is not None:
         Path(target).parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(str(target), timeout=config.BUSY_TIMEOUT_MS / 1000)
+    conn = open_any(target, timeout=config.BUSY_TIMEOUT_MS / 1000)
     conn.row_factory = sqlite3.Row
 
     # WAL lets readers proceed while a writer holds the file, which is the

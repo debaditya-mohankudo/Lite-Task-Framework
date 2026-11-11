@@ -18,6 +18,10 @@ taskfw-kitty = "taskfw.kitty.launcher:main"
 dev = [
     "pytest>=8.0",
 ]
+# Needed only when tasks.db is encrypted (task:8b0561d1); plain files never import it.
+encrypted = [
+    "apsw-sqlite3mc>=3.54.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]

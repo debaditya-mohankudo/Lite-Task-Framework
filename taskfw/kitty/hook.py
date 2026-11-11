@@ -39,7 +39,8 @@ STAMP_EVENTS = {"SessionStart", "UserPromptSubmit", "Stop"}
 
 def load_context(db_path: str, task_id: str) -> str | None:
     """Compact task context from taskfw's DB (read-only). None if the task is not found."""
-    con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2)
+    from taskfw.db.encrypted import open_any  # ciphertext opens through the shared opener
+    con = open_any(db_path, readonly=True, timeout=2)
     try:
         row = con.execute("SELECT status, title, data FROM tasks WHERE id=?", (task_id,)).fetchone()
     finally:

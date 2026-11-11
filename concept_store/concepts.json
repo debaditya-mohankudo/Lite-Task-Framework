@@ -388,6 +388,47 @@
         "nudge-dispatch-chassis"
       ]
     },
+    "encrypted-db-opens-through-shared-opener": {
+      "confidence": 0.8,
+      "contracts": [
+        "open_any(path) returns a sqlite3 connection for a plain file and a sqlite3-shaped adapter for ciphertext.",
+        "Every failure raises EncryptedDBError naming what to fix; there is no fallback to a plain open."
+      ],
+      "created_at": "2026-11-11T20:07:20.964856+00:00",
+      "description": "Opens an encrypted (SQLCipher) tasks.db by loading cli-graph's mac/encdb.py by path, so there is one opener and one key file (secrets/memory.key). Plain files never import it and open with stdlib sqlite3 as before.",
+      "evidence": [
+        "tests/test_encrypted_db.py"
+      ],
+      "invariants": [
+        "taskfw holds no copy of the key and no second implementation of the opener.",
+        "apsw errors reach callers as sqlite3.OperationalError/IntegrityError, so the FTS5 fallbacks in store.py and memory.py still work on ciphertext."
+      ],
+      "last_validated": "2026-11-11T20:07:20.965282+00:00",
+      "module": "taskfw/db/encrypted.py",
+      "name": "encrypted-db-opens-through-shared-opener",
+      "related": [
+        "connection-pragmas-single-point"
+      ]
+    },
+    "encrypted-tasks-db-round-trip-tested": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-11-11T20:07:22.310192+00:00",
+      "description": "Pins that TaskStore and MemoryStore read, write, search and recall on a SQLCipher-encrypted file keyed from a throwaway key, and that a wrong key fails with a clear error.",
+      "evidence": [
+        "tests/test_encrypted_db.py"
+      ],
+      "invariants": [
+        "A malformed FTS5 query on an encrypted file falls back to LIKE instead of raising apsw's error.",
+        "Tests never use the real key file; they skip when apsw or cli-graph's encdb.py is unavailable."
+      ],
+      "last_validated": "2026-11-11T20:07:22.310213+00:00",
+      "module": "tests/test_encrypted_db.py",
+      "name": "encrypted-tasks-db-round-trip-tested",
+      "related": [
+        "encrypted-db-opens-through-shared-opener"
+      ]
+    },
     "gitutil-head-sha-tested": {
       "confidence": 0.85,
       "contracts": [
