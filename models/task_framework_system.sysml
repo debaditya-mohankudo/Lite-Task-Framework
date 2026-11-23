@@ -21,7 +21,7 @@ package TaskFrameworkSystem {
          * removed outright once every host-specific behaviour it existed to
          * carry either duplicated what a skill already does explicitly
          * (tasks__context) or could simply be a skill's own step
-         * (tasks__add_commit, called from .claude/skills/commit/skill.md). The
+         * (tasks__add_commit, called from .claude/skills/commit/SKILL.md). The
          * coupling dissolved rather than being resolved each time — most of it
          * was complexity that did not need to exist. That is the most
          * transferable lesson in this model.

@@ -8,7 +8,7 @@ Derived (never hand-edited, rewritten here):
     taskfw/mcp_server.py
   - each tool's `namespace` (its name prefix) and `hooks` (the nudge hooks named
     in its decorator, `combine(...)` unpacked)
-  - the `used_by` relations: every tool name a .claude/skills/*/skill.md mentions
+  - the `used_by` relations: every tool name a .claude/skills/*/SKILL.md mentions
 
 Hand-written (preserved across a rewrite): `use`, `namespaces`, `skills`, `meta`.
 A new tool arrives with an empty `use`, which tests/test_tool_graph.py refuses,
@@ -58,7 +58,7 @@ def skill_edges(tools: set[str]) -> dict[str, set[str]]:
     """{skill: tools it mentions}, restricted to registered tools."""
     return {
         p.parent.name: set(TOOL_REF.findall(p.read_text())) & tools
-        for p in sorted(SKILLS.glob("*/skill.md"))
+        for p in sorted(SKILLS.glob("*/SKILL.md"))
     }
 
 

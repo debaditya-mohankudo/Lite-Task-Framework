@@ -4,8 +4,8 @@ description: Engineering execution philosophy for active tasks. Stay in scope, l
 user-invocable: true
 model: sonnet
 doc: docs/methodology/04-implementation.md
-repo: ~/workspace/task-framework/.claude/skills/task-implementation/skill.md
-deployed: ~/.claude/skills/task-implementation/skill.md
+repo: ~/workspace/task-framework/.claude/skills/task-implementation/SKILL.md
+deployed: ~/.claude/skills/task-implementation/SKILL.md
 ---
 
 Grooming removed the uncertainty. This is about not reintroducing it.
@@ -130,7 +130,7 @@ subsystem.
 
 ## Finish
 
-Commit first, with [/commit](../commit/skill.md): it cites `task:<id>` and then calls `tasks__add_commit(task_id, sha, repo)`. There is no hook that does this automatically, so the link only exists if that call is made. `python -m taskfw.backfill` re-derives it from git history if the call is missed; that is the recovery path, not a substitute.
+Commit first, with [/commit](../commit/SKILL.md): it cites `task:<id>` and then calls `tasks__add_commit(task_id, sha, repo)`. There is no hook that does this automatically, so the link only exists if that call is made. `python -m taskfw.backfill` re-derives it from git history if the call is missed; that is the recovery path, not a substitute.
 
 Then close the task on what actually landed:
 

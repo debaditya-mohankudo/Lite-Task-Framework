@@ -3,8 +3,8 @@ name: task-introspection
 description: Post-task retrospective that improves the engineering system. Grades grooming's predictions, captures unlogged decisions, and evolves concepts and skills so the next execution is cheaper. Use when the user says /task-introspection or "retrospect on task:<id>".
 user-invocable: true
 doc: docs/methodology/05-introspection.md
-repo: ~/workspace/task-framework/.claude/skills/task-introspection/skill.md
-deployed: ~/.claude/skills/task-introspection/skill.md
+repo: ~/workspace/task-framework/.claude/skills/task-introspection/SKILL.md
+deployed: ~/.claude/skills/task-introspection/SKILL.md
 ---
 
 The purpose is not to remember the past. It is to make the **next** execution better.

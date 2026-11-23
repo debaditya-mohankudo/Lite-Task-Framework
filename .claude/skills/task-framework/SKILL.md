@@ -3,8 +3,8 @@ name: task-framework
 description: Start or resume a task using taskfw. Creates a task, activates it for the workspace, and explains the lifecycle. Use when the user runs /task-framework or asks to work on a task with tracking.
 user-invocable: true
 doc: docs/methodology/01-framework.md
-repo: ~/workspace/task-framework/.claude/skills/task-framework/skill.md
-deployed: ~/.claude/skills/task-framework/skill.md
+repo: ~/workspace/task-framework/.claude/skills/task-framework/SKILL.md
+deployed: ~/.claude/skills/task-framework/SKILL.md
 ---
 
 The entry point for work that will take more than one step.
@@ -46,7 +46,7 @@ tasks__create(title="...", parent="<parent id>", motivation="...",
               resolution=["step one", "step two"], files=["a.py"], tags=["area"])
 ```
 
-There is no body template and no required sections — the object's shape is the schema. See [/task-create](../task-create/skill.md) for what each field is for.
+There is no body template and no required sections — the object's shape is the schema. See [/task-create](../task-create/SKILL.md) for what each field is for.
 
 ### 3. Groom before writing code
 
@@ -54,7 +54,7 @@ There is no body template and no required sections — the object's shape is the
 tasks__log_skill_invocation(skill="task-framework/step-3-groom", task_id=task_id)
 ```
 
-Run [/task-grooming](../task-grooming/skill.md) with `task:<id>` or `epic:<id>`. Skip only for trivial single-task work.
+Run [/task-grooming](../task-grooming/SKILL.md) with `task:<id>` or `epic:<id>`. Skip only for trivial single-task work.
 
 Gaps caught in grooming cost nothing. Gaps caught mid-implementation cost a revert and a replan.
 
@@ -79,7 +79,7 @@ Task <id> active — <title>
 tasks__log_skill_invocation(skill="task-framework/step-5-work", task_id=task_id)
 ```
 
-Follow [/task-implementation](../task-implementation/skill.md). Tick items as they complete:
+Follow [/task-implementation](../task-implementation/SKILL.md). Tick items as they complete:
 
 ```python
 tasks__check_item(task_id, index=0, done=True)
@@ -94,7 +94,7 @@ Find code with Read, Grep, and Glob. The framework deliberately ships no code se
 tasks__log_skill_invocation(skill="task-framework/step-6-commit", task_id=task_id)
 ```
 
-Commit with [/commit](../commit/skill.md). It puts `task:<id>` in the message and then calls `tasks__add_commit` — **no hook records the commit→task link**, so a raw `git commit` leaves the task's `commits` empty. `python -m taskfw.backfill` recovers missed links from git history; it is the recovery path, not a substitute.
+Commit with [/commit](../commit/SKILL.md). It puts `task:<id>` in the message and then calls `tasks__add_commit` — **no hook records the commit→task link**, so a raw `git commit` leaves the task's `commits` empty. `python -m taskfw.backfill` recovers missed links from git history; it is the recovery path, not a substitute.
 
 ### 7. Finish, then introspect
 
@@ -103,7 +103,7 @@ tasks__log_skill_invocation(skill="task-framework/step-7-finish-then-introspect"
 tasks__finish(task_id, reason="what actually shipped")
 ```
 
-Then run [/task-introspection](../task-introspection/skill.md). It is the step that makes the next task cheaper, and the easiest one to skip.
+Then run [/task-introspection](../task-introspection/SKILL.md). It is the step that makes the next task cheaper, and the easiest one to skip.
 
 ## Resuming
 

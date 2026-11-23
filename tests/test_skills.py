@@ -67,7 +67,7 @@ LINK = re.compile(r"\]\((?!https?:)([^)#]+)\)")
 
 
 def skills() -> list[Path]:
-    return sorted(SKILLS.glob("*/skill.md"))
+    return sorted(SKILLS.glob("*/SKILL.md"))
 
 
 def registered_tools() -> set[str]:

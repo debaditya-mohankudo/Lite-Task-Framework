@@ -15,7 +15,7 @@ task-framework → task-grooming → task-implementation → task-introspection
 
 `task-framework` is the entry point. `task-create` is not a stage; it is the field reference `task-framework` step 2 links to. That makes five skills.
 
-Audit [/commit](../commit/skill.md) with them. It is not a lifecycle stage, but it is where the commit→task link is actually made, and its rules are the ones the lifecycle skills restate (and have contradicted: in the 2026-11-02 audit, task-framework claimed a hook recorded that link while /commit said none did). That is six skills to audit, plus this one.
+Audit [/commit](../commit/SKILL.md) with them. It is not a lifecycle stage, but it is where the commit→task link is actually made, and its rules are the ones the lifecycle skills restate (and have contradicted: in the 2026-11-02 audit, task-framework claimed a hook recorded that link while /commit said none did). That is six skills to audit, plus this one.
 
 They reference each other constantly, and they sit on top of two things that move underneath them: [docs/methodology/](../../../docs/methodology/), which owns the reasoning, and `taskfw/mcp_server.py`, which owns the tool surface. Nothing keeps prose in sync with either.
 
@@ -87,7 +87,7 @@ The question that finds real gaps: **does a tool exist that a skill should menti
 ```bash
 grep -oE '^def (tasks__[a-z_]+|concept__[a-z_]+|task_memory__[a-z_]+)' taskfw/mcp_server.py \
   | sed 's/^def //' | sort \
-  | while read t; do echo "$(grep -lw "$t" .claude/skills/*/skill.md | wc -l | tr -d ' ') $t"; done
+  | while read t; do echo "$(grep -lw "$t" .claude/skills/*/SKILL.md | wc -l | tr -d ' ') $t"; done
 ```
 
 A `0` is a tool no skill mentions. All three namespaces matter: `task_memory__*` is the loop-memory half of grooming and introspection, and leaving it out of this grep is how an unreferenced memory tool would go unnoticed.

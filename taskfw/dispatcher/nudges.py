@@ -25,7 +25,7 @@ def _lesson_texts(report: dict) -> list[str]:
     """Every lesson-shaped entry in an introspection report, across both shapes in use.
 
     `new_knowledge` (list[str]) is the canonical field — see
-    task-introspection/skill.md Step 6, and taskfw.accuracy, which is the only
+    task-introspection/SKILL.md Step 6, and taskfw.accuracy, which is the only
     other reader of an introspection report and reads exactly this key.
     `surprises[].lesson` is read too, for backward compatibility with reports
     already written in that shape before this module existed (e.g. the six

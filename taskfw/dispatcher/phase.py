@@ -15,7 +15,7 @@ def is_groomed(task) -> bool:
     """Whether task has been through a grooming pass.
 
     A task is groomed exactly when its grooming findings are non-empty —
-    there is no separate groomed_at flag, matching task-grooming/skill.md's
+    there is no separate groomed_at flag, matching task-grooming/SKILL.md's
     own definition. The single predicate task_phase and every caller that
     needs this specific signal (e.g. ungroomed_progress_nudge) share, so a
     future change to what "groomed" means only has to change here.

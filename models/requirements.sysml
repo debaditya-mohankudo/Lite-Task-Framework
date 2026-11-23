@@ -63,7 +63,7 @@ package Requirements {
             "taskfw/dispatcher/chassis.py",
             "taskfw/dispatcher/phase.py",
             "taskfw/dispatcher/nudges.py",
-            ".claude/skills/commit/skill.md"
+            ".claude/skills/commit/SKILL.md"
         );
     }
 
@@ -319,7 +319,7 @@ package Requirements {
 
     requirement def CommitTaskTraceabilityRequirement {
         doc /* Source: taskfw/mcp_server.py:tasks__add_commit,
-             * .claude/skills/commit/skill.md, taskfw/backfill.py.
+             * .claude/skills/commit/SKILL.md, taskfw/backfill.py.
              * A commit referencing task:<id> is linked to that task — by an
              * explicit tasks__add_commit call the commit skill makes after a
              * successful commit, or by backfill scanning git history for

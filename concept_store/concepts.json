@@ -511,8 +511,8 @@
         "tests/test_scope.py:TestGroomingAccuracyIsHonestAboutWhatItCounted",
         "models/derived_values.sysml:GroomingAccuracyTally",
         "tests/test_accuracy.py:TestWrongBecause",
-        ".claude/skills/task-introspection/skill.md",
-        ".claude/skills/task-grooming/skill.md"
+        ".claude/skills/task-introspection/SKILL.md",
+        ".claude/skills/task-grooming/SKILL.md"
       ],
       "invariants": [
         "_task_grading(task) -> (risks, ungraded_count, any_graded) is the single per-task classification both grooming_accuracy and loop_debt call — factored out (task:07f9270c) so the two reads can never disagree about what counts as skipped or ungraded.",
@@ -1623,7 +1623,7 @@
         "tests/test_risk.py",
         "taskfw/risk.py:GROOMING_GRADES",
         "taskfw/risk.py:WrongReason, WRONG_REASONS",
-        ".claude/skills/task-introspection/skill.md",
+        ".claude/skills/task-introspection/SKILL.md",
         "docs/methodology/05-introspection.md"
       ],
       "invariants": [
@@ -1772,7 +1772,7 @@
         "tests/test_skills.py:TestCoverage"
       ],
       "invariants": [
-        "Every tasks__/task_memory__/concept__ token referenced in a skill.md must name a tool actually registered on taskfw.mcp_server.",
+        "Every tasks__/task_memory__/concept__ token referenced in a SKILL.md must name a tool actually registered on taskfw.mcp_server.",
         "No skill other than task-skills-audit (which must exist exactly once, as the sole enumerator of these prohibitions) may contain an mcp__ host-prefixed tool name or the string 'session_id'.",
         "Every skill's frontmatter carries name/description/user-invocable/updated/doc, its name matches its directory, its doc: field points at a methodology file that exists, and its frontmatter never names an external checkout (e.g. 'claude-hooks').",
         "Every methodology stage document (0*.md) is referenced by at least one skill's doc: field, and tasks__grooming_accuracy -- the one cross-task tool with no natural discovery path -- is mentioned by at least one skill."
@@ -1862,7 +1862,7 @@
         "taskfw/dispatcher/phase.py:is_introspected"
       ],
       "invariants": [
-        "task_phase's 'groomed' has no separate groomed_at flag — a task is groomed exactly when task.grooming is non-empty, matching task-grooming/skill.md's own definition, so this and ungroomed_progress_nudge can never disagree about what counts as groomed.",
+        "task_phase's 'groomed' has no separate groomed_at flag — a task is groomed exactly when task.grooming is non-empty, matching task-grooming/SKILL.md's own definition, so this and ungroomed_progress_nudge can never disagree about what counts as groomed.",
         "is_implemented deliberately excludes finish_reminder_nudge's own status=='open' gate: that gate is about whether to nudge someone to call tasks__finish (pointless once the task is already done), not about whether the work itself is complete — a done task with a full checklist is still implemented.",
         "tasks__phase returns the three raw booleans rather than any collapsed single-word label, so it can never disagree with task_phase itself (task:00d9483f removed phase_label, next_open_item, and completed_items along with their only caller, the drift nudge).",
         "phase.py has zero imports from chassis.py or nudges.py — it operates only on a Task's own fields, which is what makes it safe for nudges.py to import from without any risk of a cycle.",
@@ -2096,7 +2096,7 @@
     "tool-graph-derived-and-tested": {
       "confidence": 0.9,
       "contracts": [
-        "mcp_tools/gen_tool_graph.py rewrites tool-graph.json's tool set, per-tool hooks and used_by relations from taskfw/mcp_server.py @_tool decorators and .claude/skills/*/skill.md; --check exits 1 when stale",
+        "mcp_tools/gen_tool_graph.py rewrites tool-graph.json's tool set, per-tool hooks and used_by relations from taskfw/mcp_server.py @_tool decorators and .claude/skills/*/SKILL.md; --check exits 1 when stale",
         "Hand-written `use`, `namespaces`, `skills` and `meta` are preserved across a rewrite"
       ],
       "created_at": "2026-10-11T00:00:00+00:00",

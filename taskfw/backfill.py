@@ -1,7 +1,7 @@
 """Backfill commit links from git history.
 
 There is no automatic capture. A commit gets linked to a task by an explicit
-tasks__add_commit call — the commit skill (.claude/skills/commit/skill.md)
+tasks__add_commit call — the commit skill (.claude/skills/commit/SKILL.md)
 makes that call after a successful commit — but nothing enforces it happens.
 A commit made outside the skill, or one where the call was skipped, forgotten,
 or failed, leaves no link, and the gap is invisible: a task with no commits

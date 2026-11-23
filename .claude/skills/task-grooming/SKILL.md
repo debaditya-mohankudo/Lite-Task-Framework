@@ -3,8 +3,8 @@ name: task-grooming
 description: Pre-implementation grooming pass. Removes uncertainty before implementation by pulling context, verifying premises, and recording falsifiable risks. Invoke with /task-grooming, /task-grooming task:<id>, or /task-grooming epic:<id>.
 user-invocable: true
 doc: docs/methodology/03-grooming.md
-repo: ~/workspace/task-framework/.claude/skills/task-grooming/skill.md
-deployed: ~/.claude/skills/task-grooming/skill.md
+repo: ~/workspace/task-framework/.claude/skills/task-grooming/SKILL.md
+deployed: ~/.claude/skills/task-grooming/SKILL.md
 ---
 
 Grooming is not for making a task prettier. It is for **removing uncertainty before implementation**, so coding can begin without another planning pause.
