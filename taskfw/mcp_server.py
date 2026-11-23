@@ -283,10 +283,11 @@ def _loop_debt_hook(result: dict[str, Any]) -> None:
     # the accepted risk recorded on concept:grooming-accuracy-aggregate.
     # The task's recorded scope, not a re-derivation from the server's cwd;
     # derive_scope() only for a task created before scope was recorded.
-    debt = loop_debt(store(), limit=_LOOP_DEBT_LIMIT, scope=task.scope or derive_scope())
+    debt = loop_debt(store(), limit=_LOOP_DEBT_LIMIT, scope=task.scope or derive_scope(),
+                     exclude=task.id)
     dispatcher.apply_nudge(
         result, dispatcher.loop_debt_nudge,
-        debt["skipped_introspection"], debt["tasks_examined"],
+        debt["skipped_introspection"], debt["tasks_examined"], debt["open_with_commits"],
     )
     _, task_ungraded, _ = _task_grading(task)
     dispatcher.apply_nudge(result, dispatcher.task_debt_nudge, task.id, task_ungraded)
@@ -354,7 +355,7 @@ def tasks__grooming_accuracy(limit: int = 25, scope: str = "") -> dict[str, Any]
     # for_repo, not derive, so a Scope value is never re-read as a directory
     # (task:2a7eacc8). Either way the result names the scope it counted.
     return grooming_accuracy(store(), limit=limit,
-                             scope=scope_for_repo(scope) if scope else None)
+                             scope=_read_scope(scope, default_current=False))
 
 
 def _capped(key: str, rows: list, limit: int) -> dict[str, Any]:
@@ -441,12 +442,60 @@ def tasks__phase(task_id: str) -> dict[str, Any]:
     return {"id": task.id, **dispatcher.task_phase(task)}
 
 
+#: The `scope` value tasks__list / tasks__search take for "every project".
+ALL_SCOPES = "all"
+
+
+def _read_scope(scope: str, default_current: bool = True) -> str | None:
+    """The one home for how a read tool turns its `scope` argument into a filter.
+
+    "" is the project this server works in (`derive_scope()`) — review
+    2026-11-23 L4: an unfiltered listing mixed every repo's open tasks — or
+    no filter when `default_current` is off. `all` is no filter. Anything
+    else is a repo path or a Scope value, read through `scope_for_repo` so a
+    Scope value is never re-read as a directory (task:2a7eacc8).
+    """
+    if scope == ALL_SCOPES:
+        return None
+    if not scope:
+        return derive_scope() if default_current else None
+    return scope_for_repo(scope)
+
+
+def _scoped(key: str, rows: list, limit: int, scope: str | None,
+            unscoped: Callable[[int], list]) -> dict[str, Any]:
+    """_capped plus the account of what a scope filter left out.
+
+    A scoped read excludes every unscoped task (store.list's exact match), so
+    the answer echoes `scope` and, when unscoped rows also matched, carries
+    `unscoped_not_listed: {"count": N}` — with `truncated` inside it when N
+    hit the probe — so an omission never reads as an absence. `unscoped`
+    runs the same read with scope="" and the given probe limit.
+    """
+    out = _capped(key, rows, limit)
+    out["scope"] = scope or "global"
+    if scope:
+        extra = unscoped(limit + 1)
+        if extra:
+            out["unscoped_not_listed"] = {"count": min(len(extra), limit)}
+            if len(extra) > limit:
+                out["unscoped_not_listed"]["truncated"] = {"limit": limit}
+    return out
+
+
 @_tool()
-def tasks__list(status: str = "open,blocked", epic: bool | None = None, parent: str = "", limit: int = 50) -> dict[str, Any]:
+def tasks__list(status: str = "open,blocked", epic: bool | None = None, parent: str = "",
+                limit: int = 50, scope: str = "") -> dict[str, Any]:
     """List tasks. status is comma-separated; empty means every status.
 
-    Returns {"tasks": [...]}, plus `truncated: {"limit": N}` when more rows
-    matched than the limit — absent means nothing was cut.
+    Returns {"tasks": [...], "scope": ...}, plus `truncated: {"limit": N}`
+    when more rows matched than the limit — absent means nothing was cut.
+
+    `scope` "" lists the project this server runs in, "all" every project,
+    or pass a repo path or Scope value (`git:...`). With `parent` given and
+    scope empty, no project filter applies: the parent already narrows, and
+    an epic's children may live in other repos. A scoped answer carries
+    `unscoped_not_listed` when tasks with no recorded scope also matched.
 
     epic omitted lists both; epic=true lists only epics, epic=false only
     non-epic tasks. Rows come back ordered by updated_at, most recently
@@ -454,27 +503,34 @@ def tasks__list(status: str = "open,blocked", epic: bool | None = None, parent: 
     """
     statuses = tuple(s.strip() for s in status.split(",") if s.strip()) or None
     limit = max(limit, 0)
-    tasks = store().list(status=statuses, epic=epic, parent=parent or None, limit=limit + 1)
-    return _capped("tasks", [
+    where = _read_scope(scope, default_current=not parent)
+    filters = {"status": statuses, "epic": epic, "parent": parent or None}
+    tasks = store().list(**filters, scope=where, limit=limit + 1)
+    return _scoped("tasks", [
         {"id": t.id, "epic": t.epic, "status": t.status, "title": t.title,
          "parent": t.parent, "progress": list(t.progress),
          "created_at": t.created_at, "updated_at": t.updated_at}
         for t in tasks
-    ], limit)
+    ], limit, where, lambda n: store().list(**filters, scope="", limit=n))
 
 
 @_tool()
-def tasks__search(query: str, limit: int = 25) -> dict[str, Any]:
+def tasks__search(query: str, limit: int = 25, scope: str = "") -> dict[str, Any]:
     """Full-text search over titles, motivation, notes, tags, files, and checklist items.
 
-    Returns {"tasks": [...]}, plus `truncated: {"limit": N}` when more tasks
-    matched than the limit — absent means nothing was cut.
+    Returns {"tasks": [...], "scope": ...}, plus `truncated: {"limit": N}`
+    when more tasks matched than the limit — absent means nothing was cut.
+
+    `scope` as in tasks__list: "" this project, "all" every project, or a
+    repo path / Scope value. For a duplicate check before calling a task
+    unique, search with scope="all" too — a duplicate can live elsewhere.
     """
     limit = max(limit, 0)
-    return _capped("tasks", [
+    where = _read_scope(scope)
+    return _scoped("tasks", [
         {"id": t.id, "epic": t.epic, "status": t.status, "title": t.title}
-        for t in store().search(query, limit=limit + 1)
-    ], limit)
+        for t in store().search(query, limit=limit + 1, scope=where)
+    ], limit, where, lambda n: store().search(query, limit=n, scope=""))
 
 
 # ---------------------------------------------------------------------------

@@ -174,22 +174,33 @@ def ungroomed_start_nudge(task) -> str | None:
     )
 
 
-def loop_debt_nudge(skipped: int, tasks_examined: int) -> str | None:
+def loop_debt_nudge(skipped: int, tasks_examined: int, open_with_commits: int = 0) -> str | None:
     """Advisory nudge for tasks__set_active and tasks__create, or None when there's no debt — task:07f9270c.
 
     Stateless and unthrottled, matching finish_reminder_nudge's precedent: the
     debt is recomputed from taskfw.accuracy.loop_debt on every call rather
     than tracked separately, so it can never disagree with what
     tasks__grooming_accuracy reports about the same tasks. Fires only when
-    skipped > 0 — a clean loop produces silence, not a zero report, same as
+    there is debt — a clean loop produces silence, not a zero report, same as
     every other nudge here.
+
+    `open_with_commits` (task:b0e060ca) is a second bare count: open tasks
+    that already carry a commit and so never reach the finished-task window
+    `skipped` is counted over. Like `skipped`, it names no task.
     """
-    if not skipped:
-        return None
-    return (
-        f"{skipped} of the last {tasks_examined} finished task(s) had predicted "
-        "risks that were never graded. Consider running /task-introspection on them."
-    )
+    parts = []
+    if skipped:
+        parts.append(
+            f"{skipped} of the last {tasks_examined} finished task(s) had predicted "
+            "risks that were never graded. Consider running /task-introspection on them."
+        )
+    if open_with_commits:
+        parts.append(
+            f"{open_with_commits} other open task(s) already have commits but were "
+            "never finished, so they cannot be introspected. "
+            "tasks__grooming_accuracy lists them under open_with_commits."
+        )
+    return " ".join(parts) or None
 
 
 def task_debt_nudge(task_id: str, ungraded: int) -> str | None:

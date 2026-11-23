@@ -328,6 +328,92 @@ class TestLoopDebtIsHonestAboutWhatItCounted:
         assert "unscoped_not_counted" not in loop_debt(store, scope="git:a/b")
 
 
+class TestOpenWithCommitsIsDebt:
+    """Review 2026-11-23 L1 (task:b0e060ca): a committed task left open never
+    finishes, so no finished-task window could see it."""
+
+    def _open(self, store, title, scope, commit=True, status="open"):
+        task = store.save(Task(title=title, scope=scope))
+        if status != "open":
+            task.status = status
+            store.save(task)
+        if commit:
+            store.add_commit(task.id, "a" * 40)
+        return task
+
+    def test_store_lists_only_open_tasks_with_commits_in_scope(self, store):
+        hit = self._open(store, "committed", "git:a/b")
+        self._open(store, "no commit", "git:a/b", commit=False)
+        self._open(store, "blocked", "git:a/b", status="blocked")
+        self._open(store, "other repo", "git:c/d")
+        assert store.open_with_commits(scope="git:a/b") == [hit.id]
+
+    def test_loop_debt_counts_them_and_excludes_the_active_task(self, store):
+        a = self._open(store, "one", "git:a/b")
+        self._open(store, "two", "git:a/b")
+        assert loop_debt(store, scope="git:a/b")["open_with_commits"] == 2
+        assert loop_debt(store, scope="git:a/b", exclude=a.id)["open_with_commits"] == 1
+
+    def test_unscoped_ones_land_in_the_remainder(self, store):
+        self._open(store, "legacy", "")
+        debt = loop_debt(store, scope="git:a/b")
+        assert debt["open_with_commits"] == 0
+        assert debt["unscoped_not_counted"]["open_with_commits"] == 1
+
+    def test_grooming_accuracy_lists_ids_and_signals(self, store):
+        t = self._open(store, "one", "git:a/b")
+        report = grooming_accuracy(store, scope="git:a/b")
+        assert report["open_with_commits"] == [t.id]
+        assert any("already have commits" in s for s in report["signals"])
+
+    def test_nudge_carries_the_count_alone(self):
+        from taskfw.dispatcher.nudges import loop_debt_nudge
+        assert loop_debt_nudge(0, 10, 0) is None
+        text = loop_debt_nudge(0, 10, 3)
+        assert text and "3 other open task(s)" in text
+
+
+class TestListAndSearchAreScoped:
+    """Review 2026-11-23 L4 (task:b0e060ca): an unfiltered listing mixed
+    every repo's tasks. The default is the server's project; `all` is the
+    escape; an excluded unscoped task is counted, never silently dropped."""
+
+    @pytest.fixture
+    def wired(self, store, monkeypatch):
+        m.set_store(store)
+        monkeypatch.setattr(m, "derive_scope", lambda: "git:a/b")
+        store.save(Task(title="widget mine", scope="git:a/b"))
+        store.save(Task(title="widget theirs", scope="git:c/d"))
+        store.save(Task(title="widget legacy", scope=""))
+        yield store
+        m.set_store(None)
+
+    def test_list_defaults_to_the_current_project(self, wired):
+        out = m.tasks__list()
+        assert [t["title"] for t in out["tasks"]] == ["widget mine"]
+        assert out["scope"] == "git:a/b"
+        assert out["unscoped_not_listed"] == {"count": 1}
+
+    def test_all_lists_every_project_and_claims_no_remainder(self, wired):
+        out = m.tasks__list(scope="all")
+        assert len(out["tasks"]) == 3 and out["scope"] == "global"
+        assert "unscoped_not_listed" not in out
+
+    def test_an_explicit_scope_value_is_honoured(self, wired):
+        assert [t["title"] for t in m.tasks__list(scope="git:c/d")["tasks"]] == ["widget theirs"]
+
+    def test_parent_without_scope_is_not_project_filtered(self, wired):
+        epic = wired.save(Task(title="epic", epic=True, scope="git:a/b"))
+        wired.save(Task(title="child elsewhere", parent=epic.id, scope="git:c/d"))
+        assert [t["title"] for t in m.tasks__list(parent=epic.id)["tasks"]] == ["child elsewhere"]
+
+    def test_search_is_scoped_the_same_way(self, wired):
+        out = m.tasks__search("widget")
+        assert [t["title"] for t in out["tasks"]] == ["widget mine"]
+        assert out["unscoped_not_listed"] == {"count": 1}
+        assert len(m.tasks__search("widget", scope="all")["tasks"]) == 3
+
+
 class TestGroomingAccuracyIsHonestAboutWhatItCounted:
     """The sibling of TestLoopDebtIsHonestAboutWhatItCounted, and it exists
     because that class had no sibling (task:de2b48b1).

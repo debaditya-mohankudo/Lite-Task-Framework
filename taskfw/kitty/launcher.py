@@ -66,7 +66,7 @@ def build_env(task_id: str, worktree: str, db: str, path: str, store: str | None
     return env
 
 
-SLIM_MCP_DEFAULT = ("taskfw", "claude-hooks")
+SLIM_MCP_DEFAULT = ("taskfw", "find_cli")
 CLAUDE_JSON = Path("~/.claude.json")
 SETTINGS_JSON = Path("~/.claude/settings.json")
 MCP_READ_TRIES, MCP_READ_PAUSE = 3, 0.05  # a read racing a write of ~/.claude.json sees a torn file
@@ -77,7 +77,7 @@ def mcp_choice(env: Mapping[str, str] = os.environ,
     """(`--mcp-config` JSON | None, source). The JSON holds only the servers a task tab uses, copied from
     the user-level `mcpServers` in ~/.claude.json (their commands are host paths, so nothing is checked
     in). Names come from TASKFW_KITTY_MCP (comma list; empty or `all` = no slimming), default taskfw +
-    claude-hooks. The config is None, meaning the current launch, when the file is unreadable or any named
+    find_cli. The config is None, meaning the current launch, when the file is unreadable or any named
     server is absent: a partial set would leave a tab without tools it was promised. Strict means ONLY these:
     project `.mcp.json`, `projects[...].mcpServers` and plugin servers are dropped by design; name one in
     TASKFW_KITTY_MCP only if it is user-level, or set `all`. `source` says why, for

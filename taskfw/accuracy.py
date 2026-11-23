@@ -201,13 +201,17 @@ def _unscoped_remainder(store: TaskStore, limit: int, scope: str | None) -> dict
     if not scope:
         return None
     skipped, ungraded = _debt_counts(store.list(status=("done",), scope="", limit=limit))
-    if not (skipped or ungraded):
+    open_committed = len(store.open_with_commits(scope=""))
+    if not (skipped or ungraded or open_committed):
         return None
-    return {"skipped_introspection": skipped, "ungraded_risks": ungraded}
+    out = {"skipped_introspection": skipped, "ungraded_risks": ungraded}
+    if open_committed:  # added by task:b0e060ca; present only when non-zero
+        out["open_with_commits"] = open_committed
+    return out
 
 
 def loop_debt(store: TaskStore, limit: int = 10,
-              scope: str | None = None) -> dict[str, Any]:
+              scope: str | None = None, exclude: str = "") -> dict[str, Any]:
     """A cheap window onto the same debt `grooming_accuracy` reports in full.
 
     task:07f9270c — surfaced from `tasks__set_active`, which is called far
@@ -231,13 +235,23 @@ def loop_debt(store: TaskStore, limit: int = 10,
     project window, so a scoped count is genuinely smaller than the truth.
     Reporting the remainder is what keeps that a narrowing rather than a
     disappearance — an omission must not look like an absence.
+
+    `open_with_commits` counts open tasks that already carry a commit
+    (task:b0e060ca, review 2026-11-23 L1). Those never finish, so the
+    finished-task window above cannot see them, yet they are the same debt
+    one step earlier: introspection skipped by never closing. It is not
+    windowed by `limit`, since a forgotten task does not age out of being
+    forgotten. `exclude` drops one id, the task just activated, which is
+    legitimately open mid-work.
     """
     tasks = store.list(status=("done",), scope=scope, limit=limit)
     skipped, ungraded = _debt_counts(tasks)
+    open_committed = store.open_with_commits(scope=scope, exclude=exclude)
     result: dict[str, Any] = {
         "tasks_examined": len(tasks),
         "skipped_introspection": skipped,
         "ungraded_risks": ungraded,
+        "open_with_commits": len(open_committed),
         "scope": scope or "global",
     }
     if remainder := _unscoped_remainder(store, limit, scope):
@@ -314,6 +328,7 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
     only one of them did.
     """
     tasks = store.list(status=("done",), scope=scope, limit=limit)
+    open_committed = store.open_with_commits(scope=scope)
 
     tallies: Counter[str] = Counter()
     unrecognised: Counter[str] = Counter()
@@ -417,10 +432,13 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
         ),
         "recurring_risks": recurring,
         "skipped_introspection": skipped,
+        # Not windowed by `limit` — see loop_debt. Ids, like
+        # skipped_introspection, because this is the full report.
+        "open_with_commits": open_committed,
         "self_report_disagreements": disagreements,
         "signals": _signals(
             tallies, graded_total, missed_groomed, skipped,
-            missed_ungroomed, ungroomed_with_surprises,
+            missed_ungroomed, ungroomed_with_surprises, len(open_committed),
         ),
     }
     if remainder := _unscoped_remainder(store, limit, scope):
@@ -431,19 +449,25 @@ def grooming_accuracy(store: TaskStore, limit: int = 25,
 
 
 def _signals(tallies: Counter, graded_total: int, missed_groomed: int, skipped: list[str],
-             missed_ungroomed: int = 0, ungroomed_with_surprises: int = 0) -> list[str]:
+             missed_ungroomed: int = 0, ungroomed_with_surprises: int = 0,
+             open_committed: int = 0) -> list[str]:
     """Interpretations, each traceable to a stated threshold.
 
     Kept separate from the counts so the judgement is auditable and refusable.
-    A signal is emitted only where the sample supports it — the exception is a
-    skipped introspection, which needs no sample size because a single one is
-    already the loop not running.
+    A signal is emitted only where the sample supports it — the exceptions are
+    a skipped introspection and a committed task left open, which need no
+    sample size because a single one is already the loop not running.
     """
     out: list[str] = []
     if skipped:
         out.append(
             f"{len(skipped)} finished task(s) predicted risks and graded none. "
             "Introspection was skipped — the predictions taught nothing."
+        )
+    if open_committed:
+        out.append(
+            f"{open_committed} open task(s) already have commits. Unfinished, "
+            "they never reach introspection — finish or abandon them."
         )
     if graded_total >= MIN_SAMPLE:
         wrong = tallies.get("wrong", 0) / graded_total

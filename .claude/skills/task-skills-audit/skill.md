@@ -10,8 +10,10 @@ doc: docs/methodology/README.md
 The lifecycle is a chain of five skills, each edited independently:
 
 ```
-task-create → task-framework → task-grooming → task-implementation → task-introspection
+task-framework → task-grooming → task-implementation → task-introspection
 ```
+
+`task-framework` is the entry point. `task-create` is not a stage; it is the field reference `task-framework` step 2 links to. That makes five skills.
 
 Audit [/commit](../commit/skill.md) with them. It is not a lifecycle stage, but it is where the commit→task link is actually made, and its rules are the ones the lifecycle skills restate (and have contradicted: in the 2026-11-02 audit, task-framework claimed a hook recorded that link while /commit said none did). That is six skills to audit, plus this one.
 
@@ -35,12 +37,12 @@ This skill audits the skills, not a single task, so `task_id` is left empty on e
 - no `mcp__<server>__` prefixes, which would tie the skills to one host's wiring
 - no `session_id`, which the framework has no concept of
 - every relative markdown link resolves
-- frontmatter carries `name`, `description`, `user-invocable`, `updated`, `doc`, and `doc` points at a real methodology file
+- frontmatter carries `name`, `description`, `user-invocable`, `doc`, and `doc` points at a real methodology file
 
 Run it first — anything it catches needs no judgment:
 
 ```bash
-.venv/bin/python -m pytest tests/test_skills.py -q
+uv run pytest tests/test_skills.py -q
 ```
 
 Everything below is what a test cannot check.
@@ -67,7 +69,7 @@ Build a list of every claim one skill makes about another's mechanism, then veri
 
 - task-framework's step ordering against what task-grooming actually does
 - task-grooming's "risks must be falsifiable" against how task-introspection grades them
-- task-introspection's byte-identical-text rule against what `tasks__grooming_accuracy` actually groups by
+- what task-introspection says about recurring risks against what `tasks__grooming_accuracy` actually groups by (risk `id` first, then normalised text: `_RecurrenceGrouper` in `taskfw/accuracy.py`)
 - task-create's field descriptions against `tasks__create`'s real signature
 
 Do not guess which side is stale. Describe the mismatch and let the user decide.
@@ -80,7 +82,7 @@ tasks__log_skill_invocation(skill="task-skills-audit/3-tool-surface-completeness
 
 The question that finds real gaps: **does a tool exist that a skill should mention and does not?**
 
-`tasks__list()` cannot answer this — it lists tasks, not registered tool names, and in a shared `tasks.db` it returns rows from every repo using that database, not just this one. Enumerate the tool surface from source instead:
+`tasks__list()` cannot answer this — it lists tasks, not registered tool names. Enumerate the tool surface from source instead:
 
 ```bash
 grep -oE '^def (tasks__[a-z_]+|concept__[a-z_]+|task_memory__[a-z_]+)' taskfw/mcp_server.py \

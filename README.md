@@ -74,7 +74,7 @@ If you run [kitty](https://sw.kovidgoyal.net/kitty/) with remote control on, `ta
 - *Lifecycle:* kitty loads `watcher.py` itself and it appends window events to the store through a short-lived writer process (kitty's bundled Python has no `sqlite3`). Errors land in the log above, not in kitty.
 - *Report back:* this is not a kitty channel at all — it is the tab's own Claude `SendMessage` to `parent`. Kitty only starts the tab and shows its state.
 
-**MCP servers in a task tab:** a task tab (`start` / `resume` / `open`, not `plain`) launches with `--strict-mcp-config` and only `taskfw` + `claude-hooks`, copied at launch from the user-level `mcpServers` in `~/.claude.json` into a 0600 file under `<db dir>/mcp/` (never argv, since server env and headers would show in `ps`). Strict means project `.mcp.json` servers, `projects[...].mcpServers`, plugin servers and claude.ai connectors are absent from the tab by design. `TASKFW_KITTY_MCP` changes the set: a comma list of user-level server names, or empty / `all` for every server with no slimming. If `~/.claude.json` is unreadable or a named server is missing, the tab gets every server rather than a partial set. Each launch logs why it got the set it did: the `kitty launch` line under logger `taskfw.kitty` (stderr, and `tasks__logs(logger="taskfw.kitty")`) carries `mcp=<names>|all` and `mcp_source=<default|override|all-requested|fallback:<reason>>`, with `;drops=<…>` naming any project or plugin server strict mode hid.
+**MCP servers in a task tab:** a task tab (`start` / `resume` / `open`, not `plain`) launches with `--strict-mcp-config` and only `taskfw` + `find_cli`, copied at launch from the user-level `mcpServers` in `~/.claude.json` into a 0600 file under `<db dir>/mcp/` (never argv, since server env and headers would show in `ps`). Strict means project `.mcp.json` servers, `projects[...].mcpServers`, plugin servers and claude.ai connectors are absent from the tab by design. `TASKFW_KITTY_MCP` changes the set: a comma list of user-level server names, or empty / `all` for every server with no slimming. If `~/.claude.json` is unreadable or a named server is missing, the tab gets every server rather than a partial set. Each launch logs why it got the set it did: the `kitty launch` line under logger `taskfw.kitty` (stderr, and `tasks__logs(logger="taskfw.kitty")`) carries `mcp=<names>|all` and `mcp_source=<default|override|all-requested|fallback:<reason>>`, with `;drops=<…>` naming any project or plugin server strict mode hid.
 
 **Not a task:** `python -m taskfw.kitty.launcher plain --cwd <dir> --parent <session> [--prompt P] [--title T] [--model M --model-reason R]` opens a claude tab that belongs to no task (e.g. to run a project skill) and prints its window id. `--parent` is required: it is the caller's session name as `ListAgents` prints it, and the prompt ends with a sentence telling the tab to SendMessage it the outcome when finished, since a plain tab has no task row to read a result from. It carries only `PATH`: no task identity, project hooks or store row. `--cwd` must be the directory holding the `.claude/skills` you want, since project skills load only from there. Choose its model the same way (`--model` with `--model-reason`); omitted, the prompt's keywords and length pick one and stderr says so.
 
@@ -121,15 +121,18 @@ Add `--dry-run` to see what it would link without writing anything, or
 
 ## Multiple projects, one store or many
 
-By default every project shares one task database (`~/.taskfw/tasks.db`) —
-all tasks live in one flat pool, not separated by project. What *is*
-workspace-scoped is the active-task pointer: each workspace path remembers
-its own active task independently, so working in two projects at once
-doesn't cross-activate each other's tasks.
+By default every project shares one task database (`~/.taskfw/tasks.db`).
+Each task records the project it belongs to as its `scope` (the git origin,
+else the directory), and the reads filter on it: `tasks__list` and
+`tasks__search` return the current project's tasks unless you pass
+`scope="all"` or another repo. Tasks written before `scope` existed belong to
+no project. A scoped answer does not hide them silently: it reports how many
+matched under `unscoped_not_listed`. The active-task pointer is separate and
+per workspace path, so working in two projects at once doesn't
+cross-activate each other's tasks.
 
-If you want tasks themselves kept apart per project, point `TASKFW_DB` at a
-different file per project — there's no built-in filtering by workspace, so
-this is the way to get real separation.
+If you want tasks fully apart per project, point `TASKFW_DB` at a different
+file per project.
 
 ## The Jira perspective
 

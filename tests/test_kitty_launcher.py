@@ -245,12 +245,12 @@ def _claude_json(tmp_path, servers):
     return p
 
 
-SERVERS = {"taskfw": {"command": "/a"}, "claude-hooks": {"command": "/b"}, "local-mac": {"command": "/c"}}
+SERVERS = {"taskfw": {"command": "/a"}, "find_cli": {"command": "/b"}, "local-mac": {"command": "/c"}}
 
 
 def test_slim_config_keeps_only_task_servers(tmp_path):
     cfg = json.loads(mcp_choice({}, _claude_json(tmp_path, SERVERS))[0])
-    assert cfg == {"mcpServers": {"taskfw": {"command": "/a"}, "claude-hooks": {"command": "/b"}}}
+    assert cfg == {"mcpServers": {"taskfw": {"command": "/a"}, "find_cli": {"command": "/b"}}}
 
 
 def test_slim_config_names_overridable_and_all_disables(tmp_path):
@@ -265,7 +265,7 @@ def test_slim_config_fails_open(tmp_path):
     bad = tmp_path / "bad.json"
     bad.write_text("{not json")
     assert mcp_choice({}, bad)[0] is None
-    assert mcp_choice({}, _claude_json(tmp_path, {"taskfw": {}}))[0] is None  # claude-hooks absent: no partial set
+    assert mcp_choice({}, _claude_json(tmp_path, {"taskfw": {}}))[0] is None  # find_cli absent: no partial set
 
 
 def test_claude_cmd_pins_strict_flags_before_resume_and_prompt():
@@ -320,7 +320,7 @@ def test_mcp_choice_names_why_each_config_was_or_was_not_built(tmp_path):
     no_key = tmp_path / "nokey.json"
     no_key.write_text("{}")
     assert mcp_choice({}, no_key) == (None, "fallback:no-mcpServers")
-    assert mcp_choice({}, _claude_json(tmp_path, {"taskfw": {}})) == (None, "fallback:server-absent=claude-hooks")
+    assert mcp_choice({}, _claude_json(tmp_path, {"taskfw": {}})) == (None, "fallback:server-absent=find_cli")
     assert mcp_choice({"TASKFW_KITTY_MCP": "nope"}, p) == (None, "fallback:server-absent=nope")
     # a requested server literally named mcpServers is absent or present, never "no-mcpServers"
     assert mcp_choice({"TASKFW_KITTY_MCP": "mcpServers"}, p) == (None, "fallback:server-absent=mcpServers")
@@ -342,7 +342,7 @@ def _launch_line(tmp_path, task, **kw):
 def test_launch_line_states_the_mcp_set_and_why_for_slim_override_and_fallback(tmp_path):
     p = _claude_json(tmp_path, SERVERS)
     for task, env, names, source in [
-        ("mcpslim1", {}, "taskfw,claude-hooks", "default"),
+        ("mcpslim1", {}, "taskfw,find_cli", "default"),
         ("mcpover1", {"TASKFW_KITTY_MCP": "taskfw"}, "taskfw", "override"),
         ("mcpfall1", {"TASKFW_KITTY_MCP": "nope"}, "all", "fallback:server-absent=nope"),
         ("mcpall01", {"TASKFW_KITTY_MCP": "all"}, "all", "all-requested"),
@@ -363,7 +363,7 @@ def test_override_naming_no_server_falls_back_to_default_and_says_so(tmp_path):
     p = _claude_json(tmp_path, SERVERS)
     for raw in (",", " , ,"):
         cfg, why = mcp_choice({"TASKFW_KITTY_MCP": raw}, p)
-        assert set(json.loads(cfg)["mcpServers"]) == {"taskfw", "claude-hooks"}
+        assert set(json.loads(cfg)["mcpServers"]) == {"taskfw", "find_cli"}
         assert why == "fallback:override-empty"
 
 

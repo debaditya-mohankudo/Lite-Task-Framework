@@ -36,6 +36,16 @@ _FTS_DDL = f"CREATE VIRTUAL TABLE IF NOT EXISTS {_FTS_TABLE} USING fts5(id UNIND
 _FTS_INSERT = f"INSERT INTO {_FTS_TABLE} (id, tags, text) VALUES (?,?,?)"
 
 
+def _scope_clause(scope: str | None, column: str = "scope") -> tuple[str, list[str]]:
+    """(" AND <column>=?", [scope]) for a scope filter, or ("", []) for None.
+
+    The one home for the exact-match scope rule TaskStore.list documents:
+    `list`, `search` and `open_with_commits` all filter through it, so an
+    unscoped row is excluded the same way everywhere (task:b0e060ca).
+    """
+    return (f" AND {column}=?", [scope]) if scope is not None else ("", [])
+
+
 class TaskStore:
     def __init__(self, path: Path | str | None = None, conn: sqlite3.Connection | None = None):
         self.conn = conn if conn is not None else connect(path)
@@ -156,20 +166,35 @@ class TaskStore:
         if parent is not None:
             where.append("parent=?")
             params.append(parent)
-        if scope is not None:
-            where.append("scope=?")
-            params.append(scope)
-        sql = "SELECT data FROM tasks"
-        if where:
-            sql += " WHERE " + " AND ".join(where)
+        clause, value = _scope_clause(scope)
+        params += value
+        sql = "SELECT data FROM tasks WHERE 1=1" + "".join(f" AND {w}" for w in where) + clause
         sql += " ORDER BY updated_at DESC LIMIT ?"
         params.append(limit)
         return [Task.from_json(r["data"]) for r in self.conn.execute(sql, params)]
 
+    def open_with_commits(self, scope: str | None = None, exclude: str = "") -> list[str]:
+        """Ids of `open` tasks that already have a recorded commit, newest first.
+
+        A committed task left open is never finished, so it never reaches
+        introspection, and every count that walks finished tasks cannot see
+        it (review 2026-11-23 L1, task:b0e060ca). `blocked` is left out: a
+        blocked task with commits is waiting, which is a stated state, not a
+        forgotten one. `scope` matches exactly as in `list`; `exclude` drops
+        one id (the task being activated, which is open mid-work).
+        """
+        clause, params = _scope_clause(scope, "t.scope")
+        # Driven from task_commits (few rows) into tasks by primary key,
+        # rather than scanning every open task for a matching commit.
+        sql = ("SELECT t.id FROM (SELECT DISTINCT task_id FROM task_commits) k "
+               "JOIN tasks t ON t.id = k.task_id WHERE t.status='open' AND t.id != ?"
+               + clause + " ORDER BY t.updated_at DESC")
+        return [r["id"] for r in self.conn.execute(sql, [exclude, *params])]
+
     def children(self, parent_id: str) -> list[Task]:
         return self.list(status=None, parent=parent_id)
 
-    def search(self, query: str, limit: int = 25) -> list[Task]:
+    def search(self, query: str, limit: int = 25, scope: str | None = None) -> list[Task]:
         """Full-text search, degrading to LIKE where FTS5 is unavailable.
 
         `query` is a plain string, not pre-formatted FTS5 syntax — search()
@@ -184,18 +209,24 @@ class TaskStore:
         no task created in the last seven weeks. The re-rank sort is stable,
         so bm25 also decides between tasks with equal combination scores —
         which the small integer scores make the usual case, not an edge.
+
+        `scope` narrows to one project with the same exact match as `list`,
+        applied in SQL before the candidate window so a busy other project
+        cannot crowd this one's matches out of it.
         """
         terms = query.split()
         if not terms:
             return []
+        scope_sql, scope_params = _scope_clause(scope, "t.scope")
         if self.fts:
             try:
                 quoted = ['"{}"'.format(t.replace('"', '""')) for t in terms]
                 rows = self.conn.execute(
                     f"""SELECT t.data FROM {_FTS_TABLE} f JOIN tasks t ON t.id = f.id
-                       WHERE {_FTS_TABLE} MATCH ?
+                       WHERE {_FTS_TABLE} MATCH ?{scope_sql}
                        ORDER BY bm25({_FTS_TABLE}, 0.0, ?, ?) LIMIT ?""",
-                    (" OR ".join(quoted), self._TAG_WEIGHT, self._BODY_WEIGHT, limit * 4),
+                    (" OR ".join(quoted), *scope_params,
+                     self._TAG_WEIGHT, self._BODY_WEIGHT, limit * 4),
                 ).fetchall()
                 tasks = [Task.from_json(r["data"]) for r in rows]
                 tasks.sort(key=lambda t: self._combination_score(t, terms), reverse=True)
@@ -206,7 +237,8 @@ class TaskStore:
                 log.warning("FTS query failed, falling back to LIKE (%s)", exc)
         like = f"%{query}%"
         rows = self.conn.execute(
-            "SELECT data FROM tasks WHERE title LIKE ? OR data LIKE ? LIMIT ?", (like, like, limit)
+            f"SELECT data FROM tasks t WHERE (title LIKE ? OR data LIKE ?){scope_sql} LIMIT ?",
+            (like, like, *scope_params, limit),
         ).fetchall()
         return [Task.from_json(r["data"]) for r in rows]
 
