@@ -43,8 +43,8 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "b00690315f8ab56123df961373a3109ceb112e1d";
-        derivedAt = "2026-11-02";
+        derivedFromCommit = "c8257c561a9ba2858e95c310ee6175c9b887a79c";
+        derivedAt = "2026-11-23";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/db/schema.py",
@@ -303,7 +303,10 @@ package Requirements {
              * per-task classification (_task_grading) this aggregate uses, so
              * skipped introspection is visible at the start of the next task,
              * including when that task is reached by creating it and letting
-             * create activate it, rather than only on request. */
+             * create activate it, rather than only on request. Open tasks
+             * that already carry a commit are counted as the same debt one
+             * step earlier (task:b0e060ca), since they never finish and so
+             * never reach the finished-task window. */
     }
     satisfy requirement GroomingFeedbackEdgeRequirement by system.mcpTools;
 

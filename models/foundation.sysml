@@ -15,7 +15,10 @@ package Foundation {
          *
          *   2. Connection pragmas (WAL, busy_timeout, foreign_keys) are set in
          *      connect() and nowhere else. Several processes write the same
-         *      SQLite file concurrently, so this is correctness, not tuning. */
+         *      SQLite file concurrently, so this is correctness, not tuning.
+         *      The file may be SQLCipher ciphertext (task:8b0561d1): connect()
+         *      opens it through taskfw/db/encrypted.py:open_any and then
+         *      applies the same pragmas, so the rule is unchanged. */
 
     metadata def ModelProvenance {
         doc /* Which state of the codebase a package was written against.
@@ -51,8 +54,8 @@ package Foundation {
     }
 
     @ModelProvenance {
-        derivedFromCommit = "7c3a4338e9086655ef37337063e3135d87992710";
-        derivedAt = "2026-08-29";
+        derivedFromCommit = "cab2a3ba045f4ae64a037848b020bf73d50902ec";
+        derivedAt = "2026-11-23";
         modelledPaths = (
             "taskfw/config.py",
             "taskfw/db/schema.py",

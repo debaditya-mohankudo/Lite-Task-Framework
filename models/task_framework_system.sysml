@@ -45,8 +45,8 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "4d2172d4df4f9c6d0013a5ba169a498334e28fac";
-        derivedAt = "2026-11-02";
+        derivedFromCommit = "c8257c561a9ba2858e95c310ee6175c9b887a79c";
+        derivedAt = "2026-11-23";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/store.py",
@@ -151,7 +151,14 @@ package TaskFrameworkSystem {
              *     a cross-project pattern is a finding rather than noise.
              *     Neither is ambiguous about it — both name the scope they
              *     counted in their result, and a scoped count additionally
-             *     reports the unscoped remainder it left out.
+             *     reports the unscoped remainder it left out. loop_debt_nudge
+             *     also carries a second bare count (task:b0e060ca): open
+             *     tasks that already have a commit (store.open_with_commits),
+             *     excluding the one just activated — a committed task never
+             *     finished is debt no finished-task window can see.
+             *     tasks__list and tasks__search follow the same scope rule
+             *     with the opposite default: the server's project unless
+             *     scope="all", reporting unscoped_not_listed when they narrow.
              *   - ungroomed_start_nudge (tasks__set_active only, task:0b9de163):
              *     the task being activated is open or blocked, not an epic,
              *     has nothing ticked, and has empty grooming — the pre-work

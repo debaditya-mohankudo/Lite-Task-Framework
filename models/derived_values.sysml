@@ -16,8 +16,8 @@ package DerivedValues {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "2c294392daa5fb57d2e7e12abbfb2111051e4886";
-        derivedAt = "2026-10-16";
+        derivedFromCommit = "c8257c561a9ba2858e95c310ee6175c9b887a79c";
+        derivedAt = "2026-11-23";
         modelledPaths = (
             "taskfw/task.py",
             "taskfw/memory.py",
@@ -91,7 +91,9 @@ package DerivedValues {
              * taskfw/accuracy.py:_unscoped_remainder loop_debt uses, so the
              * two readings of the loop's debt can differ on which tasks they
              * counted but never on what neither of them saw. That is what
-             * makes the narrowing honest — the label alone did not. */
+             * makes the narrowing honest — the label alone did not. The
+             * remainder also counts unscoped open tasks that have commits
+             * (task:b0e060ca), a key present only when non-zero. */
         in materialized : Integer;
         in avoided : Integer;
         in wrong : Integer;
