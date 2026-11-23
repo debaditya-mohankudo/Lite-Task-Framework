@@ -70,7 +70,8 @@ package DerivedValues {
              *
              * A `wrong` grade is further tallied by its wrong_because reason
              * (task:0b9de163): settleable-by-grep, did-not-occur,
-             * unfalsifiable, other — the WrongReason Literal in
+             * not-observed (task:bd523953), unfalsifiable, other — the
+             * WrongReason Literal in
              * taskfw/risk.py, enforced by type on write, unlike the grade
              * itself — plus `unstated` for a wrong grade that gave none, so
              * the reason buckets always sum to the wrong tally.
