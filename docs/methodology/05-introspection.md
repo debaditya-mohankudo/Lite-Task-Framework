@@ -29,9 +29,9 @@ For every risk in `grooming.risks`, grade what actually happened:
 - **materialized** — predicted, and it happened. Did the mitigation hold?
 - **avoided** — predicted, and the prediction caused the change that dodged it.
 - **wrong** — predicted, but irrelevant. Noise in that pass. Say why in
-  `wrong_because`: `settleable-by-grep`, `did-not-occur`, `unfalsifiable`,
-  or `other`. The list is closed so the reasons can be counted across tasks;
-  `other` is where an unanticipated reason goes.
+  `wrong_because`: `settleable-by-grep`, `did-not-occur`, `not-observed`,
+  `unfalsifiable`, or `other`. The list is closed so the reasons can be
+  counted across tasks; `other` is where an unanticipated reason goes.
 - **missed** — a surprise no prediction anticipated. This has no risk in
   `grooming.risks` to grade against — it is not one of the four grades above,
   it goes in the introspection report's `missed_surprises` field instead.
@@ -41,6 +41,14 @@ safety belief filed as a risk ("X will not break Y") that held is `wrong` /
 `did-not-occur`, because its bad event did not happen. It is never `avoided`,
 which needs a change that the prediction caused. Consistent grading is what
 makes `tasks__grooming_accuracy` comparable across passes (task:25ab1953).
+
+`did-not-occur` is a claim that the condition was exercised and the bad event
+did not follow. If the task never exercised it (tested only against fakes, or
+the risk predicts work deferred to another task), nothing was observed: use
+`not-observed`. Of 31 `did-not-occur` grades from 2026-10-26 to 2026-11-23, 4
+were this case and only 1–2 were `avoided` filed in the wrong place
+(task:bd523953). `not-observed` still counts in the `wrong` tally, so the rate
+stays comparable with the earlier baseline.
 
 Be honest about the difference between *materialized* and *unresolved*. A risk
 that said "decide X now" and was simply not decided has not materialized — it

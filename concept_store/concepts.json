@@ -1610,7 +1610,7 @@
         "coerce(raw) -> dict: a dict is returned as a shallow copy with NO key added or removed; a str becomes {'text': raw, 'graded': None}; anything else becomes {'text': str(raw), 'graded': None}.",
         "Stdlib-only module -- imports nothing from taskfw, so accuracy.py and mcp_server.py can both depend on it without a cycle.",
         "GROOMING_GRADES = ('materialized', 'avoided', 'wrong') lives here beside RISK_KEYS (moved from accuracy.py, task:dd4ceb01); accuracy.py imports it. It is closed for COUNTING but NOT enforced on write — introspection may record a grade outside the set and accuracy.py buckets it as 'unrecognised' and still reports it, per grooming-accuracy-aggregate's never-drop-a-grade invariant.",
-        "RISK_KEYS includes wrong_because, and WrongReason / WRONG_REASONS (settleable-by-grep, did-not-occur, unfalsifiable, other) live here beside GROOMING_GRADES (task:0b9de163). Unlike the grades, the reason IS enforced on write, as a Literal on grooming.GroomingRisk."
+        "RISK_KEYS includes wrong_because, and WrongReason / WRONG_REASONS (settleable-by-grep, did-not-occur, not-observed, unfalsifiable, other; not-observed added by task:bd523953) live here beside GROOMING_GRADES (task:0b9de163). Unlike the grades, the reason IS enforced on write, as a Literal on grooming.GroomingRisk."
       ],
       "created_at": "2026-08-29T05:52:15.692497+00:00",
       "description": "The shared risk-shape primitives (coerce, normalise_text) plus GROOMING_GRADES, the closed grade vocabulary that is part of the risk shape. Stdlib-only so every consumer can depend on it without a cycle.",

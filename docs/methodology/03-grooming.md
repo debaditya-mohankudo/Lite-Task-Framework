@@ -122,6 +122,14 @@ anything that sends, writes user data, deletes, or changes system state. An
 experiment that would need one of those becomes an open question for the
 user.
 
+That paragraph was advice, and advice did not move the number. Across the 31
+`wrong` / `did-not-occur` grades from 2026-10-26 to 2026-11-23, about six were
+still runtime guesses that one short run would have settled. The target was
+at most one (task:bd523953). So the skill now states it as a gate, and a
+runtime risk that survives must name why it was not run. Introspection can
+check for that clause, where it could not check whether someone had
+"considered" a run.
+
 A deletion has a second radius, and it points the other way. Removing a
 symbol can orphan what it read — a constant it compared against, a helper
 only it called — and asking what depends on the deleted symbol never finds

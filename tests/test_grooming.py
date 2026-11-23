@@ -15,6 +15,7 @@ from pydantic import TypeAdapter
 from taskfw import mcp_server as m
 from taskfw.context import GROOMING_TRIM_ORDER
 from taskfw.grooming import GROOMING_FIELDS, Grooming, normalise
+from taskfw.risk import WRONG_REASONS
 from taskfw.store import TaskStore
 from taskfw.task import Task
 
@@ -108,9 +109,10 @@ class TestWrongBecause:
     """Why a `wrong` grade was wrong — a closed vocabulary plus `other`, so
     grooming_accuracy can group it (task:0b9de163)."""
 
-    def test_a_listed_reason_validates(self):
+    @pytest.mark.parametrize("reason", WRONG_REASONS)
+    def test_a_listed_reason_validates(self, reason):
         TypeAdapter(Grooming).validate_python(
-            {"risks": [{"text": "r", "graded": "wrong", "wrong_because": "settleable-by-grep"}]})
+            {"risks": [{"text": "r", "graded": "wrong", "wrong_because": reason}]})
 
     def test_an_unlisted_reason_is_refused(self):
         with pytest.raises(Exception, match="literal_error|Input should be"):

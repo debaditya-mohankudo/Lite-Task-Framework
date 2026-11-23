@@ -51,7 +51,11 @@ GROOMING_GRADES = ("materialized", "avoided", "wrong")
 #: hatch. ``settleable-by-grep``: one read would have settled it, so it
 #: belonged in ``clarifications``. ``did-not-occur``: checkable, and it simply
 #: did not happen. ``unfalsifiable``: could never have been graded otherwise.
-WrongReason = Literal["settleable-by-grep", "did-not-occur", "unfalsifiable", "other"]
+#: ``not-observed``: checkable in principle, but this task never exercised the
+#: condition (fake-screen tests only, a prediction about deferred work), so
+#: ``did-not-occur`` would claim an observation nobody made (task:bd523953).
+WrongReason = Literal["settleable-by-grep", "did-not-occur", "not-observed",
+                      "unfalsifiable", "other"]
 WRONG_REASONS: tuple[str, ...] = get_args(WrongReason)
 
 

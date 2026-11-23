@@ -63,7 +63,7 @@ For each item in `grooming.risks`, grade what actually happened:
 
 - **materialized** — predicted, and it happened. Did the mitigation hold?
 - **avoided** — predicted, and the prediction caused the change that dodged it.
-- **wrong** — predicted, but irrelevant. Noise in that pass. Also set `wrong_because`: `settleable-by-grep` (one read would have settled it — it belonged in `clarifications`), `did-not-occur` (checkable, and it just didn't happen), `unfalsifiable` (could never have been graded otherwise), or `other`. Any other value is refused; `tasks__grooming_accuracy` groups `wrong` by it.
+- **wrong** — predicted, but irrelevant. Noise in that pass. Also set `wrong_because`: `settleable-by-grep` (one read would have settled it — it belonged in `clarifications`), `did-not-occur` (the condition was exercised and the bad event didn't follow), `not-observed` (this task never exercised the condition: fakes only, or the risk predicts deferred work), `unfalsifiable` (could never have been graded otherwise), or `other`. Any other value is refused; `tasks__grooming_accuracy` groups `wrong` by it.
 - **missed** — a surprise no prediction anticipated. This has no risk to grade against; it goes in `missed_surprises` at Step 6.
 
 Grade the bad outcome a risk names, not whether its sentence came true. A safety belief filed as a risk ("X will not break Y") that held is `wrong` / `did-not-occur`, because its bad event did not happen. It is never `avoided`, which needs a change that the prediction caused. Keeping this consistent is what lets `tasks__grooming_accuracy` compare passes (task:25ab1953).
