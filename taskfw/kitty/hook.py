@@ -8,8 +8,15 @@ State user var (queryable with `--match var:state=...`):
   SessionStart / Stop / Notification -> waiting   (the session wants the user)
   UserPromptSubmit                   -> running
   SessionEnd                         -> done
-`last_active` (epoch seconds) is stamped on SessionStart/UserPromptSubmit/Stop only. Notification
-is excluded: it fires while the session sits idle and would keep resetting the idle clock.
+
+`waiting` is the shared word: claude-hooks' hooks/kitty_status.py paints the same tab with the
+same vocabulary (task:b5c1e08c, user decision 2026-11-25), so a Stop means "the user's input is
+wanted" in both repos. The two stay decoupled — neither reads the other's signal, only the words
+agree — and `done` is taskfw's alone, meaning the session has ended.
+
+Removed (task:b5c1e08c): the `last_active` user var and STAMP_EVENTS. It was stamped on
+SessionStart/UserPromptSubmit/Stop and read by nothing in taskfw, claude-hooks or cli-graph —
+an idle clock with no clock-reader. Do not re-add it without the query that needs it.
 """
 from __future__ import annotations
 
@@ -19,7 +26,6 @@ import shutil
 import sqlite3
 import subprocess
 import sys
-import time
 from typing import IO, Mapping
 
 from .adapter import KittyAdapter, normalize_socket
@@ -32,9 +38,6 @@ EVENT_STATE = {
     "Notification": "waiting",
     "SessionEnd": "done",
 }
-
-
-STAMP_EVENTS = {"SessionStart", "UserPromptSubmit", "Stop"}
 
 
 def load_context(db_path: str, task_id: str) -> str | None:
@@ -111,8 +114,6 @@ def handle(payload: dict, env: Mapping[str, str], *, adapter: KittyAdapter | Non
         if state:
             ad = adapter or KittyAdapter(socket, check_version=False)
             vars_ = {"state": state}
-            if event in STAMP_EVENTS:
-                vars_["last_active"] = str(int(time.time()))
             if event == "UserPromptSubmit":
                 vars_["prompted"] = "1"  # claude only saves a transcript after a first prompt
             ad.set_user_vars(wid, vars_)

@@ -70,7 +70,7 @@ If you run [kitty](https://sw.kovidgoyal.net/kitty/) with remote control on, `ta
 
 - *Launch:* `kitten @ --to <socket> launch --type=tab --cwd=<dir> --env … --var task_id=<id> --watcher=<watcher.py> -- claude --settings <hooks.json> -- "<prompt>"`. Argv is a list, never a shell string, so the prompt needs no escaping and is submitted at startup (no send-text race).
 - *Identity:* the tab carries `TASKFW_TASK_ID`, `TASKFW_WORKTREE`, `TASKFW_DB` in its env, and a `task_id` [user var](https://sw.kovidgoyal.net/kitty/launch/) on its window. `exists` is detected by `kitten @ ls --match var:task_id=<id>`.
-- *State:* Claude Code hooks (`taskfw/kitty/hooks.json`, injected with `--settings`, merged with your own) run `python -m taskfw.kitty.hook`, which sets `state` (`running` / `waiting` / `done`) and `last_active` user vars via `kitten @ set-user-vars` and backfills the Claude session id into the store. It acts only when `TASKFW_TASK_ID` is set and never fails the session.
+- *State:* Claude Code hooks (`taskfw/kitty/hooks.json`, injected with `--settings`, merged with your own) run `python -m taskfw.kitty.hook`, which sets the `state` user var (`running` / `waiting` / `done`) via `kitten @ set-user-vars` and backfills the Claude session id into the store. It acts only when `TASKFW_TASK_ID` is set and never fails the session.
 - *Lifecycle:* kitty loads `watcher.py` itself and it appends window events to the store through a short-lived writer process (kitty's bundled Python has no `sqlite3`). Errors land in the log above, not in kitty.
 - *Report back:* this is not a kitty channel at all — it is the tab's own Claude `SendMessage` to `parent`. Kitty only starts the tab and shows its state.
 

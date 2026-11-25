@@ -7,7 +7,7 @@ import pytest
 
 from taskfw.kitty import hook
 from taskfw.kitty.adapter import KittyAdapter
-from taskfw.kitty.hook import handle, load_context, main
+from taskfw.kitty.hook import EVENT_STATE, handle, load_context, main
 from taskfw.kitty.store import Store
 
 ENV = {"TASKFW_TASK_ID": "abc", "KITTY_LISTEN_ON": "unix:/tmp/s", "KITTY_WINDOW_ID": "7"}
@@ -49,9 +49,22 @@ def test_state_per_event():
         ad, calls = fake_adapter()
         handle({"hook_event_name": ev}, ENV, adapter=ad, store=Store(":memory:"))
         assert calls[-1][calls[-1].index("--match"):][:3] == ["--match", "id:7", f"state={state}"]
-        stamped = any(a.startswith("last_active=") for a in calls[-1])
         assert any(a == "prompted=1" for a in calls[-1]) == (ev == "UserPromptSubmit")
-        assert stamped == (ev in {"SessionStart", "UserPromptSubmit", "Stop"})  # not Notification
+        # last_active was dropped in task:b5c1e08c: nothing read it. Pinned so a
+        # re-add has to come with the query that needs it.
+        assert not any(a.startswith("last_active=") for a in calls[-1])
+
+
+def test_state_vocabulary_matches_claude_hooks():
+    """`waiting` means the same thing in both repos (task:b5c1e08c).
+
+    claude-hooks' hooks/kitty_status.py calls Stop/SessionStart "waiting" too; it
+    used to call Stop "done", which here means the session ended. Nothing is
+    imported across the repos — this pins taskfw's half of the shared vocabulary.
+    """
+    assert EVENT_STATE["Stop"] == EVENT_STATE["SessionStart"] == "waiting"
+    assert EVENT_STATE["SessionEnd"] == "done"
+    assert "done" not in {EVENT_STATE[e] for e in EVENT_STATE if e != "SessionEnd"}
 
 
 def test_session_start_backfills_matching_window():

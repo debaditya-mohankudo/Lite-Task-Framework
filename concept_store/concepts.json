@@ -804,24 +804,25 @@
       ]
     },
     "kitty-hook-bridge": {
-      "confidence": 0.8,
+      "confidence": 0.9,
       "contracts": [
         "SessionStart/Stop/Notification -> state=waiting; UserPromptSubmit -> running; SessionEnd -> done",
-        "last_active (epoch s) stamped only on SessionStart/UserPromptSubmit/Stop",
-        "Reads task context read-only from taskfw DB"
+        "Reads task context read-only from taskfw DB",
+        "The state words are shared with claude-hooks' hooks/kitty_status.py by agreement, not by code (task:b5c1e08c, user decision 2026-11-25): 'waiting' means the session wants the user's input in both, and 'done' is taskfw's alone, meaning the session ended. Neither repo imports or reads the other; tests/test_kitty_hook.py::test_state_vocabulary_matches_claude_hooks pins taskfw's half."
       ],
       "created_at": "2026-10-10T10:52:17.768013+00:00",
       "description": "Claude Code hooks (python -m taskfw.kitty.hook, wired by taskfw/kitty/hooks.json) that mirror session events into kitty user vars, backfill the session id and inject task context from $TASKFW_TASK_ID.",
       "evidence": [
-        "taskfw/kitty/hook.py"
+        "taskfw/kitty/hook.py",
+        "tests/test_kitty_hook.py:test_state_vocabulary_matches_claude_hooks"
       ],
       "invariants": [
         "State mirroring and task-context injection act only when TASKFW_TASK_ID is set",
         "Never fails the session: swallow all errors, exit 0",
-        "Notification must not stamp last_active (it fires while idle and would reset the idle clock)",
-        "Hook commands use absolute interpreter paths, not PATH"
+        "Hook commands use absolute interpreter paths, not PATH",
+        "Only `state`, `prompted` and (at launch) `task_id` are written as user vars. `last_active` was removed in task:b5c1e08c because nothing in taskfw, claude-hooks or cli-graph read it; do not re-add an idle clock without the query that reads it. tests/test_kitty_hook.py::test_state_per_event asserts no last_active= argument is sent."
       ],
-      "last_validated": "2026-10-11T15:22:01.625668+00:00",
+      "last_validated": "2026-11-25T03:56:50.316278+00:00",
       "module": "taskfw/kitty/hook.py",
       "name": "kitty-hook-bridge",
       "related": []
@@ -2215,6 +2216,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-11-25T03:21:59.405182+00:00"
+    "updated_at": "2026-11-25T03:56:50.316366+00:00"
   }
 }
