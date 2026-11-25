@@ -43,8 +43,8 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "a6d10f2674a3e27ac71c99bcda2bf922961a59db";
-        derivedAt = "2026-11-24";
+        derivedFromCommit = "af93b24138ac80ff064604259d5c5f105e169265";
+        derivedAt = "2026-11-25";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/db/schema.py",
@@ -318,15 +318,17 @@ package Requirements {
     satisfy requirement HostPortabilityRequirement by system.mcpTools;
 
     requirement def CommitTaskTraceabilityRequirement {
-        doc /* Source: taskfw/mcp_server.py:tasks__add_commit,
+        doc /* Source: taskfw/commit_hook.py, taskfw/mcp_server.py:tasks__add_commit,
              * .claude/skills/commit/SKILL.md, taskfw/backfill.py.
-             * A commit referencing task:<id> is linked to that task — by an
-             * explicit tasks__add_commit call the commit skill makes after a
-             * successful commit, or by backfill scanning git history for
-             * whatever that call missed.
+             * A commit referencing task:<id> is linked to that task — by
+             * commit_hook, a PostToolUse hook on Claude Code's Bash tool that
+             * links a fresh HEAD (task:dd2cf1ec); by an explicit
+             * tasks__add_commit call; or by backfill scanning git history for
+             * whatever both missed. The hook is optional, outside the MCP
+             * interface, and only sees commits made through that host.
              *
              * SINGLE allocation, and the reason is worth stating: nothing
-             * enforces the call happens, so this is not a rule LifecycleRules
+             * enforces that a link is made, so this is not a rule LifecycleRules
              * could own — add a pre-commit gate and it would become one,
              * immediately needing a home in both parts. There used to be a
              * host-specific adapter here observing commits automatically; it

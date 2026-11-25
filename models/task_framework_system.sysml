@@ -45,8 +45,8 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "a6d10f2674a3e27ac71c99bcda2bf922961a59db";
-        derivedAt = "2026-11-24";
+        derivedFromCommit = "af93b24138ac80ff064604259d5c5f105e169265";
+        derivedAt = "2026-11-25";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/store.py",
@@ -91,12 +91,13 @@ package TaskFrameworkSystem {
              *
              * In-process — tools import the library directly. tasks__context is
              * the headline tool and the sole replacement for per-turn prompt
-             * injection. tasks__add_commit is called explicitly by a host's
-             * commit skill after a successful commit, rather than observed
-             * automatically — nothing enforces that call happens, which is why
-             * taskfw/backfill.py exists as the recovery path: it rebuilds
-             * commit links from git history regardless of whether the call was
-             * ever made.
+             * injection. Commit links are written outside this interface:
+             * taskfw/commit_hook.py, an optional Claude Code PostToolUse hook
+             * (task:dd2cf1ec), links a fresh HEAD after a Bash `git commit`, and
+             * tasks__add_commit is the explicit call for anything it missed.
+             * Neither is enforced, which is why taskfw/backfill.py exists as the
+             * recovery path: it rebuilds commit links from git history
+             * regardless of whether either ever ran.
              *
              * taskfw/dispatcher/ (chassis.py, phase.py, nudges.py — split for
              * organisation only, everything re-exported unchanged from the
