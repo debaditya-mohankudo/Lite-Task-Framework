@@ -1,9 +1,9 @@
 """Backfill — recovering commit links from git history.
 
-There is no automatic capture (see taskfw/backfill.py's docstring for why),
-so this is the only mechanism that can repair a missed tasks__add_commit call,
-and the property it protects is that it never depends on that call having
-happened.
+Automatic capture (taskfw.commit_hook) covers only commits made in a Claude
+session (see taskfw/backfill.py's docstring), so this is the mechanism that
+repairs every other missed link, and the property it protects is that it
+never depends on the hook or any tasks__add_commit call having run.
 """
 from __future__ import annotations
 

@@ -154,20 +154,22 @@ shell can end up as the message itself — that is what the file and `-F` avoid.
 
 ## Link the commit to its task
 
-There is no hook watching for this. After the commit succeeds, call it
-yourself:
+A hook does this for you (task:dd2cf1ec). `taskfw.commit_hook` runs as a
+PostToolUse hook on every Bash call, registered in global
+`~/.claude/settings.json`. After a `git commit` it links the new HEAD to every
+task its message cites as `task:<id>`. Check that it happened with
+`tasks__context(task_id)` → `commits`. If the sha is missing (the commit was
+made outside a Claude session, the hook is not registered, or it failed and
+logged the error), link it by hand:
 
 ```python
 sha = <output of git rev-parse HEAD>
 tasks__add_commit(task_id="<id>", sha=sha, repo="<absolute repo path>")
 ```
 
-**This step is easy to skip and nothing will stop you.** That is deliberate —
-a pre-commit gate would make this a rule, and it isn't one — but it means the
-link only exists if you make it. If you forget, or the call fails, the commit
-is not lost: `python -m taskfw.backfill` re-derives every link from git
-history regardless of whether this step ever ran. Prefer calling it anyway;
-backfill is the recovery path, not a substitute for doing this.
+The call is idempotent, so making it when the hook already linked the commit
+is harmless. A link that is missing is still recoverable:
+`python -m taskfw.backfill` re-derives every link from git history.
 
 ## Two commits when the diff touches modelled code
 
@@ -228,7 +230,7 @@ touches no modelled path — `git log`'s "last commit touching modelledPaths"
 stays at commit 1, which is exactly what commit 2's stamp now names. No
 circularity, no prediction: commit, read the hash, use it.
 
-Both commits cite the same task, and **both** get `tasks__add_commit`.
+Both commits cite the same task, and **both** must appear in the task's `commits` (the hook links each one; check for both).
 
 ### After commit 2
 

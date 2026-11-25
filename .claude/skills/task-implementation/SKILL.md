@@ -130,7 +130,7 @@ subsystem.
 
 ## Finish
 
-Commit first, with [/commit](../commit/SKILL.md): it cites `task:<id>` and then calls `tasks__add_commit(task_id, sha, repo)`. There is no hook that does this automatically, so the link only exists if that call is made. `python -m taskfw.backfill` re-derives it from git history if the call is missed; that is the recovery path, not a substitute.
+Commit first, with [/commit](../commit/SKILL.md): it cites `task:<id>`, and the `taskfw.commit_hook` PostToolUse hook then links the commit to the task (task:dd2cf1ec). Check that `tasks__context` shows the sha under `commits`. If it is missing, call `tasks__add_commit(task_id, sha, repo)`. `python -m taskfw.backfill` re-derives any missed link from git history.
 
 Then close the task on what actually landed:
 

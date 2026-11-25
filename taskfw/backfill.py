@@ -1,11 +1,11 @@
 """Backfill commit links from git history.
 
-There is no automatic capture. A commit gets linked to a task by an explicit
-tasks__add_commit call — the commit skill (.claude/skills/commit/SKILL.md)
-makes that call after a successful commit — but nothing enforces it happens.
-A commit made outside the skill, or one where the call was skipped, forgotten,
-or failed, leaves no link, and the gap is invisible: a task with no commits
-looks exactly like a task whose commits were never made.
+Capture is automatic only inside Claude Code sessions: taskfw.commit_hook, a
+PostToolUse Bash hook (task:dd2cf1ec), links each `git commit` it sees, using
+this module's extract_task_ids. Nothing links a commit typed by hand in a
+terminal, one made where the hook is not registered, or one the hook failed
+on (it fails open). That gap is invisible: a task with no commits looks
+exactly like a task whose commits were never made.
 
 This makes that recoverable. Git history is the durable record; the commit map
 is a cache over it, and this rebuilds the cache from scratch by re-deriving
@@ -22,7 +22,10 @@ import sys
 
 from taskfw.gitutil import run_git
 from taskfw.log import get_logger
-from taskfw.store import TaskStore
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # the store pulls in pydantic; commit_hook imports this module on every Bash call
+    from taskfw.store import TaskStore
 
 log = get_logger(__name__)
 
@@ -68,7 +71,10 @@ def backfill(repo: str, since: str | None = None, dry_run: bool = False,
     Idempotent — add_commit is a no-op for an already-recorded (task, sha), so
     running this repeatedly is safe and cheap.
     """
-    s = store or TaskStore()
+    if store is None:
+        from taskfw.store import TaskStore
+        store = TaskStore()
+    s = store
     scanned = linked = skipped_unknown = already = 0
 
     for sha, message in git_log(repo, since):
