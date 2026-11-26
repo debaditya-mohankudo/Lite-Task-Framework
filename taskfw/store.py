@@ -15,6 +15,7 @@ import sqlite3
 from pathlib import Path
 
 from taskfw.db.connect import connect, transaction
+from taskfw.gitutil import full_sha as _full_sha
 from taskfw.log import get_logger
 from taskfw.scope import for_repo as _scope_for_repo
 from taskfw.task import EventKind, Task, utcnow
@@ -346,8 +347,14 @@ class TaskStore:
         derivation that produces `Task.scope` produces this, and the two can
         be compared. Rows written before this are left exactly as they are:
         rewriting them would mean inferring a scope from a stale string,
-        which is reconstruction, not a record.
+        which is reconstruction, not a record. Short SHAs among them stay too.
+
+        `sha` is expanded to the full object name first, so an abbreviation
+        and the 40-char form are one row. When git cannot say (see
+        `gitutil.full_sha`) the string is stored as given: the link is worth
+        keeping even unverified.
         """
+        sha = _full_sha(sha, repo) or sha
         scope_value = _scope_for_repo(repo)
         with transaction(self.conn):
             cur = self.conn.execute(

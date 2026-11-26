@@ -12,6 +12,8 @@ once. taskfw.mcp_server reads its loaded commit through head_sha here too.
 """
 from __future__ import annotations
 
+import os
+import re
 import subprocess
 
 from taskfw.log import get_logger
@@ -21,6 +23,8 @@ log = get_logger(__name__)
 #: Generous default — both call sites are local reads (.git/config, packed
 #: refs), so anything approaching this means git is wedged, not slow.
 DEFAULT_TIMEOUT = 30
+
+_FULL_SHA = re.compile(r"[0-9a-fA-F]{40}")
 
 
 def run_git(argv: list[str], cwd: str, timeout: int = DEFAULT_TIMEOUT) -> subprocess.CompletedProcess | None:
@@ -38,6 +42,26 @@ def run_git(argv: list[str], cwd: str, timeout: int = DEFAULT_TIMEOUT) -> subpro
     except (OSError, subprocess.SubprocessError) as exc:
         log.warning("git %s failed in %s (%s)", " ".join(argv), cwd, exc)
         return None
+
+
+def full_sha(sha: str, repo: str) -> str | None:
+    """The 40-char commit `sha` names in the checkout `repo`, else None.
+
+    `repo` is a directory, bare or in `path:` form. A scope that names no
+    directory (`git:`, `hint:`) or an empty `repo` gives None rather than
+    falling back to the working directory, where a symbolic name such as HEAD
+    would resolve confidently to another project's commit.
+    """
+    if _FULL_SHA.fullmatch(sha):
+        return sha.lower()
+    directory = os.path.expanduser(repo.removeprefix("path:"))
+    if not repo or not os.path.isdir(directory):
+        return None
+    out = run_git(["rev-parse", "--verify", "--quiet", "--end-of-options", f"{sha}^{{commit}}"],
+                  cwd=directory)
+    if out is None or out.returncode != 0:
+        return None
+    return out.stdout.strip() or None
 
 
 def head_sha(cwd: str) -> str | None:

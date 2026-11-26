@@ -505,7 +505,8 @@
         "Callers own returncode handling and its logging, since the same non-zero exit means different things to each: backfill.git_log logs it as 'not a git repo or bad rev' (closer to an error), scope._origin_url logs it quieter at debug ('no origin') since most directories legitimately have none.",
         "head_sha(cwd) -> str | None — `git rev-parse HEAD`; None for every way of not knowing (run_git None, non-zero exit such as not-a-checkout or an unborn branch, empty stdout), never ''. Added for task:0bcc56f1 so mcp_server reads its loaded commit here rather than growing a private git helper.",
         "Consumed by taskfw/backfill.py:git_log, taskfw/scope.py:_origin_url and _toplevel (run_git), and taskfw/mcp_server.py:_LOADED_SHA, tasks__active (head_sha).",
-        "path_state(cwd, relpath) -> 'clean' | 'untracked' | 'modified' | 'ignored' | None — `git status --porcelain --untracked-files=all --ignored -- relpath`. modified when any entry is a tracked change (staged or unstaged), untracked when every entry is new, ignored when only gitignored entries show; None when run_git is None or git exits non-zero (not a checkout), never 'clean'. Added for task:ce6d7830; consumed by taskfw/mcp_server.py:concept__store_status."
+        "path_state(cwd, relpath) -> 'clean' | 'untracked' | 'modified' | 'ignored' | None — `git status --porcelain --untracked-files=all --ignored -- relpath`. modified when any entry is a tracked change (staged or unstaged), untracked when every entry is new, ignored when only gitignored entries show; None when run_git is None or git exits non-zero (not a checkout), never 'clean'. Added for task:ce6d7830; consumed by taskfw/mcp_server.py:concept__store_status.",
+        "full_sha(sha, repo) -> str | None — the 40-char commit sha names in the repo directory (bare or path: form); a 40-hex input is returned lowercased without running git; None for an empty or non-directory repo (never the cwd), unknown or ambiguous names, or a git failure. Consumed by TaskStore.add_commit, which stores the input as given on None (task:12dba8d8)."
       ],
       "created_at": "2026-08-29T10:00:31.678276+00:00",
       "description": "The one place a module shells out to git. Factored out of taskfw.backfill and taskfw.scope after a reuse review found the two independently re-typing the same try/except/timeout shape around subprocess.run(['git', ...]) (task:a7a4742e). Both need the same process-level failure handling (missing binary, timeout, permissions) but disagree on what a non-zero exit means for their own purpose, so run_git only normalises the former and leaves returncode inspection to the caller.",
@@ -520,7 +521,7 @@
       "invariants": [
         "Never raises. A caller that wants to shell out to git and treat every failure mode as 'could not ask' gets that for free; a caller that needs to distinguish failure modes still can, via the returncode on what run_git returns."
       ],
-      "last_validated": "2026-10-26T09:41:11.008366+00:00",
+      "last_validated": "2026-11-26T15:08:06.722514+00:00",
       "module": "taskfw/gitutil.py",
       "name": "gitutil-subprocess-shape",
       "related": [
@@ -2256,6 +2257,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-11-26T14:39:14.716625+00:00"
+    "updated_at": "2026-11-26T15:08:06.722586+00:00"
   }
 }

@@ -5,6 +5,8 @@ in the prior system left stale edges with no way to clear them.
 """
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
 from taskfw.task import ResolutionItem, Task
@@ -228,6 +230,53 @@ class TestCommits:
         assert store.add_commit(t.id, "abc123", "/repo") is True
         assert store.add_commit(t.id, "abc123", "/repo") is False
         assert len(store.commits(t.id)) == 1
+
+    def test_short_symbolic_and_full_sha_are_one_row(self, store, tmp_path):
+        repo = git_repo(tmp_path)
+        sha = git(repo, "rev-parse", "HEAD")
+        t = store.save(make())
+        assert store.add_commit(t.id, sha[:7], str(repo)) is True
+        assert store.add_commit(t.id, sha, str(repo)) is False
+        assert store.add_commit(t.id, "HEAD", f"path:{repo}") is False
+        assert store.add_commit(t.id, sha.upper(), "") is False
+        assert [c["sha"] for c in store.commits(t.id)] == [sha]
+
+    @pytest.mark.parametrize("sha,repo_hint", [
+        ("0000000", "repo"),     # unknown object
+        ("HEAD", ""),            # no repo: never resolved against the cwd
+        ("HEAD", "git:example.com/a/b"),
+        ("abc1234", "missing"),  # not a directory
+    ])
+    def test_unresolvable_sha_is_stored_as_given(self, store, tmp_path, sha, repo_hint):
+        repo = git_repo(tmp_path)
+        hint = {"repo": str(repo), "missing": str(tmp_path / "nope")}.get(repo_hint, repo_hint)
+        t = store.save(make())
+        assert store.add_commit(t.id, sha, hint) is True
+        assert [c["sha"] for c in store.commits(t.id)] == [sha]
+
+    def test_ambiguous_prefix_is_stored_as_given(self, store, monkeypatch, tmp_path):
+        # A real collision is not cheap to build; git reports it as a non-zero exit.
+        monkeypatch.setattr(
+            "taskfw.gitutil.run_git",
+            lambda argv, cwd, timeout=30: subprocess.CompletedProcess(argv, 128, "", "ambiguous"),
+        )
+        t = store.save(make())
+        assert store.add_commit(t.id, "abcd", str(tmp_path)) is True
+        assert store.commits(t.id)[0]["sha"] == "abcd"
+
+
+def git(repo, *args) -> str:
+    out = subprocess.run(["git", "-c", "user.email=t@example.com", "-c", "user.name=T", *args],
+                         cwd=repo, capture_output=True, text=True, check=True)
+    return out.stdout.strip()
+
+
+def git_repo(tmp_path):
+    path = tmp_path / "repo"
+    path.mkdir()
+    git(path, "init", "-q")
+    git(path, "commit", "-q", "--allow-empty", "-m", "one")
+    return path
 
 
 class TestActiveTask:
