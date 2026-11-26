@@ -18,7 +18,11 @@ package Foundation {
          *      SQLite file concurrently, so this is correctness, not tuning.
          *      The file may be SQLCipher ciphertext (task:8b0561d1): connect()
          *      opens it through taskfw/db/encrypted.py:open_any and then
-         *      applies the same pragmas, so the rule is unchanged. */
+         *      applies the same pragmas, so the rule is unchanged. The one
+         *      other opener is taskfw/memory_shared.py, for the memory database
+         *      named by TASKFW_MEMORY_DB: taskfw does not own that file, so it
+         *      sets busy_timeout only and never migrates it or changes its
+         *      journal mode. */
 
     metadata def ModelProvenance {
         doc /* Which state of the codebase a package was written against.
@@ -54,8 +58,8 @@ package Foundation {
     }
 
     @ModelProvenance {
-        derivedFromCommit = "cab2a3ba045f4ae64a037848b020bf73d50902ec";
-        derivedAt = "2026-11-23";
+        derivedFromCommit = "efb896036c59a45badecace5ab0c8af68cfdbf4b";
+        derivedAt = "2026-11-26";
         modelledPaths = (
             "taskfw/config.py",
             "taskfw/db/schema.py",

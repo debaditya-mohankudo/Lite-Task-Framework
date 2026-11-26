@@ -43,8 +43,8 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "af93b24138ac80ff064604259d5c5f105e169265";
-        derivedAt = "2026-11-25";
+        derivedFromCommit = "efb896036c59a45badecace5ab0c8af68cfdbf4b";
+        derivedAt = "2026-11-26";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/db/schema.py",
@@ -54,6 +54,7 @@ package Requirements {
             "taskfw/task.py",
             "taskfw/store.py",
             "taskfw/memory.py",
+            "taskfw/memory_shared.py",
             "taskfw/context.py",
             "taskfw/accuracy.py",
             "taskfw/risk.py",
@@ -85,7 +86,11 @@ package Requirements {
         doc /* Source: taskfw/db/connect.py:connect. WAL, busy_timeout, and
              * foreign_keys are set in one place, never by callers. Several
              * processes — one MCP server per host window, plus taskfw-backfill
-             * runs — write the same file concurrently. */
+             * runs — write the same file concurrently.
+             *
+             * Scope: databases taskfw owns. The shared memory database
+             * (TASKFW_MEMORY_DB) gets busy_timeout only, from
+             * taskfw/memory_shared.py; its journal mode belongs to its owner. */
     }
     satisfy requirement ConcurrentWriterSafetyRequirement by system.foundation;
 
@@ -183,7 +188,11 @@ package Requirements {
              * unilaterally. Nothing is injected per prompt; a memory reaches
              * an agent either because it called task_memory__recall or
              * because the tasks__context bundle's lessons section matched it
-             * to the task. */
+             * to the task.
+             *
+             * Rows live in the task database, or in the memory database named
+             * by TASKFW_MEMORY_DB (taskfw/memory_shared.py); the same rules
+             * hold in both. */
     }
     satisfy requirement LoopMemoryEvidenceRequirement by system.store;
 
