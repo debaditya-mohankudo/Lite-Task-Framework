@@ -43,20 +43,19 @@
     "advisory-nudge-policies": {
       "confidence": 0.8,
       "contracts": [
-        "introspection_nudge(report, task_id, conn) -> str | None; fires only when the report has an unpromoted lesson (via _lesson_texts, covering both new_knowledge and legacy surprises[].lesson shapes) AND the task has never cited any memory (via _cited_in_memory).",
         "finish_nudge(task) -> str | None; fires only when task.introspection is empty, on any call whose result carries `finished: True` — tasks__finish, check_item/add_decision auto-finish, and tasks__update(status=\"done\") — i.e. only on the transition to done, never on a later edit of a done task (task:c0c5ff5f).",
         "finish_reminder_nudge(task) -> str | None; fires when is_implemented(task) is True AND task.status == 'open', at tasks__check_item/tasks__update, before finish is called.",
         "stale_memory_nudge(memory: dict) -> str | None; fires when memory['standing'] is 'disputed' or 'contradicted' (never 'superseded', already flagged by definition), wired onto task_memory__link.",
         "ungroomed_progress_nudge(task) -> str | None; fires when task.progress has at least one checked item AND task.grooming is empty, at tasks__check_item/tasks__update.",
         "loop_debt_nudge(skipped: int, tasks_examined: int) -> str | None; fires only when skipped > 0, wired onto tasks__set_active via mcp_server._loop_debt_hook.",
         "task_debt_nudge(task_id: str, ungraded: int) -> str | None; fires only when ungraded > 0, companion to loop_debt_nudge — that one is about the loop across recent finished tasks, this one about the specific task just made active.",
-        "ungroomed_start_nudge(task) -> str | None (task:0b9de163): fires when the task is not an epic, has status open or blocked, has no checked ResolutionItem, and is_groomed(task) is False. It is the pre-work counterpart of ungroomed_progress_nudge, and the two hand over at the first tick, so they never fire together. Wired on tasks__set_active only; tasks__create is deliberately excluded because every new task is ungroomed."
+        "ungroomed_start_nudge(task) -> str | None (task:0b9de163): fires when the task is not an epic, has status open or blocked, has no checked ResolutionItem, and is_groomed(task) is False. It is the pre-work counterpart of ungroomed_progress_nudge, and the two hand over at the first tick, so they never fire together. Wired on tasks__set_active only; tasks__create is deliberately excluded because every new task is ungroomed.",
+        "introspection_nudge(report, task_id, memory) -> str | None; fires only when the report has an unpromoted lesson (via _lesson_texts, covering both new_knowledge and legacy surprises[].lesson shapes) AND the task has never cited any memory (via MemoryStore.cited)."
       ],
       "created_at": "2026-08-23T10:14:44.522149+00:00",
-      "description": "The individual nudge functions — each a Callable[[...]] -> str | None encoding one advisory firing condition, wired onto a specific MCP tool via [[nudge-dispatch-chassis]]'s tool_called/combine/apply_nudge, and reading task state through [[task-phase-derivation]] where relevant. A nudge never blocks a write or changes what gets stored; it only surfaces something true about the result that would otherwise be silent. Extracted from the flat taskfw/dispatcher.py into taskfw/dispatcher/nudges.py; re-exported unchanged from taskfw/dispatcher/__init__.py.",
+      "description": "The individual nudge functions \u2014 each a Callable[[...]] -> str | None encoding one advisory firing condition, wired onto a specific MCP tool via [[nudge-dispatch-chassis]]'s tool_called/combine/apply_nudge, and reading task state through [[task-phase-derivation]] where relevant. A nudge never blocks a write or changes what gets stored; it only surfaces something true about the result that would otherwise be silent. Extracted from the flat taskfw/dispatcher.py into taskfw/dispatcher/nudges.py; re-exported unchanged from taskfw/dispatcher/__init__.py.",
       "evidence": [
         "taskfw/dispatcher/nudges.py:_lesson_texts",
-        "taskfw/dispatcher/nudges.py:_cited_in_memory",
         "taskfw/dispatcher/nudges.py:introspection_nudge",
         "taskfw/dispatcher/nudges.py:finish_nudge",
         "taskfw/dispatcher/nudges.py:finish_reminder_nudge",
@@ -74,7 +73,8 @@
         "tests/test_mcp_tools.py::TestStaleMemoryNudge",
         "tests/test_mcp_tools.py:TestUpdate",
         "tests/test_mcp_tools.py:TestChecklist",
-        "taskfw/dispatcher/nudges.py:ungroomed_start_nudge"
+        "taskfw/dispatcher/nudges.py:ungroomed_start_nudge",
+        "taskfw/memory.py:cited"
       ],
       "invariants": [
         "loop_debt_nudge and task_debt_nudge surface at tasks__set_active, not inside tasks__context's bundle and not on tasks__create — set_active is the earlier of the two documented lifecycle entry points, and tasks__context is already budget-constrained around per-task relevance.",
@@ -89,7 +89,7 @@
         "nudges.py imports is_groomed, is_implemented, and is_introspected from phase.py (one-directional, task:5a5fde0d) and imports nothing from chassis.py — every nudge here is a plain function returning str | None, wiring onto tool_called/apply_nudge happens only at the mcp_server.py call site, not inside this module.",
         "introspection_nudge and loop_debt_nudge are the sole code embodiment of ontology terms IntrospectionNudge and LoopDebtNudge (ontology/task-domain.json); those terms earn their own entry -- rather than folding into the parent Nudge term -- because each binds the nudge mechanism to another vocabulary term (Introspection, and the ungraded-GroomingGrade aggregate). The other nudges here back only the generic Nudge term. Renaming or removing either function breaks tests/test_ontology.py via that term's evidence citation."
       ],
-      "last_validated": "2026-09-27T16:07:58.014399+00:00",
+      "last_validated": "2026-11-26T13:16:36.575498+00:00",
       "module": "taskfw/dispatcher/nudges.py",
       "name": "advisory-nudge-policies",
       "related": [
@@ -1810,6 +1810,46 @@
         "scope-derivation"
       ]
     },
+    "shared-memory-backend": {
+      "confidence": 0.8,
+      "contracts": [
+        "open_memory(task_conn) returns MemoryStore over the task DB when TASKFW_MEMORY_DB is unset, else SharedMemoryStore",
+        "Loop memories are memories rows with origin='loop'; task links are memory_task_links; superseded_by is derived from memory_links 'supersedes' edges",
+        "record on a slug naming a general memory raises Rejected; get, recall and forget never see general rows"
+      ],
+      "created_at": "2026-11-26T13:13:12.578915+00:00",
+      "description": "Loop memory kept in a memory DB taskfw does not own (TASKFW_MEMORY_DB), behind the same MemoryStore interface.",
+      "evidence": [
+        "tests/test_memory_shared.py"
+      ],
+      "invariants": [
+        "No DDL and no journal_mode change on the shared DB; a missing file or schema raises SharedSchemaError",
+        "Recall ranks through a per-call in-memory FTS5 index over loop rows, so no stored index exists to drift",
+        "Cross-project marking and the introspection nudge ask the memory store for task ids, never joining across the two databases"
+      ],
+      "last_validated": "2026-11-26T13:13:12.578949+00:00",
+      "module": "taskfw/memory_shared.py",
+      "name": "shared-memory-backend",
+      "related": [
+        "loop-memory-derived-standing"
+      ]
+    },
+    "shared-memory-tests": {
+      "confidence": 0.8,
+      "contracts": [],
+      "created_at": "2026-11-26T13:13:13.964305+00:00",
+      "description": "Pins shared-DB mode against a stand-in of the owner's schema, including ranking equality with the task-database store and that the schema and journal mode are left alone.",
+      "evidence": [],
+      "invariants": [
+        "conftest removes TASKFW_MEMORY_DB before taskfw is imported, so tests cannot reach a real shared DB"
+      ],
+      "last_validated": "2026-11-26T13:13:13.964325+00:00",
+      "module": "tests/test_memory_shared.py",
+      "name": "shared-memory-tests",
+      "related": [
+        "shared-memory-backend"
+      ]
+    },
     "skills-tool-reference-and-host-neutrality-tested": {
       "confidence": 0.8,
       "contracts": [],
@@ -2216,6 +2256,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-11-25T03:56:50.316366+00:00"
+    "updated_at": "2026-11-26T13:16:36.575613+00:00"
   }
 }

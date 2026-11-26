@@ -47,38 +47,38 @@ def _task(tasks: TaskStore) -> str:
 
 class TestIntrospectionNudge:
     def test_none_when_nothing_lesson_shaped_is_present(self, stores):
-        tasks, _ = stores
+        tasks, memories = stores
         tid = _task(tasks)
-        assert introspection_nudge({"missed_surprises": ["huh"]}, tid, tasks.conn) is None
+        assert introspection_nudge({"missed_surprises": ["huh"]}, tid, memories) is None
 
     def test_fires_on_the_canonical_new_knowledge_field(self, stores):
-        tasks, _ = stores
+        tasks, memories = stores
         tid = _task(tasks)
-        nudge = introspection_nudge({"new_knowledge": ["a lesson"]}, tid, tasks.conn)
+        nudge = introspection_nudge({"new_knowledge": ["a lesson"]}, tid, memories)
         assert nudge is not None and "1 lesson" in nudge
 
     def test_fires_on_the_legacy_surprises_lesson_field(self, stores):
-        tasks, _ = stores
+        tasks, memories = stores
         tid = _task(tasks)
         report = {"surprises": [{"surprise": "x", "lesson": "a lesson"}, {"surprise": "y"}]}
-        nudge = introspection_nudge(report, tid, tasks.conn)
+        nudge = introspection_nudge(report, tid, memories)
         assert nudge is not None and "1 lesson" in nudge
 
     def test_counts_across_both_fields(self, stores):
-        tasks, _ = stores
+        tasks, memories = stores
         tid = _task(tasks)
         report = {
             "new_knowledge": ["a"],
             "surprises": [{"surprise": "x", "lesson": "b"}],
         }
-        nudge = introspection_nudge(report, tid, tasks.conn)
+        nudge = introspection_nudge(report, tid, memories)
         assert "2 lesson" in nudge
 
     def test_none_once_the_task_has_cited_any_memory(self, stores):
         tasks, memories = stores
         tid = _task(tasks)
         memories.record("a-slug", "A lesson long enough to pass the minimum length check.", tid)
-        nudge = introspection_nudge({"new_knowledge": ["another lesson"]}, tid, tasks.conn)
+        nudge = introspection_nudge({"new_knowledge": ["another lesson"]}, tid, memories)
         assert nudge is None
 
 

@@ -47,9 +47,11 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from taskfw import config
 from taskfw.config import DEFAULT_RECALL_LIMIT
 from taskfw.db.connect import connect, transaction
 from taskfw.log import get_logger
@@ -85,7 +87,8 @@ _FTS_DDL = "CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(slug UNIN
 _SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
-@dataclass(frozen=True)
+# eq=False keeps it hashable; not frozen, so it can pass through a `with` block.
+@dataclass(eq=False)
 class Rejected(Exception):
     """A write the store structurally cannot accept.
 
@@ -99,7 +102,14 @@ class Rejected(Exception):
 
 
 class MemoryStore:
-    """Data access for loop memories. Contains no policy beyond shape."""
+    """Data access for loop memories. Contains no policy beyond shape.
+
+    Storage here is the task database. taskfw/memory_shared.py overrides the
+    storage methods for a shared memory DB; validation and recall stay here.
+    """
+
+    #: What reads select from; rows carry the column names of schema.MEMORIES.
+    _source = "memories"
 
     def __init__(self, path: Path | str | None = None, conn: sqlite3.Connection | None = None):
         self.conn = conn if conn is not None else connect(path)
@@ -116,6 +126,18 @@ class MemoryStore:
 
     def close(self) -> None:
         self.conn.close()
+
+    #: Where the `learned_from` citations live.
+    _task_links = "memory_links"
+
+    @staticmethod
+    def _fts_text(slug: str, text: str) -> str:
+        return f"{slug} {text}"
+
+    @contextmanager
+    def _fts_index(self):
+        """The connection holding `memories_fts`."""
+        yield self.conn
 
     # -- writes -------------------------------------------------------------
 
@@ -137,6 +159,12 @@ class MemoryStore:
             )
 
         existing = self.get(slug, include_superseded=True)
+        self._write(slug, text, task_id, kind)
+        log.info("memory %s: %s kind=%s from task=%s",
+                 slug, "updated" if existing else "recorded", kind, task_id)
+        return self.get(slug, include_superseded=True)
+
+    def _write(self, slug: str, text: str, task_id: str, kind: str) -> None:
         with transaction(self.conn):
             self.conn.execute(
                 """INSERT INTO memories (slug, kind, text, updated_at) VALUES (?,?,?,?)
@@ -152,11 +180,8 @@ class MemoryStore:
             if self.fts:
                 self.conn.execute("DELETE FROM memories_fts WHERE slug=?", (slug,))
                 self.conn.execute(
-                    "INSERT INTO memories_fts (slug, text) VALUES (?,?)", (slug, f"{slug} {text}")
+                    "INSERT INTO memories_fts (slug, text) VALUES (?,?)", (slug, self._fts_text(slug, text))
                 )
-        log.info("memory %s: %s kind=%s from task=%s",
-                 slug, "updated" if existing else "recorded", kind, task_id)
-        return self.get(slug, include_superseded=True)
 
     def link(self, slug: str, task_id: str, relation: str) -> bool:
         """Record that a task confirmed or contradicted a memory. Idempotent."""
@@ -164,15 +189,18 @@ class MemoryStore:
             raise Rejected(f"Unknown relation {relation!r}. Valid: {', '.join(MEMORY_RELATIONSHIPS)}.")
         if self.get(slug, include_superseded=True) is None:
             raise Rejected(f"No memory {slug!r}.")
+        created = self._add_link(slug, task_id, relation)
+        log.info("memory %s: %s by task=%s %s", slug, relation, task_id,
+                 "recorded" if created else "already recorded")
+        return created
+
+    def _add_link(self, slug: str, task_id: str, relation: str) -> bool:
         with transaction(self.conn):
             cur = self.conn.execute(
                 "INSERT OR IGNORE INTO memory_links (slug, task_id, relation) VALUES (?,?,?)",
                 (slug, task_id, relation),
             )
-        created = cur.rowcount > 0
-        log.info("memory %s: %s by task=%s %s", slug, relation, task_id,
-                 "recorded" if created else "already recorded")
-        return created
+        return cur.rowcount > 0
 
     def supersede(self, slug: str, by: str) -> dict:
         """Mark a memory obsolete, pointing at what replaced it.
@@ -186,13 +214,16 @@ class MemoryStore:
                 raise Rejected(f"No memory {s!r}.")
         if slug == by:
             raise Rejected("A memory cannot supersede itself.")
+        self._mark_superseded(slug, by)
+        log.info("memory %s: superseded by %s", slug, by)
+        return self.get(slug, include_superseded=True)
+
+    def _mark_superseded(self, slug: str, by: str) -> None:
         with transaction(self.conn):
             self.conn.execute(
                 "UPDATE memories SET superseded_by=?, updated_at=? WHERE slug=?",
                 (by, utcnow(), slug),
             )
-        log.info("memory %s: superseded by %s", slug, by)
-        return self.get(slug, include_superseded=True)
 
     def forget(self, slug: str) -> bool:
         """Delete a memory outright. For entries that were WRONG, not outdated.
@@ -201,18 +232,34 @@ class MemoryStore:
         escape hatch for a lesson that should never have been recorded, and it
         cascades to the links so no orphaned standing survives.
         """
+        deleted = self._delete(slug)
+        log.info("memory %s: %s", slug, "forgotten" if deleted else "not found, nothing deleted")
+        return deleted
+
+    def _delete(self, slug: str) -> bool:
         with transaction(self.conn):
             cur = self.conn.execute("DELETE FROM memories WHERE slug=?", (slug,))
             if self.fts:
                 self.conn.execute("DELETE FROM memories_fts WHERE slug=?", (slug,))
-        deleted = cur.rowcount > 0
-        log.info("memory %s: %s", slug, "forgotten" if deleted else "not found, nothing deleted")
-        return deleted
+        return cur.rowcount > 0
 
     # -- reads --------------------------------------------------------------
 
+    def cited(self, task_id: str) -> bool:
+        """True when some memory was learned from this task."""
+        return self.conn.execute(
+            f"SELECT 1 FROM {self._task_links} WHERE task_id=? AND relation='learned_from' LIMIT 1",
+            (task_id,),
+        ).fetchone() is not None
+
+    def _links(self, slug: str) -> list:
+        return self.conn.execute(
+            "SELECT task_id, relation FROM memory_links WHERE slug=? ORDER BY created_at",
+            (slug,),
+        ).fetchall()
+
     def get(self, slug: str, include_superseded: bool = True) -> dict | None:
-        row = self.conn.execute("SELECT * FROM memories WHERE slug=?", (slug,)).fetchone()
+        row = self.conn.execute(f"SELECT * FROM {self._source} WHERE slug=?", (slug,)).fetchone()
         if row is None:
             return None
         memory = self._hydrate(row)
@@ -262,7 +309,7 @@ class MemoryStore:
         limit = max(limit, 0)
         ranked = self._matching_ranked(query, limit + 1) if query.strip() else None
         slugs = [slug for slug, _ in ranked] if ranked is not None else None
-        sql = "SELECT * FROM memories"
+        sql = f"SELECT * FROM {self._source}"
         where, params = [], []
         if slugs is not None:
             if not slugs:
@@ -280,7 +327,7 @@ class MemoryStore:
             sql += " ORDER BY updated_at DESC"
         sql += " LIMIT ?"
         params.append(limit + 1)
-        rows = [self._hydrate(r) for r in self.conn.execute(sql, params)]
+        rows = [self._hydrate(r) for r in self.conn.execute(sql, params).fetchall()]
         if slugs is not None:
             # _matching_slugs is already ranked by bm25 (best match first);
             # the IN (...) clause above does not preserve that order, so
@@ -291,11 +338,7 @@ class MemoryStore:
         rows = rows[:limit]
         if rows and count_hit:
             hit_at = utcnow()
-            with transaction(self.conn):
-                self.conn.executemany(
-                    "UPDATE memories SET hit_count = hit_count + 1, last_hit = ? WHERE slug = ?",
-                    [(hit_at, m["slug"]) for m in rows],
-                )
+            self._count_hits([m["slug"] for m in rows], hit_at)
             for m in rows:
                 m["hit_count"] += 1
                 m["last_hit"] = hit_at
@@ -317,6 +360,13 @@ class MemoryStore:
             _warn_quietly("memory recall logging failed (%s)", exc)
         return rows, truncated
 
+    def _count_hits(self, slugs: list[str], hit_at: str) -> None:
+        with transaction(self.conn):
+            self.conn.executemany(
+                "UPDATE memories SET hit_count = hit_count + 1, last_hit = ? WHERE slug = ?",
+                [(hit_at, s) for s in slugs],
+            )
+
     def log_bundle_candidates(self, query: str, task_id: str, entries: list[dict]) -> None:
         """One structured line for the automatic path: every candidate, with
         rank, bm25 score, created_at, `floor` (passed the relevance floor) and
@@ -334,19 +384,20 @@ class MemoryStore:
         """(slug, bm25) best first; score is None on the LIKE fallback."""
         if self.fts:
             try:
-                rows = self.conn.execute(
-                    "SELECT slug, bm25(memories_fts) AS score FROM memories_fts "
-                    "WHERE memories_fts MATCH ? ORDER BY bm25(memories_fts) LIMIT ?",
-                    (self._fts_or_query(query), limit * 4),
-                ).fetchall()
-                return [(r["slug"], round(r["score"], 4)) for r in rows]
+                with self._fts_index() as index:
+                    rows = index.execute(
+                        "SELECT slug, bm25(memories_fts) AS score FROM memories_fts "
+                        "WHERE memories_fts MATCH ? ORDER BY bm25(memories_fts) LIMIT ?",
+                        (self._fts_or_query(query), limit * 4),
+                    ).fetchall()
+                return [(slug, round(score, 4)) for slug, score in rows]
             except sqlite3.OperationalError as exc:
                 # A malformed FTS5 query is user input, not a reason to claim
                 # there are no matching memories.
                 log.warning("memory FTS query failed, falling back to LIKE (%s)", exc)
         like = f"%{query}%"
         rows = self.conn.execute(
-            "SELECT slug FROM memories WHERE slug LIKE ? OR text LIKE ? LIMIT ?",
+            f"SELECT slug FROM {self._source} WHERE slug LIKE ? OR text LIKE ? LIMIT ?",
             (like, like, limit * 4),
         ).fetchall()
         return [(r["slug"], None) for r in rows]
@@ -366,10 +417,7 @@ class MemoryStore:
 
     def _hydrate(self, row: sqlite3.Row) -> dict:
         """Attach the derived standing. Never reads a stored confidence."""
-        links = self.conn.execute(
-            "SELECT task_id, relation FROM memory_links WHERE slug=? ORDER BY created_at",
-            (row["slug"],),
-        ).fetchall()
+        links = self._links(row["slug"])
         by_relation: dict[str, list[str]] = {r: [] for r in MEMORY_RELATIONSHIPS}
         for link in links:
             by_relation.setdefault(link["relation"], []).append(link["task_id"])
@@ -390,6 +438,19 @@ class MemoryStore:
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
+
+
+def open_memory(task_conn: sqlite3.Connection) -> MemoryStore:
+    """The memory store the configuration asks for.
+
+    TASKFW_MEMORY_DB unset: memories live in the task database, over
+    `task_conn`. Set: they live in that shared DB and `task_conn` is unused.
+    """
+    if config.MEMORY_DB is None:
+        return MemoryStore(conn=task_conn)
+    from taskfw.memory_shared import SharedMemoryStore
+
+    return SharedMemoryStore(config.MEMORY_DB)
 
 
 SLIM_TEXT_CHARS = 160

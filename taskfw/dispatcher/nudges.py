@@ -15,9 +15,9 @@ nudge never blocks a write or changes what gets stored.
 """
 from __future__ import annotations
 
-import sqlite3
 from typing import Any
 
+from taskfw.memory import MemoryStore
 from taskfw.dispatcher.phase import is_groomed, is_implemented, is_introspected
 
 
@@ -40,15 +40,7 @@ def _lesson_texts(report: dict) -> list[str]:
     return lessons
 
 
-def _cited_in_memory(conn: sqlite3.Connection, task_id: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM memory_links WHERE task_id=? AND relation='learned_from' LIMIT 1",
-        (task_id,),
-    ).fetchone()
-    return row is not None
-
-
-def introspection_nudge(report: dict, task_id: str, conn: sqlite3.Connection) -> str | None:
+def introspection_nudge(report: dict, task_id: str, memory: MemoryStore) -> str | None:
     """Advisory nudge for an introspection report, or None when there's nothing to say.
 
     Fires only when the report carries a lesson AND the task has never cited a
@@ -57,7 +49,7 @@ def introspection_nudge(report: dict, task_id: str, conn: sqlite3.Connection) ->
     threshold this function enforces.
     """
     lessons = _lesson_texts(report)
-    if not lessons or _cited_in_memory(conn, task_id):
+    if not lessons or memory.cited(task_id):
         return None
     return (
         f"{len(lessons)} lesson(s) in this report aren't in loop memory yet. "

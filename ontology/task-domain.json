@@ -162,7 +162,7 @@
       "bounded_context": "The Loop",
       "form": "transient",
       "definition": "The Nudge that rides on the response to recording an Introspection report. It fires when the report carries a lesson but the Task has never cited a Loop Memory record -- the case where 'nothing here was worth promoting' would otherwise look identical to 'a lesson was dropped on the floor'. It points only at what the caller just wrote and the Task they wrote it against, never at a memory's content; whether a lesson generalises is the caller's judgement, not a bar this enforces, and a Task that has already promoted one lesson is not nudged again. It is the first concrete case the `Nudge` term names.",
-      "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge, _lesson_texts, _cited_in_memory"
+      "evidence": "taskfw/dispatcher/nudges.py:introspection_nudge, _lesson_texts"
     },
     "LoopDebtNudge": {
       "bounded_context": "The Loop",

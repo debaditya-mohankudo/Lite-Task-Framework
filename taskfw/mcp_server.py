@@ -28,7 +28,7 @@ from taskfw.gitutil import head_sha, path_state
 from taskfw.grooming import Grooming
 from taskfw.introspection import IntrospectionReport, has_content
 from taskfw.log import get_logger
-from taskfw.memory import MemoryStore, Rejected, slim_row
+from taskfw.memory import MemoryStore, Rejected, open_memory, slim_row
 from taskfw.risk import coerce, normalise_text
 from taskfw.scope import derive as derive_scope, for_create as scope_for_create, for_repo as scope_for_repo
 from taskfw.task import ResolutionItem, Task, new_id
@@ -69,26 +69,28 @@ def set_store(s: TaskStore) -> None:
     """Point the tools at a specific store — used by tests."""
     global _store, _memory
     _store = s
-    # Memories live in the same database as tasks, so a test store swap must
+    # By default memories live in the task database, so a test store swap must
     # move both or the two halves point at different files.
-    _memory = MemoryStore(conn=s.conn) if s is not None else None
+    _memory = open_memory(s.conn) if s is not None else None
 
 
 _memory: MemoryStore | None = None
 
 
 def memory() -> MemoryStore:
-    """Lazily open the memory store. Shares the task database by design.
+    """Lazily open the memory store: the task database, or TASKFW_MEMORY_DB.
 
-    ONE FILE, because a second one would be a second source to check and keep
+    ONE FILE BY DEFAULT, because a second one would be a second source to check and keep
     track of without buying anything. The citation from a memory to its task is
     validated here at the tool layer, not by a foreign key, so splitting the
     files would cost nothing — and gain nothing either. A fresh environment
-    starts with an empty database whichever way it is arranged.
+    starts with an empty database whichever way it is arranged. A host that
+    already has a memory DB can point TASKFW_MEMORY_DB at it instead, so
+    lessons are not split across two stores.
     """
     global _memory
     if _memory is None:
-        _memory = MemoryStore(conn=store().conn)
+        _memory = open_memory(store().conn)
     return _memory
 
 
@@ -305,7 +307,7 @@ def _introspection_hook(result: dict[str, Any]) -> None:
     if task and not result.get("duplicate") and dispatcher.is_introspected(task):
         dispatcher.apply_nudge(
             result, dispatcher.introspection_nudge,
-            task.introspection[-1], result["id"], store().conn,
+            task.introspection[-1], result["id"], memory(),
         )
 
 

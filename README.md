@@ -44,6 +44,7 @@ All optional; sensible defaults out of the box.
 | Variable | Default | What it controls |
 |---|---|---|
 | `TASKFW_DB` | `~/.taskfw/tasks.db` | Where the task database lives. Set this per-workspace if you want project-scoped task stores instead of one global store. |
+| `TASKFW_MEMORY_DB` | unset | Shared memory database for loop memories. Unset keeps them in the task database. The file and its schema must already exist; taskfw never creates or migrates it. |
 | `TASKFW_LOG_LEVEL` | `INFO` | Logger verbosity. |
 | `TASKFW_BUSY_TIMEOUT_MS` | `5000` | How long a writer waits on a lock before giving up, if you're running multiple sessions against the same DB. |
 

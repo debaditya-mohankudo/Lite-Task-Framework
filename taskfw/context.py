@@ -68,7 +68,7 @@ from __future__ import annotations
 import re
 
 from taskfw.log import get_logger
-from taskfw.memory import MemoryStore, slim_row
+from taskfw.memory import MEMORY_RELATIONSHIPS, MemoryStore, open_memory, slim_row
 from taskfw.scope import local_root
 from taskfw.task import Task
 from taskfw.store import TaskStore
@@ -427,7 +427,7 @@ def _lessons_for(store: TaskStore, task: Task,
     query = _query_terms(task)
     if not query:
         return []
-    store_ = memory if memory is not None else MemoryStore(conn=store.conn)
+    store_ = memory if memory is not None else open_memory(store.conn)
     trace: list[dict] = []
     candidates = store_.recall(query, limit=MAX_LESSONS * 4, count_hit=False,
                                caller="bundle", task_id=task.id, trace=trace)
@@ -449,7 +449,8 @@ def _lessons_for(store: TaskStore, task: Task,
     return [slim_row(m) for m in _mark_cross_project(store, task, delivered)]
 
 
-def _mark_cross_project(store: TaskStore, task: Task, lessons: list[dict]) -> list[dict]:
+def _mark_cross_project(store: TaskStore, task: Task,
+                        lessons: list[dict]) -> list[dict]:
     """Flag lessons learned entirely in other projects. Marks, never filters.
 
     THIS IS WHERE `related` AND `lessons` DIVERGE, after being treated as one
@@ -466,26 +467,27 @@ def _mark_cross_project(store: TaskStore, task: Task, lessons: list[dict]) -> li
     known", never "checked and cleared", which is why the key is present
     only when it is true.
 
-    One query for the whole batch, not one per lesson: this runs on the
-    bundle assembly path, which is a read the agent pays for on every
-    tasks__context call.
+    One query for the whole batch, not per lesson: this runs on the bundle
+    assembly path, which is a read the agent pays for on every tasks__context
+    call. The links come off the hydrated rows rather than a join because the
+    memories may live in another database than the tasks.
     """
-    slugs = [m["slug"] for m in lessons if m.get("slug")]
-    if not slugs or not task.scope:
+    if not lessons or not task.scope:
         return lessons
-    placeholders = ",".join("?" * len(slugs))
-    rows = store.conn.execute(
-        f"""SELECT l.slug AS slug, t.scope AS scope
-            FROM memory_links l JOIN tasks t ON t.id = l.task_id
-            WHERE l.slug IN ({placeholders})""",
-        slugs,
-    ).fetchall()
-    scopes: dict[str, set[str]] = {}
-    for row in rows:
-        scopes.setdefault(row["slug"], set()).add(row["scope"] or "")
+    links = {m["slug"]: [t for r in MEMORY_RELATIONSHIPS for t in m[r]] for m in lessons}
+    task_ids = sorted({t for ids in links.values() for t in ids})
+    if not task_ids:
+        return lessons
+    placeholders = ",".join("?" * len(task_ids))
+    task_scopes = {
+        row["id"]: row["scope"] or ""
+        for row in store.conn.execute(
+            f"SELECT id, scope FROM tasks WHERE id IN ({placeholders})", task_ids
+        ).fetchall()
+    }
     out = []
     for lesson in lessons:
-        known = scopes.get(lesson.get("slug"), set())
+        known = {task_scopes[t] for t in links[lesson["slug"]] if t in task_scopes}
         if known and not any(_same_project(task.scope, s) for s in known):
             lesson = {**lesson, "cross_project": True}
         out.append(lesson)

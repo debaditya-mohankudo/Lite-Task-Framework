@@ -22,6 +22,9 @@ import os
 import tempfile
 from pathlib import Path
 
+# A shell or MCP config that points loop memory at a real shared DB must not
+# reach the tests; those that want shared mode build their own file.
+os.environ.pop("TASKFW_MEMORY_DB", None)
 os.environ.setdefault(
     "TASKFW_DB",
     os.path.join(tempfile.mkdtemp(prefix="taskfw-test-session-"), "tasks.db"),

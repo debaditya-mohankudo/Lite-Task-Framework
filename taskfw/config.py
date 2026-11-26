@@ -12,6 +12,12 @@ from pathlib import Path
 #: Where the task database lives. TASKFW_DB overrides.
 DB_PATH = Path(os.environ.get("TASKFW_DB", Path.home() / ".taskfw" / "tasks.db")).expanduser()
 
+#: Shared memory database for loop memories. Unset (the default) keeps them in
+#: the task database. taskfw never creates or migrates the file named here.
+#: TASKFW_MEMORY_DB sets it.
+_memory_db = os.environ.get("TASKFW_MEMORY_DB")
+MEMORY_DB = Path(_memory_db).expanduser() if _memory_db else None
+
 #: Log level for the taskfw logger.
 LOG_LEVEL = os.environ.get("TASKFW_LOG_LEVEL", "INFO").upper()
 
