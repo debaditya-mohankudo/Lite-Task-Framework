@@ -53,7 +53,7 @@
         "introspection_nudge(report, task_id, memory) -> str | None; fires only when the report has an unpromoted lesson (via _lesson_texts, covering both new_knowledge and legacy surprises[].lesson shapes) AND the task has never cited any memory (via MemoryStore.cited)."
       ],
       "created_at": "2026-08-23T10:14:44.522149+00:00",
-      "description": "The individual nudge functions \u2014 each a Callable[[...]] -> str | None encoding one advisory firing condition, wired onto a specific MCP tool via [[nudge-dispatch-chassis]]'s tool_called/combine/apply_nudge, and reading task state through [[task-phase-derivation]] where relevant. A nudge never blocks a write or changes what gets stored; it only surfaces something true about the result that would otherwise be silent. Extracted from the flat taskfw/dispatcher.py into taskfw/dispatcher/nudges.py; re-exported unchanged from taskfw/dispatcher/__init__.py.",
+      "description": "The individual nudge functions — each a Callable[[...]] -> str | None encoding one advisory firing condition, wired onto a specific MCP tool via [[nudge-dispatch-chassis]]'s tool_called/combine/apply_nudge, and reading task state through [[task-phase-derivation]] where relevant. A nudge never blocks a write or changes what gets stored; it only surfaces something true about the result that would otherwise be silent. Extracted from the flat taskfw/dispatcher.py into taskfw/dispatcher/nudges.py; re-exported unchanged from taskfw/dispatcher/__init__.py.",
       "evidence": [
         "taskfw/dispatcher/nudges.py:_lesson_texts",
         "taskfw/dispatcher/nudges.py:introspection_nudge",
@@ -1825,9 +1825,9 @@
       "invariants": [
         "No DDL and no journal_mode change on the shared DB; a missing file or schema raises SharedSchemaError",
         "Recall ranks through a per-call in-memory FTS5 index over loop rows, so no stored index exists to drift",
-        "Cross-project marking and the introspection nudge ask the memory store for task ids, never joining across the two databases"
+        "Cross-project marking reads task ids off the hydrated lesson rows and the introspection nudge asks the memory store, never joining across the two databases"
       ],
-      "last_validated": "2026-11-26T13:13:12.578949+00:00",
+      "last_validated": "2026-11-26T14:39:14.716529+00:00",
       "module": "taskfw/memory_shared.py",
       "name": "shared-memory-backend",
       "related": [
@@ -2256,6 +2256,6 @@
     "note": "Architectural concepts, one or more per module. Ground truth is the code; this is a durable summary of what each module promises and what must stay true of it. The SysML model under models/ is derived FROM this, never the reverse — code -> concepts -> model, one direction only.",
     "repo": "task-framework",
     "seeded_at": "2026-08-01",
-    "updated_at": "2026-11-26T13:16:36.575613+00:00"
+    "updated_at": "2026-11-26T14:39:14.716625+00:00"
   }
 }
