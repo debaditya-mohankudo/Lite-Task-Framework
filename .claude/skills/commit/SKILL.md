@@ -5,6 +5,10 @@ user-invocable: true
 doc: docs/methodology/04-implementation.md
 ---
 
+## Intent
+
+The commit is read later by someone with no memory of this session, who will believe it. It must say only what actually landed and was checked: name any step skipped or failed, and cite nothing you cannot support.
+
 Commit procedure, available in every repo (symlinked into `~/.claude/skills`).
 The `task:<id>` citation, the message shape and the commit link apply wherever
 taskfw runs. The suite command, the ontology carve-out and the two-commit
