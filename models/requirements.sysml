@@ -43,8 +43,8 @@ package Requirements {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "6dfd3da21f8ca87fed9f0d28a814b4d2fc9a9003";
-        derivedAt = "2026-11-26";
+        derivedFromCommit = "9516e260f29b8be4280c4ed5034789a6a3403603";
+        derivedAt = "2026-11-27";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/db/schema.py",
@@ -63,8 +63,7 @@ package Requirements {
             "taskfw/dispatcher/__init__.py",
             "taskfw/dispatcher/chassis.py",
             "taskfw/dispatcher/phase.py",
-            "taskfw/dispatcher/nudges.py",
-            ".claude/skills/commit/SKILL.md"
+            "taskfw/dispatcher/nudges.py"
         );
     }
 
@@ -327,14 +326,12 @@ package Requirements {
     satisfy requirement HostPortabilityRequirement by system.mcpTools;
 
     requirement def CommitTaskTraceabilityRequirement {
-        doc /* Source: taskfw/commit_hook.py, taskfw/mcp_server.py:tasks__add_commit,
-             * .claude/skills/commit/SKILL.md, taskfw/backfill.py.
+        doc /* Source: taskfw/mcp_server.py:tasks__add_commit,
+             * taskfw/backfill.py.
              * A commit referencing task:<id> is linked to that task — by
-             * commit_hook, a PostToolUse hook on Claude Code's Bash tool that
-             * links a fresh HEAD (task:dd2cf1ec); by an explicit
-             * tasks__add_commit call; or by backfill scanning git history for
-             * whatever both missed. The hook is optional, outside the MCP
-             * interface, and only sees commits made through that host.
+             * an explicit tasks__add_commit call, or by backfill scanning git
+             * history, run by hand or by a host after a commit. Any host hook
+             * is optional and outside the MCP interface.
              *
              * SINGLE allocation, and the reason is worth stating: nothing
              * enforces that a link is made, so this is not a rule LifecycleRules

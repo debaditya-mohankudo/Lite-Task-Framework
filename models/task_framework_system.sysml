@@ -21,7 +21,7 @@ package TaskFrameworkSystem {
          * removed outright once every host-specific behaviour it existed to
          * carry either duplicated what a skill already does explicitly
          * (tasks__context) or could simply be a skill's own step
-         * (tasks__add_commit, called from .claude/skills/commit/SKILL.md). The
+         * (tasks__add_commit, called from the /commit skill). The
          * coupling dissolved rather than being resolved each time — most of it
          * was complexity that did not need to exist. That is the most
          * transferable lesson in this model.
@@ -45,8 +45,8 @@ package TaskFrameworkSystem {
     private import Foundation::ModelProvenance;
 
     @ModelProvenance {
-        derivedFromCommit = "6dfd3da21f8ca87fed9f0d28a814b4d2fc9a9003";
-        derivedAt = "2026-11-26";
+        derivedFromCommit = "9516e260f29b8be4280c4ed5034789a6a3403603";
+        derivedAt = "2026-11-27";
         modelledPaths = (
             "taskfw/scope.py",
             "taskfw/store.py",
@@ -91,13 +91,10 @@ package TaskFrameworkSystem {
              *
              * In-process — tools import the library directly. tasks__context is
              * the headline tool and the sole replacement for per-turn prompt
-             * injection. Commit links are written outside this interface:
-             * taskfw/commit_hook.py, an optional Claude Code PostToolUse hook
-             * (task:dd2cf1ec), links a fresh HEAD after a Bash `git commit`, and
-             * tasks__add_commit is the explicit call for anything it missed.
-             * Neither is enforced, which is why taskfw/backfill.py exists as the
-             * recovery path: it rebuilds commit links from git history
-             * regardless of whether either ever ran.
+             * injection. Commit links come from outside this interface: a host
+             * may run taskfw/backfill.py after a commit, and tasks__add_commit
+             * is the explicit call for anything it missed. Neither is enforced;
+             * a later backfill run rebuilds any missing link from git history.
              *
              * taskfw/dispatcher/ (chassis.py, phase.py, nudges.py — split for
              * organisation only, everything re-exported unchanged from the
