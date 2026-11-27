@@ -130,7 +130,7 @@ subsystem.
 
 ## Finish
 
-Commit first, with [/commit](../commit/SKILL.md): it cites `task:<id>`, and the `taskfw.commit_hook` PostToolUse hook then links the commit to the task (task:dd2cf1ec). Check that `tasks__context` shows the sha under `commits`. If it is missing, call `tasks__add_commit(task_id, sha, repo)`. `python -m taskfw.backfill` re-derives any missed link from git history.
+Commit first, with `/commit`: it cites `task:<id>`, and a host hook may link the commit to the task. Check that `tasks__context` shows the sha under `commits`. If it is missing, call `tasks__add_commit(task_id, sha, repo)`. `python -m taskfw.backfill` re-derives any missed link from git history.
 
 Then close the task on what actually landed:
 

@@ -94,7 +94,7 @@ Find code with Read, Grep, and Glob. The framework deliberately ships no code se
 tasks__log_skill_invocation(skill="task-framework/step-6-commit", task_id=task_id)
 ```
 
-Commit with [/commit](../commit/SKILL.md). It puts `task:<id>` in the message. The `taskfw.commit_hook` PostToolUse hook (task:dd2cf1ec) then links any `git commit` made through Bash to the tasks its message cites. Check that `tasks__context` shows the sha under `commits`. If it is missing (for example, a commit made by hand outside a Claude session), call `tasks__add_commit(task_id, sha, repo)`. `python -m taskfw.backfill` re-derives any missed link from git history.
+Commit with `/commit`. It puts `task:<id>` in the message. A host hook may then link the commit to the tasks its message cites. Check that `tasks__context` shows the sha under `commits`. If it is missing (for example, a commit made by hand outside a Claude session), call `tasks__add_commit(task_id, sha, repo)`. `python -m taskfw.backfill` re-derives any missed link from git history.
 
 ### 7. Finish, then introspect
 

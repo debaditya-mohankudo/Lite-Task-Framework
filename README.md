@@ -97,7 +97,6 @@ package — then work through the loop with slash commands:
 | `/task-introspection` | After finishing — grades the risks grooming predicted, records what was learned. |
 | `/task-framework` | General entry point if you're not sure which stage you're in. |
 | `/task-skills-audit` | Sanity-checks the skills themselves stay consistent with each other. |
-| `/commit` | Commit conventions for a repo using this framework — cites the task, links the commit, keeps the message honest. |
 
 The shape of the loop: **create → groom → implement → introspect.** Grooming
 makes predictions; introspection grades them. That feedback edge is the part
@@ -106,9 +105,9 @@ you anything.
 
 ## Recovering a missed commit link
 
-Linking a commit to its task is a deliberate step (the `/commit` skill does
-it), not something watched for automatically. If a commit lands without that
-step — forgotten, or made outside the skill — nothing is lost:
+taskfw does not watch git: a commit is linked by `tasks__add_commit`, by
+whatever host hook calls `taskfw-backfill`, or not at all. A missed link is
+never lost:
 
 ```bash
 taskfw-backfill --repo /path/to/some/repo

@@ -17,8 +17,7 @@
     "task-implementation": "Execution pass: stays in scope, logs decisions and commits as they happen.",
     "task-introspection": "Post-implementation pass: grades grooming's predictions, promotes lessons to Loop Memory.",
     "task-framework": "Entry point that starts/resumes a task and explains the lifecycle.",
-    "task-skills-audit": "Audits the task-* skills for drift against each other and the live tool surface.",
-    "commit": "Commits changes in this repo and records the commit against the active task."
+    "task-skills-audit": "Audits the task-* skills for drift against each other and the live tool surface."
   },
   "tools": {
     "tasks__context": {"namespace": "tasks", "use": "The whole bundle for a task (defaults to the active task): object, decisions, grooming, graph, commits, related, lessons. `related` and `lessons` are approximate and trimmed first; `truncated` lists dropped sections.", "hooks": []},
@@ -131,12 +130,6 @@
     {"subject": "tasks__logs", "predicate": "used_by", "object": "task-skills-audit"},
     {"subject": "tasks__log_skill_invocation", "predicate": "used_by", "object": "task-skills-audit"},
     {"subject": "tasks__list", "predicate": "used_by", "object": "task-skills-audit"},
-    {"subject": "tasks__create", "predicate": "used_by", "object": "task-skills-audit"},
-    {"subject": "tasks__context", "predicate": "used_by", "object": "commit"},
-    {"subject": "tasks__format_commit_message", "predicate": "used_by", "object": "commit"},
-    {"subject": "tasks__add_commit", "predicate": "used_by", "object": "commit"},
-    {"subject": "tasks__active", "predicate": "used_by", "object": "commit"},
-    {"subject": "concept__upsert", "predicate": "used_by", "object": "commit"},
-    {"subject": "concept__store_status", "predicate": "used_by", "object": "commit"}
+    {"subject": "tasks__create", "predicate": "used_by", "object": "task-skills-audit"}
   ]
 }

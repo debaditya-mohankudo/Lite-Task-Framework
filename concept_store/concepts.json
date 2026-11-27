@@ -145,54 +145,6 @@
         "mcp-portable-interface"
       ]
     },
-    "commit-hook-links-fresh-head": {
-      "confidence": 0.9,
-      "contracts": [
-        "handle(payload) returns the task ids it linked; [] for a non-Bash tool, a non-commit command, no task:<id>, an unknown task, a stale HEAD, or a directory outside git.",
-        "main() always returns 0 and prints nothing to stdout, whatever the input."
-      ],
-      "created_at": "2026-11-25T03:21:56.398879+00:00",
-      "description": "A Claude Code PostToolUse command hook for Bash (registered in global ~/.claude/settings.json, task:dd2cf1ec). When the command runs `git commit` (found by command word, following `cd` and `git -C`), it links HEAD of that repo to every existing task its message cites, through backfill.extract_task_ids and TaskStore.add_commit. HEAD counts only when it was committed within FRESH_SECONDS, so a failed commit links nothing new.",
-      "evidence": [
-        "taskfw/commit_hook.py:handle",
-        "taskfw/commit_hook.py:commit_dirs",
-        "taskfw/commit_hook.py:link_head",
-        "taskfw/commit_hook.py:FRESH_SECONDS"
-      ],
-      "invariants": [
-        "Only ids written as task:<id> are linked (same TASK_REF as backfill); a bare id in prose is not.",
-        "Never imports or calls claude-hooks; taskfw owns this hook end to end."
-      ],
-      "last_validated": "2026-11-25T03:21:56.398936+00:00",
-      "module": "taskfw/commit_hook.py",
-      "name": "commit-hook-links-fresh-head",
-      "related": [
-        "backfill-recovers-without-the-original-call"
-      ]
-    },
-    "commit-hook-tested-against-real-git": {
-      "confidence": 0.9,
-      "contracts": [
-        "Each case builds its own git repo and TaskStore under tmp_path; nothing touches the live DB."
-      ],
-      "created_at": "2026-11-25T03:21:59.405123+00:00",
-      "description": "Pins commit_hook's success, failure and no-task-id behaviour against real temporary git repos: a cited task gets linked, cd/-C target the right repo, re-linking is idempotent, a failed commit adds no link, an uncited or unknown id links nothing, and main fails open.",
-      "evidence": [
-        "tests/test_commit_hook.py:TestSuccess",
-        "tests/test_commit_hook.py:TestFailure",
-        "tests/test_commit_hook.py:TestNoTaskId",
-        "tests/test_commit_hook.py:TestCommitDirs"
-      ],
-      "invariants": [
-        "A failed commit (nothing staged) must leave the task's commits unchanged."
-      ],
-      "last_validated": "2026-11-25T03:21:59.405136+00:00",
-      "module": "tests/test_commit_hook.py",
-      "name": "commit-hook-tested-against-real-git",
-      "related": [
-        "commit-hook-links-fresh-head"
-      ]
-    },
     "concept-store-coverage-enforced-by-test": {
       "confidence": 0.8,
       "contracts": [

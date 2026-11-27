@@ -1,11 +1,9 @@
 """Backfill commit links from git history.
 
-Capture is automatic only inside Claude Code sessions: taskfw.commit_hook, a
-PostToolUse Bash hook (task:dd2cf1ec), links each `git commit` it sees, using
-this module's extract_task_ids. Nothing links a commit typed by hand in a
-terminal, one made where the hook is not registered, or one the hook failed
-on (it fails open). That gap is invisible: a task with no commits looks
-exactly like a task whose commits were never made.
+taskfw does not watch git. A commit is linked by tasks__add_commit, or by a
+host running this command after a commit (`--since HEAD~1`). A commit nobody
+linked is invisible: a task with no commits looks exactly like a task whose
+commits were never made.
 
 This makes that recoverable. Git history is the durable record; the commit map
 is a cache over it, and this rebuilds the cache from scratch by re-deriving
@@ -22,10 +20,7 @@ import sys
 
 from taskfw.gitutil import run_git
 from taskfw.log import get_logger
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:  # the store pulls in pydantic; commit_hook imports this module on every Bash call
-    from taskfw.store import TaskStore
+from taskfw.store import TaskStore
 
 log = get_logger(__name__)
 
@@ -72,21 +67,19 @@ def backfill(repo: str, since: str | None = None, dry_run: bool = False,
     running this repeatedly is safe and cheap.
     """
     if store is None:
-        from taskfw.store import TaskStore
         store = TaskStore()
-    s = store
     scanned = linked = skipped_unknown = already = 0
 
     for sha, message in git_log(repo, since):
         scanned += 1
         for task_id in extract_task_ids(message):
-            if s.get(task_id) is None:
+            if store.get(task_id) is None:
                 skipped_unknown += 1
                 continue
             if dry_run:
                 linked += 1
                 continue
-            if s.add_commit(task_id, sha, repo):
+            if store.add_commit(task_id, sha, repo):
                 linked += 1
             else:
                 already += 1
